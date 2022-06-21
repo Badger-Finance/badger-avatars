@@ -37,7 +37,7 @@ forge build
 Because the tests interact with mainnet contracts, tests must be run in mainnet fork mode.
 
 ```
-forge test --fork-url <mainnet-rpc-url>
+forge test
 ```
 
 ## Create a new Avatar
