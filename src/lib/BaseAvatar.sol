@@ -2,7 +2,7 @@
 pragma solidity 0.8.12;
 
 import {OwnableUpgradeable} from "openzeppelin-contracts-upgradeable/access/OwnableUpgradeable.sol";
-import "./lib/GlobalAccessControlManaged.sol";
+import "./GlobalAccessControlManaged.sol";
 import "@gnosis-safe/base/Executor.sol";
 
 /**
@@ -10,7 +10,7 @@ import "@gnosis-safe/base/Executor.sol";
     Forwards calls from the owner
 */
 contract BaseAvatar is GlobalAccessControlManaged, OwnableUpgradeable, Executor {
-    function initialize(address _globalAccessControl, address _owner)
+    function __BaseAvatar_init(address _globalAccessControl, address _owner)
         public
         initializer
     {
@@ -18,6 +18,16 @@ contract BaseAvatar is GlobalAccessControlManaged, OwnableUpgradeable, Executor 
         __Ownable_init_unchained();
         transferOwnership(_owner);
     }
+
+    /// ===== View Functions =====
+    
+    /// @notice Used to track the deployed version of BaseAvatar.
+    /// @return Current version of the contract.
+    function baseAvatarVersion() external pure returns (string memory) {
+        return "1.0";
+    }
+
+    /// ===== Permissioned Actions: Owner =====
 
     /**
      * @dev Make arbitrary Ethereum call
@@ -29,7 +39,7 @@ contract BaseAvatar is GlobalAccessControlManaged, OwnableUpgradeable, Executor 
         address to,
         uint256 value,
         bytes memory data
-    ) external payable onlyOwner gacPausable returns (bool success) {
+    ) external payable virtual onlyOwner gacPausable returns (bool success) {
         return execute(to, value, data, Enum.Operation.DelegateCall, gasleft());
     }
 }
