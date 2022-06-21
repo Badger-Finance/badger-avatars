@@ -12,7 +12,7 @@ import "@gnosis-safe/base/Executor.sol";
 contract BaseAvatar is GlobalAccessControlManaged, OwnableUpgradeable, Executor {
     function __BaseAvatar_init(address _globalAccessControl, address _owner)
         public
-        initializer
+        onlyInitializing
     {
         __GlobalAccessControlManaged_init(_globalAccessControl);
         __Ownable_init_unchained();
@@ -20,7 +20,7 @@ contract BaseAvatar is GlobalAccessControlManaged, OwnableUpgradeable, Executor 
     }
 
     /// ===== View Functions =====
-    
+
     /// @notice Used to track the deployed version of BaseAvatar.
     /// @return Current version of the contract.
     function baseAvatarVersion() external pure returns (string memory) {
