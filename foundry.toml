@@ -4,8 +4,8 @@ out = 'out'
 libs = ['lib']
 remappings = [
     'ds-test/=lib/ds-test/src/',
-    'openzeppelin-contracts-upgradeable/=node_modules/@openzeppelin/contracts-upgradeable/',
-    'openzeppelin-contracts/=node_modules/@openzeppelin/contracts/',
+    'openzeppelin-contracts-upgradeable/=lib/openzeppelin-contracts-upgradeable/contracts/',
+    'openzeppelin-contracts/=lib/openzeppelin-contracts/contracts/',
     'forge-std/=lib/forge-std/src/',
     '@gnosis-safe=node_modules/@gnosis.pm/safe-contracts/contracts'
 ]
