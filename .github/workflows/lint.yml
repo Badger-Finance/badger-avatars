@@ -1,4 +1,4 @@
-name: Tests
+name: Linter
 
 on:
   pull_request:
@@ -15,10 +15,13 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Install Foundry
-        uses: foundry-rs/foundry-toolchain@v1
+      - name: Use Node.js
+        uses: actions/setup-node@v3
         with:
-          version: nightly
+            node-version: '16.x'
 
-      - name: Run tests
-        run: forge test --fork-url https://eth-mainnet.alchemyapi.io/v2/${{ secrets.ALCHEMY_KEY }} -vvv
+      - name: Install Dependencies
+        run: npm install
+
+      - name: Run linter/formatter checks
+        run: npm run solhint
