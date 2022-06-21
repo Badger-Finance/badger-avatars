@@ -9,7 +9,11 @@ import "@gnosis-safe/base/Executor.sol";
     Avatar
     Forwards calls from the owner
 */
-contract BaseAvatar is GlobalAccessControlManaged, OwnableUpgradeable, Executor {
+contract BaseAvatar is
+    GlobalAccessControlManaged,
+    OwnableUpgradeable,
+    Executor
+{
     function __BaseAvatar_init(address _globalAccessControl, address _owner)
         public
         onlyInitializing
