@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.12;
+pragma solidity 0.8.16;
 
 import {OwnableUpgradeable} from "openzeppelin-contracts-upgradeable/access/OwnableUpgradeable.sol";
-import "./GlobalAccessControlManaged.sol";
+import {GlobalAccessControlManaged} from "./GlobalAccessControlManaged.sol";
 import "@gnosis-safe/base/Executor.sol";
 
 /**

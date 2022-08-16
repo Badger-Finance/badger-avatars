@@ -1,20 +1,11 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity 0.8.12;
+pragma solidity 0.8.16;
 
-import "ds-test/test.sol";
-import {Vm} from "forge-std/Vm.sol";
-import {stdCheats} from "forge-std/stdlib.sol";
-import {Utils} from "./utils/Utils.sol";
-import {ERC20Utils} from "./utils/ERC20Utils.sol";
-import {SnapshotComparator} from "./utils/SnapshotUtils.sol";
+import {Test} from "forge-std/Vm.sol";
 
 import {Avatar} from "src/avatars/template/Avatar.sol";
 
-contract BaseFixture is DSTest, Utils, stdCheats {
-    Vm constant vm = Vm(HEVM_ADDRESS);
-    ERC20Utils immutable erc20utils = new ERC20Utils();
-    SnapshotComparator comparator;
-
+contract BaseFixture is Test {
     // ==================
     // ===== Actors =====
     // ==================
