@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity 0.8.16;
 
-import {Test} from "forge-std/Vm.sol";
+import {Test} from "forge-std/Test.sol";
 
 import {Avatar} from "src/avatars/template/Avatar.sol";
 
@@ -10,7 +10,7 @@ contract BaseFixture is Test {
     // ===== Actors =====
     // ==================
 
-    address immutable owner = getAddress("owner");
+    address immutable owner = address(1);
 
     // ==================
     // === Contracts ====
