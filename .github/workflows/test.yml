@@ -1,15 +1,18 @@
-name: Tests
+name: test
 
 on:
-  pull_request:
-  workflow_dispatch:
   push:
     branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  FOUNDRY_PROFILE: ci
 
 jobs:
-  check:
-    name: Foundry project
+  forge:
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v3
         with:
