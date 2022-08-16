@@ -1,17 +1,11 @@
 {
     "name": "badger-avatars",
     "devDependencies": {
-        "husky": "^7.0.0",
+        "husky": "^8.0.1",
         "prettier": "^2.6.2",
         "prettier-plugin-solidity": "^1.0.0-beta.19",
         "solhint": "^3.3.7",
-        "solhint-plugin-prettier": "^0.0.5",
-        "typechain": "^8.0.0"
-    },
-    "dependencies": {
-        "@gnosis.pm/safe-contracts": "^1.3.0",
-        "@openzeppelin/contracts": "^4.5.0",
-        "@openzeppelin/contracts-upgradeable": "^4.5.2"
+        "solhint-plugin-prettier": "^0.0.5"
     },
     "scripts": {
         "solhint": "solhint -f table 'src/**/*.sol'",

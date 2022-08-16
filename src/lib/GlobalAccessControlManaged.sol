@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
-
-pragma solidity ^0.8.12;
+pragma solidity 0.8.16;
 
 import {PausableUpgradeable} from "openzeppelin-contracts-upgradeable/security/PausableUpgradeable.sol";
-import "../interfaces/citadel/IGac.sol";
+
+import {IGac} from "../interfaces/badger/IGac.sol";
 
 /**
  * @title Global Access Control Managed - Base Class

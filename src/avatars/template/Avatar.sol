@@ -1,5 +1,4 @@
-pragma solidity 0.8.12;
-pragma experimental ABIEncoderV2;
+pragma solidity 0.8.16;
 
 import {BaseAvatar} from "../../lib/BaseAvatar.sol";
 
