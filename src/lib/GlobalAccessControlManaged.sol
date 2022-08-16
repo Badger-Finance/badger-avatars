@@ -24,10 +24,7 @@ contract GlobalAccessControlManaged is PausableUpgradeable {
      * @dev this is assumed to be used in the initializer of the inhereiting contract
      * @param _globalAccessControl global access control which is pinged to allow / deny access to permissioned calls by role
      */
-    function __GlobalAccessControlManaged_init(address _globalAccessControl)
-        public
-        onlyInitializing
-    {
+    function __GlobalAccessControlManaged_init(address _globalAccessControl) public onlyInitializing {
         __Pausable_init_unchained();
         gac = IGac(_globalAccessControl);
     }
@@ -59,10 +56,7 @@ contract GlobalAccessControlManaged is PausableUpgradeable {
     // @dev only holders of the given role on the GAC can call, or a specified address
     // @dev used to faciliate extra contract-specific permissioned accounts
     modifier onlyRoleOrAddress(bytes32 role, address account) {
-        require(
-            gac.hasRole(role, msg.sender) || msg.sender == account,
-            "GAC: invalid-caller-role-or-address"
-        );
+        require(gac.hasRole(role, msg.sender) || msg.sender == account, "GAC: invalid-caller-role-or-address");
         _;
     }
 

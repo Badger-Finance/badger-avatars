@@ -29,9 +29,6 @@ contract BaseFixture is Test {
         vm.label(address(this), "this");
 
         // Initialize template
-        avatar_template.initialize(
-            gac,
-            owner
-        );
+        avatar_template.initialize(gac, owner);
     }
 }

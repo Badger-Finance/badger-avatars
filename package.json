@@ -1,7 +1,6 @@
 {
     "name": "badger-avatars",
     "devDependencies": {
-        "husky": "^8.0.1",
         "prettier": "^2.6.2",
         "prettier-plugin-solidity": "^1.0.0-beta.19",
         "solhint": "^3.3.7",
@@ -9,7 +8,6 @@
     },
     "scripts": {
         "solhint": "solhint -f table 'src/**/*.sol'",
-        "prettier:solidity": "prettier --write 'src/**/*.sol'",
-        "prepare": "husky install"
+        "prettier:solidity": "prettier --write 'src/**/*.sol'",,
     }
 }
