@@ -10,6 +10,7 @@ import {GlobalAccessControlManaged} from "./GlobalAccessControlManaged.sol";
  * Avatar
  * Forwards calls from the owner
  */
+// TODO: See if we need GAC
 contract BaseAvatar is GlobalAccessControlManaged, OwnableUpgradeable, Executor {
     function __BaseAvatar_init(address _globalAccessControl, address _owner) public onlyInitializing {
         __GlobalAccessControlManaged_init(_globalAccessControl);
