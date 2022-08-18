@@ -10,11 +10,10 @@ import {GlobalAccessControlManaged} from "./GlobalAccessControlManaged.sol";
  * Avatar
  * Forwards calls from the owner
  */
-// TODO: See if we need GAC
-contract BaseAvatar is GlobalAccessControlManaged, OwnableUpgradeable, Executor {
-    function __BaseAvatar_init(address _globalAccessControl, address _owner) public onlyInitializing {
-        __GlobalAccessControlManaged_init(_globalAccessControl);
+contract BaseAvatar is OwnableUpgradeable, Executor {
+    function __BaseAvatar_init(address _owner) public onlyInitializing {
         __Ownable_init_unchained();
+
         transferOwnership(_owner);
     }
 
@@ -35,11 +34,10 @@ contract BaseAvatar is GlobalAccessControlManaged, OwnableUpgradeable, Executor 
      * @param data TX data
      */
     function call(address to, uint256 value, bytes memory data)
-        external
+        public
         payable
         virtual
         onlyOwner
-        gacPausable
         returns (bool success)
     {
         return execute(to, value, data, Enum.Operation.DelegateCall, gasleft());
