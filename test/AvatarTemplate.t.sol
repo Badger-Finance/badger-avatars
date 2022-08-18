@@ -10,6 +10,5 @@ contract AvatarTemplateTest is BaseFixture {
 
     function testInitialize() public {
         assertEq(address(avatar_template.owner()), owner);
-        assertEq(address(avatar_template.gac()), gac);
     }
 }
