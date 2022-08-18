@@ -16,73 +16,103 @@ import {IBalancerVault} from "../interfaces/balancer/IBalancerVault.sol";
 import {IPriceOracle} from "../interfaces/balancer/IPriceOracle.sol";
 import {IAggregatorV3} from "../interfaces/chainlink/IAggregatorV3.sol";
 
-contract AuraAvatar is BaseAvatar {
+uint256 constant MAX_BPS = 10000;
+
+/*
+struct PoolInfo {
+    uint256 pid;
+    address bpt;
+    address baseRewardPool;
+}
+
+totalAssets(asset)
+deposit(asset, amount, receiver)
+withdraw(asset, amount, receiver, owner)
+*/
+
+struct TokenAmount {
+    address token;
+    uint256 amount;
+}
+
+contract AuraAvatar2Bpt is BaseAvatar {
     ////////////////////////////////////////////////////////////////////////////
     // CONSTANTS
     ////////////////////////////////////////////////////////////////////////////
 
-    uint256 public constant MAX_BPS = 10000;
+    IBalancerVault private constant BALANCER_VAULT = IBalancerVault(0xBA12222222228d8Ba445958a75a0704d566BF2C8);
+    IBooster private constant AURA_BOOSTER = IBooster(0x7818A1DA7BD1E64c199029E86Ba244a9798eEE10);
+    ICrvDepositorWrapper private constant AURABAL_DEPOSIT_WRAPPER =
+        ICrvDepositorWrapper(0x68655AD9852a99C87C0934c7290BB62CFa5D4123);
+    IBaseRewardPool private constant AURABAL_REWARDS = IBaseRewardPool(0x5e5ea2048475854a5702F5B8468A51Ba1296EFcC);
+    IVault private constant BAURABAL = IVault(0x37d9D2C6035b744849C15F1BFEE8F268a20fCBd8);
+    IAuraLocker private constant AURA_LOCKER = IAuraLocker(0x3Fa73f1E5d8A792C80F426fc8F84FBF7Ce9bBCAC);
+    address private constant BADGER_VOTER = address(0xA9ed98B5Fb8428d68664f3C5027c62A10d45826b);
 
-    IBooster public constant BOOSTER = IBooster(0x7818A1DA7BD1E64c199029E86Ba244a9798eEE10);
+    IERC20Upgradeable private constant BAL = IERC20Upgradeable(0xba100000625a3754423978a60c9317c58a424e3D);
+    IAuraToken private constant AURA = IAuraToken(0xC0c293ce456fF0ED870ADd98a0828Dd4d2903DBF);
+    IERC20Upgradeable private constant WETH = IERC20Upgradeable(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
+    IERC20Upgradeable private constant USDC = IERC20Upgradeable(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
+    IERC20Upgradeable private constant AURABAL = IERC20Upgradeable(0x616e8BfA43F920657B3497DBf40D6b1A02D4608d);
 
-    IBaseRewardPool public constant AURABAL_REWARDS = IBaseRewardPool(0x5e5ea2048475854a5702F5B8468A51Ba1296EFcC);
+    bytes32 private constant BAL_WETH_POOL_ID = 0x5c6ee304399dbdb9c8ef030ab642b10820db8f56000200000000000000000014;
+    bytes32 private constant AURA_WETH_POOL_ID = 0xcfca23ca9ca720b6e98e3eb9b6aa0ffc4a5c08b9000200000000000000000274; // 50AURA-20WETH
+    bytes32 private constant USDC_WETH_POOL_ID = 0x96646936b91d6b9d7d0c47c496afbf3d6ec7b6f8000200000000000000000019;
+
+    IAggregatorV3 constant BAL_USD_FEED = IAggregatorV3(0xdF2917806E30300537aEB49A7663062F4d1F2b5F);
+    IAggregatorV3 constant ETH_USD_FEED = IAggregatorV3(0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419);
+
+    IPriceOracle private constant POOL_80AURA_20WETH = IPriceOracle(0xc29562b045D80fD77c69Bec09541F5c16fe20d9d);
+
+    uint256 private constant USD_FEED_PRECISIONS = 1e8;
+    uint256 private constant AURA_WETH_TWAP_PRECISION = 1e18;
 
     uint256 public constant PID_80BADGER_20WBTC = 11;
     uint256 public constant PID_40WBTC_40DIGG_20GRAVIAURA = 18;
 
+    IERC20Upgradeable public constant BPT_80BADGER_20WBTC =
+        IERC20Upgradeable(0xb460DAa847c45f1C4a41cb05BFB3b51c92e41B36);
+    IERC20Upgradeable public constant BPT_40WBTC_40DIGG_20GRAVIAURA =
+        IERC20Upgradeable(0x8eB6c82C3081bBBd45DcAC5afA631aaC53478b7C);
+
     IBaseRewardPool public constant BASE_REWARD_POOL_80BADGER_20WBTC =
-        IBaseRewardPool(0x5e5ea2048475854a5702F5B8468A51Ba1296EFcC);
+        IBaseRewardPool(0xCea3aa5b2a50e39c7C7755EbFF1e9E1e1516D3f5);
     IBaseRewardPool public constant BASE_REWARD_POOL_40WBTC_40DIGG_20GRAVIAURA =
-        IBaseRewardPool(0x5e5ea2048475854a5702F5B8468A51Ba1296EFcC);
+        IBaseRewardPool(0x10Ca519614b0F3463890387c24819001AFfC5152);
 
-    IBalancerVault public constant BALANCER_VAULT = IBalancerVault(0xBA12222222228d8Ba445958a75a0704d566BF2C8);
+    ////////////////////////////////////////////////////////////////////////////
+    // IMMUTABLES
+    ////////////////////////////////////////////////////////////////////////////
 
-    address public constant VOTER = address(0);
-
-    // TODO: Do I need constants to be public?
-    IAuraToken public constant AURA = IAuraToken(0xC0c293ce456fF0ED870ADd98a0828Dd4d2903DBF);
-    IERC20Upgradeable public constant BAL = IERC20Upgradeable(0xba100000625a3754423978a60c9317c58a424e3D);
-    IERC20Upgradeable public constant WETH = IERC20Upgradeable(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
-    IERC20Upgradeable public constant USDC = IERC20Upgradeable(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
-    IERC20Upgradeable public constant AURABAL = IERC20Upgradeable(0x616e8BfA43F920657B3497DBf40D6b1A02D4608d);
-
-    IVault public constant BAURABAL = IVault(0x37d9D2C6035b744849C15F1BFEE8F268a20fCBd8);
-    IAuraLocker public constant AURA_LOCKER = IAuraLocker(0x3Fa73f1E5d8A792C80F426fc8F84FBF7Ce9bBCAC);
-
-    ICrvDepositorWrapper public constant AURABAL_DEPOSIT_WRAPPER =
-        ICrvDepositorWrapper(0x68655AD9852a99C87C0934c7290BB62CFa5D4123);
-
-    bytes32 public constant BAL_WETH_POOL_ID = 0x5c6ee304399dbdb9c8ef030ab642b10820db8f56000200000000000000000014;
-    // TODO: See if it makes sense to use other pool?
-    bytes32 public constant AURA_WETH_POOL_ID = 0xc29562b045d80fd77c69bec09541f5c16fe20d9d000200000000000000000251; // 80AURA-20WETH
-    bytes32 public constant USDC_WETH_POOL_ID = 0x96646936b91d6b9d7d0c47c496afbf3d6ec7b6f8000200000000000000000019;
-
-    IAggregatorV3 constant BAL_USD_FEED = IAggregatorV3(0xdF2917806E30300537aEB49A7663062F4d1F2b5F);
-    IAggregatorV3 constant ETH_USD_FEED = IAggregatorV3(0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419);
-    uint256 public constant USD_FEED_PRECISIONS = 1e8;
-
-    IPriceOracle POOL_80AURA_20WETH = IPriceOracle(0xc29562b045D80fD77c69Bec09541F5c16fe20d9d);
-
-    // TODO: No decimals
-    uint256 public slippageToleranceBalToAuraBal;
-    uint256 public slippageTol;
+    // PoolInfo[2] immutable public pools;
 
     ////////////////////////////////////////////////////////////////////////////
     // STORAGE
     ////////////////////////////////////////////////////////////////////////////
 
+    address public keeperRegistry;
+
     uint256 public auraToUsdcBps;
     uint256 public balToUsdcBps;
+
+    // TODO: No decimals
+    uint256 public slippageTolToUsdc;
+    uint256 public slippageTolBalToAuraBal;
 
     ////////////////////////////////////////////////////////////////////////////
     // ERRORS
     ////////////////////////////////////////////////////////////////////////////
     error StalePriceFeed();
+    error OnlyKeeperRegistry();
 
     ////////////////////////////////////////////////////////////////////////////
     // EVENTS
     ////////////////////////////////////////////////////////////////////////////
     // TODO: Events
+    event KeeperRegistryUpdated(address keeperRegistry);
+    event BalToUsdBpsUpdated(uint256 balToUsdcBps);
+    event AuraToUsdBpsUpdated(uint256 auraToUsdcBps);
+    event RewardClaimed(); // Or harvested
 
     ////////////////////////////////////////////////////////////////////////////
     // INITIALIZATION
@@ -94,11 +124,11 @@ contract AuraAvatar is BaseAvatar {
         auraToUsdcBps = 3000; // 30%
         balToUsdcBps = 7000; // 70%
 
-        slippageToleranceBalToAuraBal = 9950;
-        slippageTol = 9825;
+        slippageTolToUsdc = 9825; // 98.25%
+        slippageTolBalToAuraBal = 9950; // 99.5%
 
-        // TODO: Approvals
-        // Maybe dont't do unlimited approvals since contract can have arbitrary calls
+        BPT_80BADGER_20WBTC.approve(address(AURA_BOOSTER), type(uint256).max);
+        BPT_40WBTC_40DIGG_20GRAVIAURA.approve(address(AURA_BOOSTER), type(uint256).max);
     }
 
     ////////////////////////////////////////////////////////////////////////////
@@ -110,16 +140,18 @@ contract AuraAvatar is BaseAvatar {
         name_ = "Aura_Avatar";
     }
 
-    // TODO: Balance check and claimable reward check functions
-
-    /// @dev Returns the name of the strategy
-    function getBalance() external view returns (string memory) {
-        return "Aura_Avatar";
+    function totalAssets() external view returns (uint256[2] memory assets_) {
+        assets_[0] = BASE_REWARD_POOL_80BADGER_20WBTC.balanceOf(address(this));
+        assets_[1] = BASE_REWARD_POOL_40WBTC_40DIGG_20GRAVIAURA.balanceOf(address(this));
     }
 
     /// @dev Returns the name of the strategy
-    function getRewards() external view returns (string memory) {
-        return "Aura_Avatar";
+    function pendingRewards() external view returns (TokenAmount[2] memory rewards_) {
+        uint256 balEarned = BASE_REWARD_POOL_80BADGER_20WBTC.earned(address(this));
+        balEarned += BASE_REWARD_POOL_40WBTC_40DIGG_20GRAVIAURA.earned(address(this));
+
+        rewards_[0] = TokenAmount(address(BAL), balEarned);
+        rewards_[1] = TokenAmount(address(AURA), getMintableAuraRewards(balEarned));
     }
 
     /// NOTE: Add custom avatar functions below
@@ -128,27 +160,67 @@ contract AuraAvatar is BaseAvatar {
     // PUBLIC: Permissioned
     ////////////////////////////////////////////////////////////////////////////
 
-    // TODO: Permissions
+    // TODO: See if events should emit old value
     function setBalToUsdcBps(uint256 _balToUsdcBps) external onlyOwner {
         balToUsdcBps = _balToUsdcBps;
+
+        emit BalToUsdBpsUpdated(_balToUsdcBps);
     }
 
-    // TODO: Permissions
     function setAuraToUsdcBps(uint256 _auraToUsdcBps) external onlyOwner {
         auraToUsdcBps = _auraToUsdcBps;
+
+        emit AuraToUsdBpsUpdated(_auraToUsdcBps);
+    }
+
+    function setKeeperRegistry(address _keeperRegistry) external onlyOwner {
+        keeperRegistry = _keeperRegistry;
+
+        emit KeeperRegistryUpdated(_keeperRegistry);
+    }
+
+    // TODO: Two steps: Withdraw from rewards pool, withdraw to owner
+    function withdrawToOwner() external onlyOwner {
+        uint256 bpt80Badger20WbtcDeposited = BASE_REWARD_POOL_80BADGER_20WBTC.balanceOf(address(this));
+        if (bpt80Badger20WbtcDeposited > 0) {
+            BASE_REWARD_POOL_80BADGER_20WBTC.withdrawAndUnwrap(bpt80Badger20WbtcDeposited, true);
+        }
+        uint256 bpt40Wbtc40Digg20GraviAuraDeposited =
+            BASE_REWARD_POOL_40WBTC_40DIGG_20GRAVIAURA.balanceOf(address(this));
+        if (bpt40Wbtc40Digg20GraviAuraDeposited > 0) {
+            BASE_REWARD_POOL_40WBTC_40DIGG_20GRAVIAURA.withdrawAndUnwrap(bpt40Wbtc40Digg20GraviAuraDeposited, true);
+        }
+
+        address ownerCached = owner();
+        BPT_80BADGER_20WBTC.transfer(ownerCached, BPT_80BADGER_20WBTC.balanceOf(address(this)));
+        BPT_40WBTC_40DIGG_20GRAVIAURA.transfer(ownerCached, BPT_40WBTC_40DIGG_20GRAVIAURA.balanceOf(address(this)));
+    }
+
+    ////////////////////////////////////////////////////////////////////////////
+    // MODIFIERS
+    ////////////////////////////////////////////////////////////////////////////
+
+    modifier onlyKeeperRegistry() {
+        if (msg.sender != keeperRegistry) {
+            revert OnlyKeeperRegistry();
+        }
+        _;
+    }
+
+    ////////////////////////////////////////////////////////////////////////////
+    // PUBLIC
+    ////////////////////////////////////////////////////////////////////////////
+
+    function depositAll() external whenNotPaused {
+        AURA_BOOSTER.depositAll(PID_80BADGER_20WBTC, true);
+        AURA_BOOSTER.depositAll(PID_40WBTC_40DIGG_20GRAVIAURA, true);
     }
 
     ////////////////////////////////////////////////////////////////////////////
     // PUBLIC: Keeper
     ////////////////////////////////////////////////////////////////////////////
 
-    // TODO: See if needs to be permissioned
-    function depositAll() external {
-        BOOSTER.depositAll(PID_80BADGER_20WBTC, true);
-        BOOSTER.depositAll(PID_40WBTC_40DIGG_20GRAVIAURA, true);
-    }
-
-    function upKeep() external {
+    function processRewards() external onlyKeeperRegistry whenNotPaused {
         // 1. Claim BAL and AURA rewards
         claimRewards();
 
@@ -168,7 +240,7 @@ contract AuraAvatar is BaseAvatar {
 
         // 4. Lock remaining AURA on behalf of Badger voter msig
         uint256 auraToLock = totalAura - auraForUsdc;
-        AURA_LOCKER.lock(VOTER, auraToLock);
+        AURA_LOCKER.lock(BADGER_VOTER, auraToLock);
 
         // 5. Dogfood auraBAL in Badger vault
         BAURABAL.depositAll();
@@ -179,8 +251,6 @@ contract AuraAvatar is BaseAvatar {
     ////////////////////////////////////////////////////////////////////////////
 
     function claimRewards() internal {
-        // TODO: Should use AuraClaimZap?
-        // NOTE: Anyone can claim rewards for contract
         BASE_REWARD_POOL_80BADGER_20WBTC.getReward();
         BASE_REWARD_POOL_40WBTC_40DIGG_20GRAVIAURA.getReward();
     }
@@ -274,7 +344,7 @@ contract AuraAvatar is BaseAvatar {
     }
 
     function swapBalForAuraBal(uint256 _auraAmount) internal {
-        uint256 minAuraBalOut = AURABAL_DEPOSIT_WRAPPER.getMinOut(_auraAmount, slippageToleranceBalToAuraBal);
+        uint256 minAuraBalOut = AURABAL_DEPOSIT_WRAPPER.getMinOut(_auraAmount, slippageTolBalToAuraBal);
         AURABAL_DEPOSIT_WRAPPER.deposit(_auraAmount, minAuraBalOut, true, address(0));
         // TODO: See if can find optimal route on-chain
         /*
@@ -312,11 +382,11 @@ contract AuraAvatar is BaseAvatar {
         IPriceOracle.OracleAverageQuery[] memory queries = new IPriceOracle.OracleAverageQuery[](1);
 
         queries[0].variable = IPriceOracle.Variable.PAIR_PRICE;
-        queries[0].secs = 3600; // last hour
+        queries[0].secs = 1 hours; // last hour
         queries[0].ago = 0; // now
 
         // Gets the balancer time weighted average price denominated in BAL
-        return _pool.getTimeWeightedAverage(queries)[0];
+        price_ = _pool.getTimeWeightedAverage(queries)[0];
     }
 
     ////////////////////////////////////////////////////////////////////////////
@@ -334,7 +404,27 @@ contract AuraAvatar is BaseAvatar {
         uint256 auraInEth = fetchPriceFromBalancerTwap(POOL_80AURA_20WETH);
         uint256 ethInUsd = fetchPriceFromFeed(ETH_USD_FEED);
 
-        // TODO:
-        usdcAmount_ = _auraAmount * auraInEth * ethInUsd / USD_FEED_PRECISIONS;
+        usdcAmount_ = _auraAmount * auraInEth * ethInUsd / USD_FEED_PRECISIONS / AURA_WETH_TWAP_PRECISION;
+    }
+
+    /// @notice Returns the expected amount of AURA to be minted given an amount of BAL rewards
+    /// @dev ref: https://etherscan.io/address/0xc0c293ce456ff0ed870add98a0828dd4d2903dbf#code#F1#L86
+    function getMintableAuraRewards(uint256 _balAmount) internal view returns (uint256 amount) {
+        // NOTE: Only correct if AURA.minterMinted() == 0
+        //       minterMinted is a private var in the contract, so we can't access it directly
+        uint256 emissionsMinted = AURA.totalSupply() - AURA.INIT_MINT_AMOUNT();
+
+        uint256 cliff = emissionsMinted / AURA.reductionPerCliff();
+        uint256 totalCliffs = AURA.totalCliffs();
+
+        if (cliff < totalCliffs) {
+            uint256 reduction = (((totalCliffs - cliff) * 5) / 2) + 700;
+            amount = _balAmount * reduction / totalCliffs;
+
+            uint256 amtTillMax = AURA.EMISSIONS_MAX_SUPPLY() - emissionsMinted;
+            if (amount > amtTillMax) {
+                amount = amtTillMax;
+            }
+        }
     }
 }
