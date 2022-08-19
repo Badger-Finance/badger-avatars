@@ -77,6 +77,8 @@ contract AuraAvatar is BaseAvatar, AuraConstants, AuraAvatarOracleUtils {
 
         BPT_80BADGER_20WBTC.approve(address(AURA_BOOSTER), type(uint256).max);
         BPT_40WBTC_40DIGG_20GRAVIAURA.approve(address(AURA_BOOSTER), type(uint256).max);
+        AURA.approve(address(AURA_LOCKER), type(uint256).max);
+        AURABAL.approve(address(BAURABAL), type(uint256).max);
     }
 
     ////////////////////////////////////////////////////////////////////////////
@@ -191,8 +193,8 @@ contract AuraAvatar is BaseAvatar, AuraConstants, AuraAvatarOracleUtils {
         uint256 auraToLock = totalAura - auraForUsdc;
         AURA_LOCKER.lock(BADGER_VOTER, auraToLock);
 
-        // 5. Dogfood auraBAL in Badger vault
-        BAURABAL.depositAll();
+        // 5. Dogfood auraBAL in Badger vault in behalf of vault
+        BAURABAL.depositFor(owner(), AURABAL.balanceOf(address(this)));
     }
 
     ////////////////////////////////////////////////////////////////////////////
