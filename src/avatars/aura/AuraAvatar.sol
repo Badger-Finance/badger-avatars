@@ -2,6 +2,7 @@
 pragma solidity 0.8.16;
 
 import {IERC20Upgradeable} from "openzeppelin-contracts-upgradeable/interfaces/IERC20Upgradeable.sol";
+import {PausableUpgradeable} from "openzeppelin-contracts-upgradeable/security/PausableUpgradeable.sol";
 
 import {BaseAvatar} from "../../lib/BaseAvatar.sol";
 import {AuraConstants} from "./AuraConstants.sol";
@@ -19,7 +20,7 @@ struct TokenAmount {
     uint256 amount;
 }
 
-contract AuraAvatar is BaseAvatar, AuraConstants, AuraAvatarOracleUtils, KeeperCompatibleInterface {
+contract AuraAvatar is BaseAvatar, AuraConstants, AuraAvatarOracleUtils, KeeperCompatibleInterface, PausableUpgradeable {
     ////////////////////////////////////////////////////////////////////////////
     // CONSTANTS
     ////////////////////////////////////////////////////////////////////////////
@@ -159,12 +160,19 @@ contract AuraAvatar is BaseAvatar, AuraConstants, AuraAvatarOracleUtils, KeeperC
         BPT_40WBTC_40DIGG_20GRAVIAURA.transfer(ownerCached, BPT_40WBTC_40DIGG_20GRAVIAURA.balanceOf(address(this)));
     }
 
+    function pause() external onlyOwner {
+        _pause();
+    }
+
+    function unpause() external onlyOwner {
+        _unpause();
+    }
+
     ////////////////////////////////////////////////////////////////////////////
     // PUBLIC
     ////////////////////////////////////////////////////////////////////////////
 
-    // TODO: Pausable
-    function depositAll() external {
+    function depositAll() external whenNotPaused {
         AURA_BOOSTER.depositAll(PID_80BADGER_20WBTC, true);
         AURA_BOOSTER.depositAll(PID_40WBTC_40DIGG_20GRAVIAURA, true);
     }
@@ -175,12 +183,11 @@ contract AuraAvatar is BaseAvatar, AuraConstants, AuraAvatarOracleUtils, KeeperC
 
     function checkUpkeep(bytes calldata) external view override returns (bool upkeepNeeded, bytes memory checkData) {
         if ((block.timestamp - lastClaimTimestamp) > CLAIM_CADENCE) {
-        return (true, new bytes(0));
+            return (true, new bytes(0));
         }
     }
-    
-    // TODO: Pausable
-    function performUpkeep(bytes calldata performData) external override onlyKeeperRegistry {
+
+    function performUpkeep(bytes calldata performData) external override onlyKeeperRegistry whenNotPaused {
         if ((block.timestamp - lastClaimTimestamp) > CLAIM_CADENCE) {
             processRewards();
             lastClaimTimestamp = block.timestamp;
