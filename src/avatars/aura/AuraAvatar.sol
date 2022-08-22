@@ -10,6 +10,7 @@ import {AuraAvatarOracleUtils} from "./AuraAvatarOracleUtils.sol";
 import {IBaseRewardPool} from "../../interfaces/aura/IBaseRewardPool.sol";
 import {IAsset} from "../../interfaces/balancer/IAsset.sol";
 import {IBalancerVault} from "../../interfaces/balancer/IBalancerVault.sol";
+import {KeeperCompatibleInterface} from "../../interfaces/chainlink/KeeperCompatibleInterface.sol";
 
 uint256 constant MAX_BPS = 10000;
 
@@ -18,7 +19,7 @@ struct TokenAmount {
     uint256 amount;
 }
 
-contract AuraAvatar is BaseAvatar, AuraConstants, AuraAvatarOracleUtils {
+contract AuraAvatar is BaseAvatar, AuraConstants, AuraAvatarOracleUtils, KeeperCompatibleInterface {
     ////////////////////////////////////////////////////////////////////////////
     // CONSTANTS
     ////////////////////////////////////////////////////////////////////////////
@@ -47,6 +48,8 @@ contract AuraAvatar is BaseAvatar, AuraConstants, AuraAvatarOracleUtils {
 
     uint256 public slippageTolToUsdc;
     uint256 public slippageTolBalToAuraBal;
+
+    uint256 public lastClaimTimestamp; 
 
     ////////////////////////////////////////////////////////////////////////////
     // ERRORS
@@ -170,8 +173,20 @@ contract AuraAvatar is BaseAvatar, AuraConstants, AuraAvatarOracleUtils {
     // PUBLIC: Keeper
     ////////////////////////////////////////////////////////////////////////////
 
+    function checkUpkeep(bytes calldata) external view override returns (bool upkeepNeeded, bytes memory checkData) {
+        if ((block.timestamp - lastClaimTimestamp) > CLAIM_CADENCE) {
+        return (true, new bytes(0));
+        }
+    }
+    
     // TODO: Pausable
-    function processRewards() external onlyKeeperRegistry {
+    function performUpkeep(bytes calldata performData) external override onlyKeeperRegistry {
+        if ((block.timestamp - lastClaimTimestamp) > CLAIM_CADENCE) {
+            processRewards();
+            lastClaimTimestamp = block.timestamp;
+        }
+    }
+    function processRewards() internal {
         // 1. Claim BAL and AURA rewards
         claimRewards();
 
