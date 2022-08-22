@@ -64,7 +64,8 @@ contract AuraAvatar is BaseAvatar, AuraConstants, AuraAvatarOracleUtils, KeeperC
     event KeeperRegistryUpdated(address keeperRegistry);
     event BalToUsdBpsUpdated(uint256 balToUsdcBps);
     event AuraToUsdBpsUpdated(uint256 auraToUsdcBps);
-    event RewardClaimed(); // Or harvested
+    event RewardsToStable(address indexed token, uint256 amount);
+    event RewardClaimed(address indexed token, uint256 amount); // Or harvested
 
     ////////////////////////////////////////////////////////////////////////////
     // INITIALIZATION
@@ -204,8 +205,8 @@ contract AuraAvatar is BaseAvatar, AuraConstants, AuraAvatarOracleUtils, KeeperC
         uint256 balForUsdc = totalBal * balToUsdcBps / MAX_BPS;
         uint256 auraForUsdc = totalAura * auraToUsdcBps / MAX_BPS;
 
-        swapBalForUsdc(balForUsdc);
-        swapAuraForUsdc(auraForUsdc);
+        uint256 usdcEarnedFromBal = swapBalForUsdc(balForUsdc);
+        uint256 usdcEarnedFromAura = swapAuraForUsdc(auraForUsdc);
 
         // 3. Swap remaining BAL for auraBAL
         uint256 balToDeposit = totalBal - balForUsdc;
@@ -217,6 +218,11 @@ contract AuraAvatar is BaseAvatar, AuraConstants, AuraAvatarOracleUtils, KeeperC
 
         // 5. Dogfood auraBAL in Badger vault in behalf of vault
         BAURABAL.depositFor(owner(), AURABAL.balanceOf(address(this)));
+
+        // events for metric analysis
+        emit RewardClaimed(address(BAL), totalBal);
+        emit RewardClaimed(address(AURA), totalAura);
+        emit RewardsToStable(address(USDC), usdcEarnedFromBal + usdcEarnedFromAura);
     }
 
     ////////////////////////////////////////////////////////////////////////////
