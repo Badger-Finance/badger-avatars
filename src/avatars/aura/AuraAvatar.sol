@@ -86,13 +86,20 @@ contract AuraAvatar is
         slippageTolToUsdc = 9825; // 98.25%
         slippageTolBalToAuraBal = 9950; // 99.5%
 
+        // booster approval for each bpt
         BPT_80BADGER_20WBTC.approve(address(AURA_BOOSTER), type(uint256).max);
         BPT_40WBTC_40DIGG_20GRAVIAURA.approve(
             address(AURA_BOOSTER),
             type(uint256).max
         );
+        // aura locker approval
         AURA.approve(address(AURA_LOCKER), type(uint256).max);
+        // badger sett approval
         AURABAL.approve(address(BAURABAL), type(uint256).max);
+        // balancer vaults approvals
+        B_80_BAL_20_WETH.approve(address(BALANCER_VAULT), type(uint256).max);
+        AURA.approve(address(BALANCER_VAULT), type(uint256).max);
+        BAL.approve(address(BALANCER_VAULT), type(uint256).max);
     }
 
     ////////////////////////////////////////////////////////////////////////////
