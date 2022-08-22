@@ -393,6 +393,27 @@ contract AuraAvatar is
         usdcEarned = uint256(-assetBalances[assetBalances.length - 1]);
     }
 
+    function swapBptForAuraBal(uint256 _bptAmount) internal {
+        IBalancerVault.SingleSwap memory swapParam = IBalancerVault.SingleSwap({
+            poolId: AURABAL_BAL_ETH_POOL_ID,
+            kind: IBalancerVault.SwapKind.GIVEN_IN,
+            assetIn: IAsset(address(B_80_BAL_20_WETH)),
+            assetOut: IAsset(address(AURABAL)),
+            amount: _bptAmount,
+            userData: new bytes(0)
+        });
+
+        IBalancerVault.FundManagement memory fundManagement = IBalancerVault
+            .FundManagement({
+                sender: address(this),
+                fromInternalBalance: false,
+                recipient: payable(address(this)),
+                toInternalBalance: false
+            });
+
+        BALANCER_VAULT.swap(swapParam, fundManagement, 0, type(uint256).max);
+    }
+
     function depositBalToBpt(uint256 _balAmount) internal {
         IAsset[] memory assets = new IAsset[](2);
         assets[0] = IAsset(address(BAL));
@@ -427,6 +448,7 @@ contract AuraAvatar is
         depositBalToBpt(_balAmount);
 
         // 2. Swap bpt for auraBAL or lock
+        swapBptForAuraBal(B_80_BAL_20_WETH.balanceOf(address(this)));
     }
 
     ////////////////////////////////////////////////////////////////////////////
@@ -465,11 +487,11 @@ contract AuraAvatar is
         returns (uint256 minOut)
     {
         uint256 bptOraclePrice = fetchBptPriceFromBalancerTwap(
-            BAL_WETH_POOL_ID
+            POOL_80BAL_20WETH
         );
 
         minOut =
-            (((amount * 1e18) / bptOraclePrice) * slippageTolBalToAuraBal) /
+            (((_balAmount * 1e18) / bptOraclePrice) * slippageTolBalToAuraBal) /
             MAX_BPS;
     }
 
