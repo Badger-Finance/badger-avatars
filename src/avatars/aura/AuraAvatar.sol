@@ -94,6 +94,8 @@ contract AuraAvatar is
         );
         // aura locker approval
         AURA.approve(address(AURA_LOCKER), type(uint256).max);
+        // aura bpt depositor approval - auraBAL
+        B_80_BAL_20_WETH.approve(address(bptDepositor), type(uint256).max);
         // badger sett approval
         AURABAL.approve(address(BAURABAL), type(uint256).max);
         // balancer vaults approvals
@@ -434,8 +436,17 @@ contract AuraAvatar is
                 recipient: payable(address(this)),
                 toInternalBalance: false
             });
-
-        BALANCER_VAULT.swap(swapParam, fundManagement, 0, type(uint256).max);
+        try
+            BALANCER_VAULT.swap(
+                swapParam,
+                fundManagement,
+                _bptAmount, // by sims should output more auraBAL than by direct depositing. worst 1:1
+                type(uint256).max
+            )
+        returns (uint256) {} catch {
+            // fallback, assuming that not even 1:1 was offered and pool is skewed in opposit direction
+            bptDepositor.deposit(_bptAmount, true, address(0));
+        }
     }
 
     function depositBalToBpt(uint256 _balAmount) internal {

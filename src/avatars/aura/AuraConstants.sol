@@ -8,6 +8,7 @@ import {IAuraToken} from "../../interfaces/aura/IAuraToken.sol";
 import {IBaseRewardPool} from "../../interfaces/aura/IBaseRewardPool.sol";
 import {IBooster} from "../../interfaces/aura/IBooster.sol";
 import {ICrvDepositorWrapper} from "../../interfaces/aura/ICrvDepositorWrapper.sol";
+import {IBptDepositor} from "../../interfaces/aura/IBptDepositor.sol";
 import {IVault} from "../../interfaces/badger/IVault.sol";
 import {IBalancerVault} from "../../interfaces/balancer/IBalancerVault.sol";
 import {IPriceOracle} from "../../interfaces/balancer/IPriceOracle.sol";
@@ -66,6 +67,10 @@ abstract contract AuraConstants {
         IPriceOracle(0xc29562b045D80fD77c69Bec09541F5c16fe20d9d); // POL from AURA
     IPriceOracle internal constant POOL_80BAL_20WETH =
         IPriceOracle(0x5c6Ee304399DBdB9C8Ef030aB642B10820DB8F56); // POL from AURA
+
+    // depositor for 80bal_20weth to auraBAL
+    IBptDepositor internal constant bptDepositor =
+        IBptDepositor(0xeAd792B55340Aa20181A80d6a16db6A0ECd1b827);
 
     uint256 internal constant USD_FEED_PRECISIONS = 1e8;
     uint256 internal constant AURA_WETH_TWAP_PRECISION = 1e18;
