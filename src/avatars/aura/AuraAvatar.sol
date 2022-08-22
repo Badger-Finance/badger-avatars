@@ -10,7 +10,7 @@ import {AuraAvatarOracleUtils} from "./AuraAvatarOracleUtils.sol";
 
 import {IBaseRewardPool} from "../../interfaces/aura/IBaseRewardPool.sol";
 import {IAsset} from "../../interfaces/balancer/IAsset.sol";
-import {IBalancerVault} from "../../interfaces/balancer/IBalancerVault.sol";
+import {IBalancerVault, JoinKind} from "../../interfaces/balancer/IBalancerVault.sol";
 import {KeeperCompatibleInterface} from "../../interfaces/chainlink/KeeperCompatibleInterface.sol";
 
 uint256 constant MAX_BPS = 10000;
@@ -20,7 +20,13 @@ struct TokenAmount {
     uint256 amount;
 }
 
-contract AuraAvatar is BaseAvatar, AuraConstants, AuraAvatarOracleUtils, KeeperCompatibleInterface, PausableUpgradeable {
+contract AuraAvatar is
+    BaseAvatar,
+    AuraConstants,
+    AuraAvatarOracleUtils,
+    KeeperCompatibleInterface,
+    PausableUpgradeable
+{
     ////////////////////////////////////////////////////////////////////////////
     // CONSTANTS
     ////////////////////////////////////////////////////////////////////////////
@@ -50,7 +56,7 @@ contract AuraAvatar is BaseAvatar, AuraConstants, AuraAvatarOracleUtils, KeeperC
     uint256 public slippageTolToUsdc;
     uint256 public slippageTolBalToAuraBal;
 
-    uint256 public lastClaimTimestamp; 
+    uint256 public lastClaimTimestamp;
 
     ////////////////////////////////////////////////////////////////////////////
     // ERRORS
@@ -81,7 +87,10 @@ contract AuraAvatar is BaseAvatar, AuraConstants, AuraAvatarOracleUtils, KeeperC
         slippageTolBalToAuraBal = 9950; // 99.5%
 
         BPT_80BADGER_20WBTC.approve(address(AURA_BOOSTER), type(uint256).max);
-        BPT_40WBTC_40DIGG_20GRAVIAURA.approve(address(AURA_BOOSTER), type(uint256).max);
+        BPT_40WBTC_40DIGG_20GRAVIAURA.approve(
+            address(AURA_BOOSTER),
+            type(uint256).max
+        );
         AURA.approve(address(AURA_LOCKER), type(uint256).max);
         AURABAL.approve(address(BAURABAL), type(uint256).max);
     }
@@ -97,16 +106,29 @@ contract AuraAvatar is BaseAvatar, AuraConstants, AuraAvatarOracleUtils, KeeperC
 
     function totalAssets() external view returns (uint256[2] memory assets_) {
         assets_[0] = BASE_REWARD_POOL_80BADGER_20WBTC.balanceOf(address(this));
-        assets_[1] = BASE_REWARD_POOL_40WBTC_40DIGG_20GRAVIAURA.balanceOf(address(this));
+        assets_[1] = BASE_REWARD_POOL_40WBTC_40DIGG_20GRAVIAURA.balanceOf(
+            address(this)
+        );
     }
 
     /// @dev Returns the name of the strategy
-    function pendingRewards() external view returns (TokenAmount[2] memory rewards_) {
-        uint256 balEarned = BASE_REWARD_POOL_80BADGER_20WBTC.earned(address(this));
-        balEarned += BASE_REWARD_POOL_40WBTC_40DIGG_20GRAVIAURA.earned(address(this));
+    function pendingRewards()
+        external
+        view
+        returns (TokenAmount[2] memory rewards_)
+    {
+        uint256 balEarned = BASE_REWARD_POOL_80BADGER_20WBTC.earned(
+            address(this)
+        );
+        balEarned += BASE_REWARD_POOL_40WBTC_40DIGG_20GRAVIAURA.earned(
+            address(this)
+        );
 
         rewards_[0] = TokenAmount(address(BAL), balEarned);
-        rewards_[1] = TokenAmount(address(AURA), getMintableAuraRewards(balEarned));
+        rewards_[1] = TokenAmount(
+            address(AURA),
+            getMintableAuraRewards(balEarned)
+        );
     }
 
     /// NOTE: Add custom avatar functions below
@@ -146,19 +168,32 @@ contract AuraAvatar is BaseAvatar, AuraConstants, AuraAvatarOracleUtils, KeeperC
     }
 
     function withdrawToOwner() external onlyOwner {
-        uint256 bpt80Badger20WbtcDeposited = BASE_REWARD_POOL_80BADGER_20WBTC.balanceOf(address(this));
+        uint256 bpt80Badger20WbtcDeposited = BASE_REWARD_POOL_80BADGER_20WBTC
+            .balanceOf(address(this));
         if (bpt80Badger20WbtcDeposited > 0) {
-            BASE_REWARD_POOL_80BADGER_20WBTC.withdrawAndUnwrap(bpt80Badger20WbtcDeposited, true);
+            BASE_REWARD_POOL_80BADGER_20WBTC.withdrawAndUnwrap(
+                bpt80Badger20WbtcDeposited,
+                true
+            );
         }
-        uint256 bpt40Wbtc40Digg20GraviAuraDeposited =
-            BASE_REWARD_POOL_40WBTC_40DIGG_20GRAVIAURA.balanceOf(address(this));
+        uint256 bpt40Wbtc40Digg20GraviAuraDeposited = BASE_REWARD_POOL_40WBTC_40DIGG_20GRAVIAURA
+                .balanceOf(address(this));
         if (bpt40Wbtc40Digg20GraviAuraDeposited > 0) {
-            BASE_REWARD_POOL_40WBTC_40DIGG_20GRAVIAURA.withdrawAndUnwrap(bpt40Wbtc40Digg20GraviAuraDeposited, true);
+            BASE_REWARD_POOL_40WBTC_40DIGG_20GRAVIAURA.withdrawAndUnwrap(
+                bpt40Wbtc40Digg20GraviAuraDeposited,
+                true
+            );
         }
 
         address ownerCached = owner();
-        BPT_80BADGER_20WBTC.transfer(ownerCached, BPT_80BADGER_20WBTC.balanceOf(address(this)));
-        BPT_40WBTC_40DIGG_20GRAVIAURA.transfer(ownerCached, BPT_40WBTC_40DIGG_20GRAVIAURA.balanceOf(address(this)));
+        BPT_80BADGER_20WBTC.transfer(
+            ownerCached,
+            BPT_80BADGER_20WBTC.balanceOf(address(this))
+        );
+        BPT_40WBTC_40DIGG_20GRAVIAURA.transfer(
+            ownerCached,
+            BPT_40WBTC_40DIGG_20GRAVIAURA.balanceOf(address(this))
+        );
     }
 
     function pause() external onlyOwner {
@@ -182,18 +217,29 @@ contract AuraAvatar is BaseAvatar, AuraConstants, AuraAvatarOracleUtils, KeeperC
     // PUBLIC: Keeper
     ////////////////////////////////////////////////////////////////////////////
 
-    function checkUpkeep(bytes calldata) external view override returns (bool upkeepNeeded, bytes memory checkData) {
+    function checkUpkeep(bytes calldata)
+        external
+        view
+        override
+        returns (bool upkeepNeeded, bytes memory checkData)
+    {
         if ((block.timestamp - lastClaimTimestamp) > CLAIM_CADENCE) {
             return (true, new bytes(0));
         }
     }
 
-    function performUpkeep(bytes calldata performData) external override onlyKeeperRegistry whenNotPaused {
+    function performUpkeep(bytes calldata performData)
+        external
+        override
+        onlyKeeperRegistry
+        whenNotPaused
+    {
         if ((block.timestamp - lastClaimTimestamp) > CLAIM_CADENCE) {
             processRewards();
             lastClaimTimestamp = block.timestamp;
         }
     }
+
     function processRewards() internal {
         // 1. Claim BAL and AURA rewards
         claimRewards();
@@ -202,8 +248,8 @@ contract AuraAvatar is BaseAvatar, AuraConstants, AuraAvatarOracleUtils, KeeperC
         uint256 totalAura = AURA.balanceOf(address(this));
 
         // 2. Swap some for USDC
-        uint256 balForUsdc = totalBal * balToUsdcBps / MAX_BPS;
-        uint256 auraForUsdc = totalAura * auraToUsdcBps / MAX_BPS;
+        uint256 balForUsdc = (totalBal * balToUsdcBps) / MAX_BPS;
+        uint256 auraForUsdc = (totalAura * auraToUsdcBps) / MAX_BPS;
 
         uint256 usdcEarnedFromBal = swapBalForUsdc(balForUsdc);
         uint256 usdcEarnedFromAura = swapAuraForUsdc(auraForUsdc);
@@ -222,7 +268,10 @@ contract AuraAvatar is BaseAvatar, AuraConstants, AuraAvatarOracleUtils, KeeperC
         // events for metric analysis
         emit RewardClaimed(address(BAL), totalBal);
         emit RewardClaimed(address(AURA), totalAura);
-        emit RewardsToStable(address(USDC), usdcEarnedFromBal + usdcEarnedFromAura);
+        emit RewardsToStable(
+            address(USDC),
+            usdcEarnedFromBal + usdcEarnedFromAura
+        );
     }
 
     ////////////////////////////////////////////////////////////////////////////
@@ -235,7 +284,10 @@ contract AuraAvatar is BaseAvatar, AuraConstants, AuraAvatarOracleUtils, KeeperC
     }
 
     // TODO: See if can use pricer v3
-    function swapBalForUsdc(uint256 _balAmount) internal returns (uint256 usdcEarned) {
+    function swapBalForUsdc(uint256 _balAmount)
+        internal
+        returns (uint256 usdcEarned)
+    {
         IAsset[] memory assets = new IAsset[](3);
         assets[0] = IAsset(address(BAL));
         assets[1] = IAsset(address(WETH));
@@ -243,9 +295,12 @@ contract AuraAvatar is BaseAvatar, AuraConstants, AuraAvatarOracleUtils, KeeperC
 
         int256[] memory limits = new int256[](3);
         limits[0] = int256(_balAmount);
-        limits[2] = int256(getBalAmountInUsdc(_balAmount) * slippageTolToUsdc / MAX_BPS);
+        limits[2] = int256(
+            (getBalAmountInUsdc(_balAmount) * slippageTolToUsdc) / MAX_BPS
+        );
 
-        IBalancerVault.BatchSwapStep[] memory swaps = new IBalancerVault.BatchSwapStep[](2);
+        IBalancerVault.BatchSwapStep[]
+            memory swaps = new IBalancerVault.BatchSwapStep[](2);
         // BAL --> WETH
         swaps[0] = IBalancerVault.BatchSwapStep({
             poolId: BAL_WETH_POOL_ID,
@@ -263,21 +318,30 @@ contract AuraAvatar is BaseAvatar, AuraConstants, AuraAvatarOracleUtils, KeeperC
             userData: new bytes(0)
         });
 
-        IBalancerVault.FundManagement memory fundManagement = IBalancerVault.FundManagement({
-            sender: address(this),
-            fromInternalBalance: false,
-            recipient: payable(address(this)),
-            toInternalBalance: false
-        });
+        IBalancerVault.FundManagement memory fundManagement = IBalancerVault
+            .FundManagement({
+                sender: address(this),
+                fromInternalBalance: false,
+                recipient: payable(address(this)),
+                toInternalBalance: false
+            });
 
         int256[] memory assetBalances = BALANCER_VAULT.batchSwap(
-            IBalancerVault.SwapKind.GIVEN_IN, swaps, assets, fundManagement, limits, type(uint256).max
+            IBalancerVault.SwapKind.GIVEN_IN,
+            swaps,
+            assets,
+            fundManagement,
+            limits,
+            type(uint256).max
         );
 
         usdcEarned = uint256(-assetBalances[assetBalances.length - 1]);
     }
 
-    function swapAuraForUsdc(uint256 _auraAmount) internal returns (uint256 usdcEarned) {
+    function swapAuraForUsdc(uint256 _auraAmount)
+        internal
+        returns (uint256 usdcEarned)
+    {
         // TODO: See if it makes sense to use better of two pools
         IAsset[] memory assets = new IAsset[](3);
         assets[0] = IAsset(address(AURA));
@@ -286,9 +350,12 @@ contract AuraAvatar is BaseAvatar, AuraConstants, AuraAvatarOracleUtils, KeeperC
 
         int256[] memory limits = new int256[](3);
         limits[0] = int256(_auraAmount);
-        limits[2] = int256(getAuraAmountInUsdc(_auraAmount) * slippageTolToUsdc / MAX_BPS);
+        limits[2] = int256(
+            (getAuraAmountInUsdc(_auraAmount) * slippageTolToUsdc) / MAX_BPS
+        );
 
-        IBalancerVault.BatchSwapStep[] memory swaps = new IBalancerVault.BatchSwapStep[](2);
+        IBalancerVault.BatchSwapStep[]
+            memory swaps = new IBalancerVault.BatchSwapStep[](2);
         // AURA --> WETH
         swaps[0] = IBalancerVault.BatchSwapStep({
             poolId: AURA_WETH_POOL_ID,
@@ -306,42 +373,59 @@ contract AuraAvatar is BaseAvatar, AuraConstants, AuraAvatarOracleUtils, KeeperC
             userData: new bytes(0)
         });
 
-        IBalancerVault.FundManagement memory fundManagement = IBalancerVault.FundManagement({
-            sender: address(this),
-            fromInternalBalance: false,
-            recipient: payable(address(this)),
-            toInternalBalance: false
-        });
+        IBalancerVault.FundManagement memory fundManagement = IBalancerVault
+            .FundManagement({
+                sender: address(this),
+                fromInternalBalance: false,
+                recipient: payable(address(this)),
+                toInternalBalance: false
+            });
 
         int256[] memory assetBalances = BALANCER_VAULT.batchSwap(
-            IBalancerVault.SwapKind.GIVEN_IN, swaps, assets, fundManagement, limits, type(uint256).max
+            IBalancerVault.SwapKind.GIVEN_IN,
+            swaps,
+            assets,
+            fundManagement,
+            limits,
+            type(uint256).max
         );
 
         usdcEarned = uint256(-assetBalances[assetBalances.length - 1]);
     }
 
-    function swapBalForAuraBal(uint256 _auraAmount) internal {
-        uint256 minAuraBalOut = AURABAL_DEPOSIT_WRAPPER.getMinOut(_auraAmount, slippageTolBalToAuraBal);
-        AURABAL_DEPOSIT_WRAPPER.deposit(_auraAmount, minAuraBalOut, true, address(0));
-        // TODO: See if can find optimal route on-chain
-        /*
-        # bpt out and swap estimation
-        bpt_out = vault.balancer.get_amount_bpt_out(
-            [bal, weth], [bal_to_deposit, 0], pool=b80bal_20weth
-        ) * Decimal(SLIPPAGE)
-        amt_pool_swapped_out = float(
-            vault.balancer.get_amount_out(
-                b80bal_20weth, auraBAL, bpt_out, pool=bauraBAL_stable
-            )
-            * Decimal(SLIPPAGE)
-        )
-        if amt_pool_swapped_out > wrapper_aurabal_out:
-            vault.balancer.deposit_and_stake(
-                [bal, weth], [bal_to_deposit, 0], pool=b80bal_20weth, stake=False
-            )
-            balance_bpt = b80bal_20weth.balanceOf(vault) * SLIPPAGE
-            vault.balancer.swap(b80bal_20weth, auraBAL, balance_bpt, pool=bauraBAL_stable)
-        */
+    function depositBalToBpt(uint256 _balAmount) internal {
+        IAsset[] memory assets = new IAsset[](2);
+        assets[0] = IAsset(address(BAL));
+        assets[1] = IAsset(address(WETH));
+
+        uint256[] memory amountsIn = new uint256[](2);
+        amountsIn[0] = _balAmount;
+        amountsIn[1] = 0;
+
+        IBalancerVault.JoinPoolRequest memory request = IBalancerVault.JoinPoolRequest(
+            assets,
+            amountsIn,
+            abi.encode(
+                JoinKind.TOKEN_IN_FOR_EXACT_BPT_OUT,
+                0, // TODO: calc with the internal oracle?
+                0 // BAL index
+            ),
+            false
+        );
+
+        BALANCER_VAULT.joinPool(
+            BAL_WETH_POOL_ID,
+            address(this),
+            address(this),
+            request
+        );
+    }
+
+    function swapBalForAuraBal(uint256 _balAmount) internal {
+        // 1. Get bpt
+        depositBalToBpt(_balAmount);
+        
+        // 2. Swap bpt for auraBAL or lock
     }
 
     ////////////////////////////////////////////////////////////////////////////
@@ -349,23 +433,38 @@ contract AuraAvatar is BaseAvatar, AuraConstants, AuraAvatarOracleUtils, KeeperC
     ////////////////////////////////////////////////////////////////////////////
 
     // NOTE: Assumes USDC is pegged to USD. If not, we should sell to a different stablecoin.
-    function getBalAmountInUsdc(uint256 _balAmount) internal view returns (uint256 usdcAmount_) {
+    function getBalAmountInUsdc(uint256 _balAmount)
+        internal
+        view
+        returns (uint256 usdcAmount_)
+    {
         // TODO: Check
         uint256 balInUsd = fetchPriceFromClFeed(BAL_USD_FEED);
-        usdcAmount_ = _balAmount * balInUsd / USD_FEED_PRECISIONS;
+        usdcAmount_ = (_balAmount * balInUsd) / USD_FEED_PRECISIONS;
     }
 
     // NOTE: Assumes USDC is pegged to USD. If not, we should sell to a different stablecoin.
-    function getAuraAmountInUsdc(uint256 _auraAmount) internal view returns (uint256 usdcAmount_) {
+    function getAuraAmountInUsdc(uint256 _auraAmount)
+        internal
+        view
+        returns (uint256 usdcAmount_)
+    {
         uint256 auraInEth = fetchPriceFromBalancerTwap(POOL_80AURA_20WETH);
         uint256 ethInUsd = fetchPriceFromClFeed(ETH_USD_FEED);
 
-        usdcAmount_ = _auraAmount * auraInEth * ethInUsd / USD_FEED_PRECISIONS / AURA_WETH_TWAP_PRECISION;
+        usdcAmount_ =
+            (_auraAmount * auraInEth * ethInUsd) /
+            USD_FEED_PRECISIONS /
+            AURA_WETH_TWAP_PRECISION;
     }
 
     /// @notice Returns the expected amount of AURA to be minted given an amount of BAL rewards
     /// @dev ref: https://etherscan.io/address/0xc0c293ce456ff0ed870add98a0828dd4d2903dbf#code#F1#L86
-    function getMintableAuraRewards(uint256 _balAmount) internal view returns (uint256 amount) {
+    function getMintableAuraRewards(uint256 _balAmount)
+        internal
+        view
+        returns (uint256 amount)
+    {
         // NOTE: Only correct if AURA.minterMinted() == 0
         //       minterMinted is a private var in the contract, so we can't access it directly
         uint256 emissionsMinted = AURA.totalSupply() - AURA.INIT_MINT_AMOUNT();
@@ -375,7 +474,7 @@ contract AuraAvatar is BaseAvatar, AuraConstants, AuraAvatarOracleUtils, KeeperC
 
         if (cliff < totalCliffs) {
             uint256 reduction = (((totalCliffs - cliff) * 5) / 2) + 700;
-            amount = _balAmount * reduction / totalCliffs;
+            amount = (_balAmount * reduction) / totalCliffs;
 
             uint256 amtTillMax = AURA.EMISSIONS_MAX_SUPPLY() - emissionsMinted;
             if (amount > amtTillMax) {
