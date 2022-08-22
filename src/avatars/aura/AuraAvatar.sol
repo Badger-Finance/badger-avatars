@@ -296,8 +296,15 @@ contract AuraAvatar is
     ////////////////////////////////////////////////////////////////////////////
 
     function claimRewards() internal {
-        BASE_REWARD_POOL_80BADGER_20WBTC.getReward();
-        BASE_REWARD_POOL_40WBTC_40DIGG_20GRAVIAURA.getReward();
+        if (BASE_REWARD_POOL_80BADGER_20WBTC.earned(address(this)) > 0) {
+            BASE_REWARD_POOL_80BADGER_20WBTC.getReward();
+        }
+
+        if (
+            BASE_REWARD_POOL_40WBTC_40DIGG_20GRAVIAURA.earned(address(this)) > 0
+        ) {
+            BASE_REWARD_POOL_40WBTC_40DIGG_20GRAVIAURA.getReward();
+        }
     }
 
     // TODO: See if can use pricer v3
