@@ -402,16 +402,17 @@ contract AuraAvatar is
         amountsIn[0] = _balAmount;
         amountsIn[1] = 0;
 
-        IBalancerVault.JoinPoolRequest memory request = IBalancerVault.JoinPoolRequest(
-            assets,
-            amountsIn,
-            abi.encode(
-                JoinKind.TOKEN_IN_FOR_EXACT_BPT_OUT,
-                0, // TODO: calc with the internal oracle?
-                0 // BAL index
-            ),
-            false
-        );
+        IBalancerVault.JoinPoolRequest memory request = IBalancerVault
+            .JoinPoolRequest(
+                assets,
+                amountsIn,
+                abi.encode(
+                    JoinKind.TOKEN_IN_FOR_EXACT_BPT_OUT,
+                    _getMinBpt(_balAmount),
+                    0 // BAL index
+                ),
+                false
+            );
 
         BALANCER_VAULT.joinPool(
             BAL_WETH_POOL_ID,
@@ -424,7 +425,7 @@ contract AuraAvatar is
     function swapBalForAuraBal(uint256 _balAmount) internal {
         // 1. Get bpt
         depositBalToBpt(_balAmount);
-        
+
         // 2. Swap bpt for auraBAL or lock
     }
 
@@ -456,6 +457,20 @@ contract AuraAvatar is
             (_auraAmount * auraInEth * ethInUsd) /
             USD_FEED_PRECISIONS /
             AURA_WETH_TWAP_PRECISION;
+    }
+
+    function _getMinBpt(uint256 _balAmount)
+        internal
+        view
+        returns (uint256 minOut)
+    {
+        uint256 bptOraclePrice = fetchBptPriceFromBalancerTwap(
+            BAL_WETH_POOL_ID
+        );
+
+        minOut =
+            (((amount * 1e18) / bptOraclePrice) * slippageTolBalToAuraBal) /
+            MAX_BPS;
     }
 
     /// @notice Returns the expected amount of AURA to be minted given an amount of BAL rewards
