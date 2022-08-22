@@ -216,6 +216,16 @@ contract AuraAvatar is
     ////////////////////////////////////////////////////////////////////////////
 
     function depositAll() external whenNotPaused {
+        if (
+            BASE_REWARD_POOL_80BADGER_20WBTC.balanceOf(address(this)) == 0 &&
+            BASE_REWARD_POOL_40WBTC_40DIGG_20GRAVIAURA.balanceOf(
+                address(this)
+            ) ==
+            0
+        ) {
+            // init the timestamp based on the 1st deposit
+            lastClaimTimestamp = block.timestamp;
+        }
         AURA_BOOSTER.depositAll(PID_80BADGER_20WBTC, true);
         AURA_BOOSTER.depositAll(PID_40WBTC_40DIGG_20GRAVIAURA, true);
     }
