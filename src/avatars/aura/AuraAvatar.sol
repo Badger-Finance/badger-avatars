@@ -70,8 +70,20 @@ contract AuraAvatar is
     event KeeperRegistryUpdated(address keeperRegistry);
     event BalToUsdBpsUpdated(uint256 balToUsdcBps);
     event AuraToUsdBpsUpdated(uint256 auraToUsdcBps);
-    event RewardsToStable(address indexed token, uint256 amount);
-    event RewardClaimed(address indexed token, uint256 amount); // Or harvested
+    event RewardsToStable(
+        address indexed source,
+        address indexed token,
+        uint256 amount,
+        uint256 indexed blockNumber,
+        uint256 timestamp
+    );
+    event RewardClaimed(
+        address indexed source,
+        address indexed token,
+        uint256 amount,
+        uint256 indexed blockNumber,
+        uint256 timestamp
+    );
 
     ////////////////////////////////////////////////////////////////////////////
     // INITIALIZATION
@@ -285,11 +297,26 @@ contract AuraAvatar is
         BAURABAL.depositFor(owner(), AURABAL.balanceOf(address(this)));
 
         // events for metric analysis
-        emit RewardClaimed(address(BAL), totalBal);
-        emit RewardClaimed(address(AURA), totalAura);
+        emit RewardClaimed(
+            address(this),
+            address(BAL),
+            totalBal,
+            block.number,
+            block.timestamp
+        );
+        emit RewardClaimed(
+            address(this),
+            address(AURA),
+            totalAura,
+            block.number,
+            block.timestamp
+        );
         emit RewardsToStable(
+            address(this),
             address(USDC),
-            usdcEarnedFromBal + usdcEarnedFromAura
+            usdcEarnedFromBal + usdcEarnedFromAura,
+            block.number,
+            block.timestamp
         );
     }
 
