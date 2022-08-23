@@ -22,6 +22,7 @@ struct TokenAmount {
 }
 
 // TODO: Contract should never hold funds?
+//       Natspec
 contract AuraAvatarTwoToken is
     BaseAvatar,
     PausableUpgradeable, // TODO: See if move pausable to base
@@ -55,11 +56,12 @@ contract AuraAvatarTwoToken is
 
     address public keeperRegistry;
 
-    uint256 public balToUsdcBps;
-    uint256 public auraToUsdcBps;
+    uint256 public sellBpsBalToUsd;
+    uint256 public sellBpsAuraToUsd;
 
-    uint256 public slippageTolToUsdc;
-    uint256 public slippageTolBalToAuraBal;
+    uint256 public minOutBpsBalToUsd;
+    uint256 public minOutBpsAuraToUsd;
+    uint256 public minOutBpsBalToAuraBal;
 
     uint256 public lastClaimTimestamp;
 
@@ -75,8 +77,14 @@ contract AuraAvatarTwoToken is
     // EVENTS
     ////////////////////////////////////////////////////////////////////////////
     event KeeperRegistryUpdated(address indexed oldKeeperRegistry, address indexed newKeeperRegistry);
-    event BalToUsdBpsUpdated(uint256 oldBalToUsdcBps, uint256 newBalToUsdcBps);
-    event AuraToUsdBpsUpdated(uint256 oldAuraToUsdcBps, uint256 newAuraToUsdcBps);
+
+    event SellBpsBalToUsdUpdated(uint256 oldValue, uint256 newValue);
+    event SellBpsAuraToUsdUpdated(uint256 oldValue, uint256 newValue);
+
+    event MinOutBpsBalToUsdUpdated(uint256 oldValue, uint256 newValue);
+    event MinOutBpsAuraToUsdUpdated(uint256 oldValue, uint256 newValue);
+    event MinOutBpsBalToAuraBalUpdated(uint256 oldValue, uint256 newValue);
+
     event RewardsToStable(
         address indexed source, address indexed token, uint256 amount, uint256 indexed blockNumber, uint256 timestamp
     );
@@ -106,11 +114,12 @@ contract AuraAvatarTwoToken is
         __BaseAvatar_init(_owner);
         __Pausable_init();
 
-        auraToUsdcBps = 3000; // 30%
-        balToUsdcBps = 7000; // 70%
+        sellBpsAuraToUsd = 3000; // 30%
+        sellBpsBalToUsd = 7000; // 70%
 
-        slippageTolToUsdc = 9825; // 98.25%
-        slippageTolBalToAuraBal = 9950; // 99.5%
+        minOutBpsBalToUsd = 9825; // 98.25%
+        minOutBpsAuraToUsd = 9825; // 98.25%
+        minOutBpsBalToAuraBal = 9950; // 99.5%
 
         // Booster approval for both bpt
         asset1.approve(address(AURA_BOOSTER), type(uint256).max);
@@ -168,7 +177,7 @@ contract AuraAvatarTwoToken is
     }
 
     ////////////////////////////////////////////////////////////////////////////
-    // PUBLIC: Owner
+    // PUBLIC: Owner - Pausing
     ////////////////////////////////////////////////////////////////////////////
 
     // TODO: See if move up hierarchy
@@ -180,26 +189,63 @@ contract AuraAvatarTwoToken is
         _unpause();
     }
 
-    function setBalToUsdcBps(uint256 _balToUsdcBps) external onlyOwner {
-        if (_balToUsdcBps > MAX_BPS) {
-            revert InvalidBps(_balToUsdcBps);
+    ////////////////////////////////////////////////////////////////////////////
+    // PUBLIC: Owner - Config
+    ////////////////////////////////////////////////////////////////////////////
+
+    function setSellBpsBalToUsd(uint256 _sellBpsBalToUsd) external onlyOwner {
+        if (_sellBpsBalToUsd > MAX_BPS) {
+            revert InvalidBps(_sellBpsBalToUsd);
         }
 
-        uint256 oldBalToUsdcBps = balToUsdcBps;
-        balToUsdcBps = _balToUsdcBps;
+        uint256 oldSellBpsBalToUsd = sellBpsBalToUsd;
+        sellBpsBalToUsd = _sellBpsBalToUsd;
 
-        emit BalToUsdBpsUpdated(oldBalToUsdcBps, _balToUsdcBps);
+        emit SellBpsBalToUsdUpdated(oldSellBpsBalToUsd, _sellBpsBalToUsd);
     }
 
-    function setAuraToUsdcBps(uint256 _auraToUsdcBps) external onlyOwner {
-        if (_auraToUsdcBps > MAX_BPS) {
-            revert InvalidBps(_auraToUsdcBps);
+    function setSellBpsAuraToUsd(uint256 _sellBpsAuraToUsd) external onlyOwner {
+        if (_sellBpsAuraToUsd > MAX_BPS) {
+            revert InvalidBps(_sellBpsAuraToUsd);
         }
 
-        uint256 oldAuraToUsdcBps = auraToUsdcBps;
-        auraToUsdcBps = _auraToUsdcBps;
+        uint256 oldSellBpsAuraToUsd = sellBpsAuraToUsd;
+        sellBpsAuraToUsd = _sellBpsAuraToUsd;
 
-        emit AuraToUsdBpsUpdated(oldAuraToUsdcBps, _auraToUsdcBps);
+        emit SellBpsAuraToUsdUpdated(oldSellBpsAuraToUsd, _sellBpsAuraToUsd);
+    }
+
+    function setMinOutBpsBalToUsd(uint256 _minOutBpsBalToUsd) external onlyOwner {
+        if (_minOutBpsBalToUsd > MAX_BPS) {
+            revert InvalidBps(_minOutBpsBalToUsd);
+        }
+
+        uint256 oldMinOutBpsBalToUsd = minOutBpsBalToUsd;
+        minOutBpsBalToUsd = _minOutBpsBalToUsd;
+
+        emit MinOutBpsBalToUsdUpdated(oldMinOutBpsBalToUsd, _minOutBpsBalToUsd);
+    }
+
+    function setMinOutBpsAuraToUsd(uint256 _minOutBpsAuraToUsd) external onlyOwner {
+        if (_minOutBpsAuraToUsd > MAX_BPS) {
+            revert InvalidBps(_minOutBpsAuraToUsd);
+        }
+
+        uint256 oldMinOutBpsAuraToUsd = minOutBpsAuraToUsd;
+        minOutBpsAuraToUsd = _minOutBpsAuraToUsd;
+
+        emit MinOutBpsAuraToUsdUpdated(oldMinOutBpsAuraToUsd, _minOutBpsAuraToUsd);
+    }
+
+    function setMinOutBpsBalToAuraBal(uint256 _minOutBpsBalToAuraBal) external onlyOwner {
+        if (_minOutBpsBalToAuraBal > MAX_BPS) {
+            revert InvalidBps(_minOutBpsBalToAuraBal);
+        }
+
+        uint256 oldMinOutBpsBalToAuraBal = minOutBpsBalToAuraBal;
+        minOutBpsBalToAuraBal = _minOutBpsBalToAuraBal;
+
+        emit MinOutBpsBalToAuraBalUpdated(oldMinOutBpsBalToAuraBal, _minOutBpsBalToAuraBal);
     }
 
     function setKeeperRegistry(address _keeperRegistry) external onlyOwner {
@@ -208,6 +254,10 @@ contract AuraAvatarTwoToken is
         keeperRegistry = _keeperRegistry;
         emit KeeperRegistryUpdated(oldKeeperRegistry, _keeperRegistry);
     }
+
+    ////////////////////////////////////////////////////////////////////////////
+    // PUBLIC: Owner
+    ////////////////////////////////////////////////////////////////////////////
 
     // TODO: Events
     function deposit(uint256 _amountBpt1, uint256 _amountBpt2) external onlyOwner {
@@ -296,8 +346,8 @@ contract AuraAvatarTwoToken is
         }
 
         // 2. Swap some for USDC
-        uint256 balForUsdc = (totalBal * balToUsdcBps) / MAX_BPS;
-        uint256 auraForUsdc = (totalAura * auraToUsdcBps) / MAX_BPS;
+        uint256 balForUsdc = (totalBal * sellBpsBalToUsd) / MAX_BPS;
+        uint256 auraForUsdc = (totalAura * sellBpsAuraToUsd) / MAX_BPS;
 
         uint256 usdcEarnedFromBal = swapBalForUsdc(balForUsdc);
         uint256 usdcEarnedFromAura = swapAuraForUsdc(auraForUsdc);
@@ -345,7 +395,8 @@ contract AuraAvatarTwoToken is
 
         int256[] memory limits = new int256[](3);
         limits[0] = int256(_balAmount);
-        limits[2] = int256((getBalAmountInUsdc(_balAmount) * slippageTolToUsdc) / MAX_BPS);
+        // Assumes USDC is pegged. We should sell for other stableecoins if not
+        limits[2] = int256((getBalAmountInUsd(_balAmount) * minOutBpsBalToUsd) / MAX_BPS); //
 
         IBalancerVault.BatchSwapStep[] memory swaps = new IBalancerVault.BatchSwapStep[](2);
         // BAL --> WETH
@@ -388,7 +439,8 @@ contract AuraAvatarTwoToken is
 
         int256[] memory limits = new int256[](3);
         limits[0] = int256(_auraAmount);
-        limits[2] = int256((getAuraAmountInUsdc(_auraAmount) * slippageTolToUsdc) / MAX_BPS);
+        // Assumes USDC is pegged. We should sell for other stableecoins if not
+        limits[2] = int256((getAuraAmountInUsd(_auraAmount) * minOutBpsAuraToUsd) / MAX_BPS);
 
         IBalancerVault.BatchSwapStep[] memory swaps = new IBalancerVault.BatchSwapStep[](2);
         // AURA --> WETH
@@ -482,15 +534,13 @@ contract AuraAvatarTwoToken is
     // INTERNAL VIEW
     ////////////////////////////////////////////////////////////////////////////
 
-    // NOTE: Assumes USDC is pegged to USD. If not, we should sell to a different stablecoin.
-    function getBalAmountInUsdc(uint256 _balAmount) internal view returns (uint256 usdcAmount_) {
+    function getBalAmountInUsd(uint256 _balAmount) internal view returns (uint256 usdcAmount_) {
         // TODO: Check
         uint256 balInUsd = fetchPriceFromClFeed(BAL_USD_FEED);
         usdcAmount_ = (_balAmount * balInUsd) / USD_FEED_PRECISIONS;
     }
 
-    // NOTE: Assumes USDC is pegged to USD. If not, we should sell to a different stablecoin.
-    function getAuraAmountInUsdc(uint256 _auraAmount) internal view returns (uint256 usdcAmount_) {
+    function getAuraAmountInUsd(uint256 _auraAmount) internal view returns (uint256 usdcAmount_) {
         uint256 auraInEth = fetchPriceFromBalancerTwap(BPT_80AURA_20WETH);
         uint256 ethInUsd = fetchPriceFromClFeed(ETH_USD_FEED);
 
@@ -500,7 +550,7 @@ contract AuraAvatarTwoToken is
     function getMinBpt(uint256 _balAmount) internal view returns (uint256 minOut_) {
         uint256 bptOraclePrice = fetchBptPriceFromBalancerTwap(IPriceOracle(address(BPT_80BAL_20WETH)));
 
-        minOut_ = (((_balAmount * 1e18) / bptOraclePrice) * slippageTolBalToAuraBal) / MAX_BPS;
+        minOut_ = (((_balAmount * 1e18) / bptOraclePrice) * minOutBpsBalToAuraBal) / MAX_BPS;
     }
 
     /// @notice Returns the expected amount of AURA to be minted given an amount of BAL rewards
