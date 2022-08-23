@@ -49,6 +49,15 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
         assertEq(address(avatar.baseRewardPool2()), address(BASE_REWARD_POOL_40WBTC_40DIGG_20GRAVIAURA));
     }
 
+    function testInitialize() public {
+        assertGt(avatar.sellBpsBalToUsd(), 0);
+        assertGt(avatar.sellBpsAuraToUsd(), 0);
+
+        assertGt(avatar.minOutBpsBalToUsd(), 0);
+        assertGt(avatar.minOutBpsAuraToUsd(), 0);
+        assertGt(avatar.minOutBpsBalToAuraBal(), 0);
+    }
+
     function testDeposit() public {
         vm.prank(owner);
         avatar.deposit(10e18, 20e18);
@@ -64,8 +73,14 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
         vm.prank(owner);
         avatar.deposit(10e18, 20e18);
 
-        assertEq(BASE_REWARD_POOL_80BADGER_20WBTC.balanceOf(address(avatar)), 10e18);
-        assertEq(BASE_REWARD_POOL_40WBTC_40DIGG_20GRAVIAURA.balanceOf(address(avatar)), 20e18);
+        uint256[2] memory amounts = avatar.totalAssets();
+        assertEq(amounts[0], 10e18);
+        assertEq(amounts[1], 20e18);
+    }
+
+    function testOnlyOwnerCanDeposit() public {
+        vm.expectRevert("Ownable: caller is not the owner");
+        avatar.deposit(1, 1);
     }
 
     function testWithdrawAll() public {

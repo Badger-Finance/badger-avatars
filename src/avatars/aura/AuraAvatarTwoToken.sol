@@ -397,7 +397,6 @@ contract AuraAvatarTwoToken is
         limits[0] = int256(_balAmount);
         // Assumes USDC is pegged. We should sell for other stableecoins if not
         limits[2] = int256((getBalAmountInUsd(_balAmount) * minOutBpsBalToUsd) / MAX_BPS); //
-
         IBalancerVault.BatchSwapStep[] memory swaps = new IBalancerVault.BatchSwapStep[](2);
         // BAL --> WETH
         swaps[0] = IBalancerVault.BatchSwapStep({
