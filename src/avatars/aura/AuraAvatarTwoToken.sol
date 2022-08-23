@@ -7,6 +7,7 @@ import {PausableUpgradeable} from "openzeppelin-contracts-upgradeable/security/P
 import {BaseAvatar} from "../../lib/BaseAvatar.sol";
 import {AuraConstants} from "./AuraConstants.sol";
 import {AuraAvatarOracleUtils} from "./AuraAvatarOracleUtils.sol";
+import {KEEPER_REGISTRY} from "../BaseConstants.sol";
 
 import {IBaseRewardPool} from "../../interfaces/aura/IBaseRewardPool.sol";
 import {IAsset} from "../../interfaces/balancer/IAsset.sol";
@@ -113,6 +114,8 @@ contract AuraAvatarTwoToken is
     function initialize(address _owner) public initializer {
         __BaseAvatar_init(_owner);
         __Pausable_init();
+
+        keeperRegistry = KEEPER_REGISTRY;
 
         sellBpsAuraToUsd = 3000; // 30%
         sellBpsBalToUsd = 7000; // 70%
@@ -298,6 +301,10 @@ contract AuraAvatarTwoToken is
         asset2.transfer(ownerCached, asset2.balanceOf(address(this)));
     }
 
+    function processRewards() external onlyOwner {
+        processRewardsInternal();
+    }
+
     ////////////////////////////////////////////////////////////////////////////
     // PUBLIC: Keeper
     ////////////////////////////////////////////////////////////////////////////
@@ -306,8 +313,7 @@ contract AuraAvatarTwoToken is
     function performUpkeep(bytes calldata) external override onlyKeeperRegistry whenNotPaused {
         if ((block.timestamp - lastClaimTimestamp) > CLAIM_CADENCE) {
             // Would revert if there's nothing to claim
-            processRewards();
-            lastClaimTimestamp = block.timestamp;
+            processRewardsInternal();
         }
     }
 
@@ -334,7 +340,10 @@ contract AuraAvatarTwoToken is
     // INTERNAL
     ////////////////////////////////////////////////////////////////////////////
 
-    function processRewards() internal {
+    function processRewardsInternal() internal {
+        // Update last claimed time
+        lastClaimTimestamp = block.timestamp;
+
         // 1. Claim BAL and AURA rewards
         claimRewards();
 
@@ -367,7 +376,7 @@ contract AuraAvatarTwoToken is
         // 6. Dogfood auraBAL in Badger vault in behalf of vault
         BAURABAL.depositFor(owner(), AURABAL.balanceOf(address(this)));
 
-        // events for metric analysis
+        // Emit events for analysis
         emit RewardClaimed(address(this), address(BAL), totalBal, block.number, block.timestamp);
         emit RewardClaimed(address(this), address(AURA), totalAura, block.number, block.timestamp);
         emit RewardsToStable(
