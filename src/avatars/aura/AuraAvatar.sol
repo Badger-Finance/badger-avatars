@@ -66,10 +66,9 @@ contract AuraAvatar is
     ////////////////////////////////////////////////////////////////////////////
     // EVENTS
     ////////////////////////////////////////////////////////////////////////////
-    // TODO: Events
-    event KeeperRegistryUpdated(address keeperRegistry);
-    event BalToUsdBpsUpdated(uint256 balToUsdcBps);
-    event AuraToUsdBpsUpdated(uint256 auraToUsdcBps);
+    event KeeperRegistryUpdated(address indexed oldKeeperRegistry, address indexed newKeeperRegistry);
+    event BalToUsdBpsUpdated(uint256 oldBalToUsdcBps, uint256 newBalToUsdcBps);
+    event AuraToUsdBpsUpdated(uint256 oldAuraToUsdcBps, uint256 newAuraToUsdcBps);
     event RewardsToStable(
         address indexed source,
         address indexed token,
@@ -98,7 +97,7 @@ contract AuraAvatar is
         slippageTolToUsdc = 9825; // 98.25%
         slippageTolBalToAuraBal = 9950; // 99.5%
 
-        // booster approval for each bpt
+        // Booster approval for each bpt
         BPT_80BADGER_20WBTC.approve(address(AURA_BOOSTER), type(uint256).max);
         BPT_40WBTC_40DIGG_20GRAVIAURA.approve(
             address(AURA_BOOSTER),
@@ -107,7 +106,7 @@ contract AuraAvatar is
         // aura locker approval
         AURA.approve(address(AURA_LOCKER), type(uint256).max);
         // aura bpt depositor approval - auraBAL
-        B_80_BAL_20_WETH.approve(address(bptDepositor), type(uint256).max);
+        B_80_BAL_20_WETH.approve(address(AURABAL_DEPOSITOR), type(uint256).max);
         // badger sett approval
         AURABAL.approve(address(BAURABAL), type(uint256).max);
         // balancer vaults approvals
@@ -152,8 +151,6 @@ contract AuraAvatar is
         );
     }
 
-    /// NOTE: Add custom avatar functions below
-
     ////////////////////////////////////////////////////////////////////////////
     // MODIFIERS
     ////////////////////////////////////////////////////////////////////////////
@@ -171,21 +168,24 @@ contract AuraAvatar is
 
     // TODO: See if events should emit old value
     function setBalToUsdcBps(uint256 _balToUsdcBps) external onlyOwner {
+        uint256 oldBalToUsdcBps = balToUsdcBps;
         balToUsdcBps = _balToUsdcBps;
 
-        emit BalToUsdBpsUpdated(_balToUsdcBps);
+        emit BalToUsdBpsUpdated(oldBalToUsdcBps, _balToUsdcBps);
     }
 
     function setAuraToUsdcBps(uint256 _auraToUsdcBps) external onlyOwner {
+        uint256 oldAuraToUsdcBps = auraToUsdcBps;
         auraToUsdcBps = _auraToUsdcBps;
 
-        emit AuraToUsdBpsUpdated(_auraToUsdcBps);
+        emit AuraToUsdBpsUpdated(oldAuraToUsdcBps, _auraToUsdcBps);
     }
 
     function setKeeperRegistry(address _keeperRegistry) external onlyOwner {
-        keeperRegistry = _keeperRegistry;
+        address oldKeeperRegistry = keeperRegistry;
 
-        emit KeeperRegistryUpdated(_keeperRegistry);
+        keeperRegistry = _keeperRegistry;
+        emit KeeperRegistryUpdated(oldKeeperRegistry, _keeperRegistry);
     }
 
     function withdrawToOwner() external onlyOwner {
@@ -230,6 +230,7 @@ contract AuraAvatar is
     ////////////////////////////////////////////////////////////////////////////
 
     function depositAll() external whenNotPaused {
+        // TODO: Check this
         if (
             BASE_REWARD_POOL_80BADGER_20WBTC.balanceOf(address(this)) == 0 &&
             BASE_REWARD_POOL_40WBTC_40DIGG_20GRAVIAURA.balanceOf(
@@ -240,8 +241,15 @@ contract AuraAvatar is
             // init the timestamp based on the 1st deposit
             lastClaimTimestamp = block.timestamp;
         }
-        AURA_BOOSTER.depositAll(PID_80BADGER_20WBTC, true);
-        AURA_BOOSTER.depositAll(PID_40WBTC_40DIGG_20GRAVIAURA, true);
+
+        uint256 bpt80Badger20WbtcBalance  = BPT_80BADGER_20WBTC.balanceOf(address(this));
+        if (bpt80Badger20WbtcBalance > 0) {
+            AURA_BOOSTER.deposit(PID_80BADGER_20WBTC, bpt80Badger20WbtcBalance, true);
+        }
+        uint256 bpt40Wbtc40Digg20GraviAuraBalance = BPT_40WBTC_40DIGG_20GRAVIAURA.balanceOf(address(this));
+        if (bpt40Wbtc40Digg20GraviAuraBalance > 0) {
+            AURA_BOOSTER.deposit(PID_40WBTC_40DIGG_20GRAVIAURA, bpt40Wbtc40Digg20GraviAuraBalance, true);
+        }
     }
 
     ////////////////////////////////////////////////////////////////////////////
@@ -252,14 +260,14 @@ contract AuraAvatar is
         external
         view
         override
-        returns (bool upkeepNeeded, bytes memory checkData)
+        returns (bool upkeepNeeded_, bytes memory)
     {
         if ((block.timestamp - lastClaimTimestamp) > CLAIM_CADENCE) {
-            return (true, new bytes(0));
+            upKeepNeeded_ = true;
         }
     }
 
-    function performUpkeep(bytes calldata performData)
+    function performUpkeep(bytes calldata)
         external
         override
         onlyKeeperRegistry
@@ -285,15 +293,19 @@ contract AuraAvatar is
         uint256 usdcEarnedFromBal = swapBalForUsdc(balForUsdc);
         uint256 usdcEarnedFromAura = swapAuraForUsdc(auraForUsdc);
 
-        // 3. Swap remaining BAL for auraBAL
+        // 3. Deposit remaining BAL to 80BAL-20ETH BPT
         uint256 balToDeposit = totalBal - balForUsdc;
-        swapBalForAuraBal(balToDeposit);
+        depositBalToBpt(_balAmount);
 
-        // 4. Lock remaining AURA on behalf of Badger voter msig
+        // 4. Swap BPT for auraBAL or lock
+        uint256 balEthBptAmount = balB_80_BAL_20_WETH.balanceOf(address(this));
+        swapBptForAuraBal(balEthBptAmount);
+
+        // 5. Lock remaining AURA on behalf of Badger voter msig
         uint256 auraToLock = totalAura - auraForUsdc;
         AURA_LOCKER.lock(BADGER_VOTER, auraToLock);
 
-        // 5. Dogfood auraBAL in Badger vault in behalf of vault
+        // 6. Dogfood auraBAL in Badger vault in behalf of vault
         BAURABAL.depositFor(owner(), AURABAL.balanceOf(address(this)));
 
         // events for metric analysis
@@ -446,6 +458,7 @@ contract AuraAvatar is
         usdcEarned = uint256(-assetBalances[assetBalances.length - 1]);
     }
 
+    // TODO: Check this
     function swapBptForAuraBal(uint256 _bptAmount) internal {
         IBalancerVault.SingleSwap memory swapParam = IBalancerVault.SingleSwap({
             poolId: AURABAL_BAL_ETH_POOL_ID,
@@ -463,6 +476,7 @@ contract AuraAvatar is
                 recipient: payable(address(this)),
                 toInternalBalance: false
             });
+
         try
             BALANCER_VAULT.swap(
                 swapParam,
@@ -472,45 +486,35 @@ contract AuraAvatar is
             )
         returns (uint256) {} catch {
             // fallback, assuming that not even 1:1 was offered and pool is skewed in opposit direction
-            bptDepositor.deposit(_bptAmount, true, address(0));
+            AURABAL_DEPOSITOR.deposit(_bptAmount, true, address(0));
         }
     }
 
+    // TODO: Check minOut
     function depositBalToBpt(uint256 _balAmount) internal {
         IAsset[] memory assets = new IAsset[](2);
         assets[0] = IAsset(address(BAL));
         assets[1] = IAsset(address(WETH));
 
-        uint256[] memory amountsIn = new uint256[](2);
+        uint256[] memory maxAmountsIn = new uint256[](2);
         amountsIn[0] = _balAmount;
         amountsIn[1] = 0;
 
-        IBalancerVault.JoinPoolRequest memory request = IBalancerVault
-            .JoinPoolRequest(
-                assets,
-                amountsIn,
-                abi.encode(
-                    JoinKind.TOKEN_IN_FOR_EXACT_BPT_OUT,
-                    _getMinBpt(_balAmount),
-                    0 // BAL index
-                ),
-                false
-            );
-
         BALANCER_VAULT.joinPool(
-            BAL_WETH_POOL_ID,
+            BAL_ETH_POOL_ID,
             address(this),
             address(this),
-            request
+            IBalancerVault.JoinPoolRequest({
+                assets: assets,
+                maxAmountsIn: maxAmountsIn,
+                userData: abi.encode(
+                    JoinKind.EXACT_TOKENS_IN_FOR_BPT_OUT,
+                    maxAmountsIn,
+                    getMinBpt(_balAmount) // minOut
+                ),
+                fromInternalBalance: false
+            })
         );
-    }
-
-    function swapBalForAuraBal(uint256 _balAmount) internal {
-        // 1. Get bpt
-        depositBalToBpt(_balAmount);
-
-        // 2. Swap bpt for auraBAL or lock
-        swapBptForAuraBal(B_80_BAL_20_WETH.balanceOf(address(this)));
     }
 
     ////////////////////////////////////////////////////////////////////////////
@@ -543,16 +547,16 @@ contract AuraAvatar is
             AURA_WETH_TWAP_PRECISION;
     }
 
-    function _getMinBpt(uint256 _balAmount)
+    function getMinBpt(uint256 _balAmount)
         internal
         view
-        returns (uint256 minOut)
+        returns (uint256 minOut_)
     {
         uint256 bptOraclePrice = fetchBptPriceFromBalancerTwap(
             POOL_80BAL_20WETH
         );
 
-        minOut =
+        minOut_ =
             (((_balAmount * 1e18) / bptOraclePrice) * slippageTolBalToAuraBal) /
             MAX_BPS;
     }

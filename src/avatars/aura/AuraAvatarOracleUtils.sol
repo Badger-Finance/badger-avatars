@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.16;
 
-import {IAsset} from "../../interfaces/balancer/IAsset.sol";
 import {IPriceOracle} from "../../interfaces/balancer/IPriceOracle.sol";
 import {IAggregatorV3} from "../../interfaces/chainlink/IAggregatorV3.sol";
 

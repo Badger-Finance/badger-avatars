@@ -26,8 +26,11 @@ abstract contract AuraConstants {
         IBooster(0x7818A1DA7BD1E64c199029E86Ba244a9798eEE10);
     IAuraLocker internal constant AURA_LOCKER =
         IAuraLocker(0x3Fa73f1E5d8A792C80F426fc8F84FBF7Ce9bBCAC);
-    ICrvDepositorWrapper internal constant AURABAL_DEPOSIT_WRAPPER =
+    ICrvDepositor internal constant AURABAL_DEPOSITOR =
+        ICrvDepositor(0xeAd792B55340Aa20181A80d6a16db6A0ECd1b827);
+    ICrvDepositorWrapper internal constant AURABAL_DEPOSITOR_WRAPPER =
         ICrvDepositorWrapper(0x68655AD9852a99C87C0934c7290BB62CFa5D4123);
+
     IBaseRewardPool internal constant AURABAL_REWARDS =
         IBaseRewardPool(0x5e5ea2048475854a5702F5B8468A51Ba1296EFcC);
 
@@ -66,11 +69,7 @@ abstract contract AuraConstants {
     IPriceOracle internal constant POOL_80AURA_20WETH =
         IPriceOracle(0xc29562b045D80fD77c69Bec09541F5c16fe20d9d); // POL from AURA
     IPriceOracle internal constant POOL_80BAL_20WETH =
-        IPriceOracle(0x5c6Ee304399DBdB9C8Ef030aB642B10820DB8F56); // POL from AURA
-
-    // depositor for 80bal_20weth to auraBAL
-    IBptDepositor internal constant bptDepositor =
-        IBptDepositor(0xeAd792B55340Aa20181A80d6a16db6A0ECd1b827);
+        IPriceOracle(0x5c6Ee304399DBdB9C8Ef030aB642B10820DB8F56);
 
     uint256 internal constant USD_FEED_PRECISIONS = 1e8;
     uint256 internal constant AURA_WETH_TWAP_PRECISION = 1e18;

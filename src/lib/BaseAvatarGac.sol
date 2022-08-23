@@ -34,4 +34,3 @@ contract BaseAvatarGac is BaseAvatar, GlobalAccessControlManaged {
         return BaseAvatar.call(to, value, data);
     }
 }
-
