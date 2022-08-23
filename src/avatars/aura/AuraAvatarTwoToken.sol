@@ -21,6 +21,7 @@ struct TokenAmount {
     uint256 amount;
 }
 
+// TODO: Contract should never hold funds?
 contract AuraAvatarTwoToken is
     BaseAvatar,
     PausableUpgradeable, // TODO: See if move pausable to base
@@ -42,8 +43,8 @@ contract AuraAvatarTwoToken is
     uint256 public immutable pid1;
     uint256 public immutable pid2;
 
-    IERC20Upgradeable public immutable bpt1;
-    IERC20Upgradeable public immutable bpt2;
+    IERC20Upgradeable public immutable asset1;
+    IERC20Upgradeable public immutable asset2;
 
     IBaseRewardPool public immutable baseRewardPool1;
     IBaseRewardPool public immutable baseRewardPool2;
@@ -94,8 +95,8 @@ contract AuraAvatarTwoToken is
         (address lpToken1,,, address crvRewards1,,) = AURA_BOOSTER.poolInfo(_pid1);
         (address lpToken2,,, address crvRewards2,,) = AURA_BOOSTER.poolInfo(_pid2);
 
-        bpt1 = IERC20Upgradeable(lpToken1);
-        bpt2 = IERC20Upgradeable(lpToken2);
+        asset1 = IERC20Upgradeable(lpToken1);
+        asset2 = IERC20Upgradeable(lpToken2);
 
         baseRewardPool1 = IBaseRewardPool(crvRewards1);
         baseRewardPool2 = IBaseRewardPool(crvRewards2);
@@ -112,8 +113,8 @@ contract AuraAvatarTwoToken is
         slippageTolBalToAuraBal = 9950; // 99.5%
 
         // Booster approval for both bpt
-        bpt1.approve(address(AURA_BOOSTER), type(uint256).max);
-        bpt2.approve(address(AURA_BOOSTER), type(uint256).max);
+        asset1.approve(address(AURA_BOOSTER), type(uint256).max);
+        asset2.approve(address(AURA_BOOSTER), type(uint256).max);
 
         // Balancer vault approvals
         BAL.approve(address(BALANCER_VAULT), type(uint256).max);
@@ -136,9 +137,14 @@ contract AuraAvatarTwoToken is
         name_ = "Aura_Avatar";
     }
 
-    function totalAssets() external view returns (TokenAmount[2] memory assets_) {
-        assets_[0] = TokenAmount(address(bpt1), baseRewardPool1.balanceOf(address(this)));
-        assets_[1] = TokenAmount(address(bpt2), baseRewardPool2.balanceOf(address(this)));
+    function assets() external view returns (IERC20Upgradeable[2] memory assets_) {
+        assets_[0] = asset1;
+        assets_[1] = asset2;
+    }
+
+    function totalAssets() external view returns (uint256[2] memory assetAmounts_) {
+        assetAmounts_[0] = baseRewardPool1.balanceOf(address(this));
+        assetAmounts_[1] = baseRewardPool2.balanceOf(address(this));
     }
 
     /// @dev Returns the name of the strategy
@@ -203,7 +209,31 @@ contract AuraAvatarTwoToken is
         emit KeeperRegistryUpdated(oldKeeperRegistry, _keeperRegistry);
     }
 
-    function withdrawToOwner() external onlyOwner {
+    // TODO: Events
+    function deposit(uint256 _amountBpt1, uint256 _amountBpt2) external onlyOwner {
+        if (_amountBpt1 == 0 && _amountBpt2 == 0) {
+            revert NothingToDeposit();
+        }
+
+        uint256 bptDeposited1 = baseRewardPool1.balanceOf(address(this));
+        uint256 bptDeposited2 = baseRewardPool2.balanceOf(address(this));
+        if (bptDeposited1 == 0 && bptDeposited2 == 0) {
+            // Initialize at first deposit
+            lastClaimTimestamp = block.timestamp;
+        }
+
+        if (_amountBpt1 > 0) {
+            asset1.transferFrom(msg.sender, address(this), _amountBpt1);
+            AURA_BOOSTER.deposit(pid1, _amountBpt1, true);
+        }
+        if (_amountBpt2 > 0) {
+            asset2.transferFrom(msg.sender, address(this), _amountBpt2);
+            AURA_BOOSTER.deposit(pid2, _amountBpt2, true);
+        }
+    }
+
+    // TODO: Events
+    function withdrawAll() external onlyOwner {
         uint256 bptDeposited1 = baseRewardPool1.balanceOf(address(this));
         if (bptDeposited1 > 0) {
             baseRewardPool1.withdrawAndUnwrap(bptDeposited1, true);
@@ -214,35 +244,8 @@ contract AuraAvatarTwoToken is
         }
 
         address ownerCached = owner();
-        bpt1.transfer(ownerCached, bpt1.balanceOf(address(this)));
-        bpt2.transfer(ownerCached, bpt2.balanceOf(address(this)));
-    }
-
-    ////////////////////////////////////////////////////////////////////////////
-    // PUBLIC
-    ////////////////////////////////////////////////////////////////////////////
-
-    function depositAll() external whenNotPaused {
-        uint256 bptBalance1 = bpt1.balanceOf(address(this));
-        uint256 bptBalance2 = bpt2.balanceOf(address(this));
-
-        if (bptBalance1 == 0 && bptBalance2 == 0) {
-            revert NothingToDeposit();
-        }
-
-        uint256 bptDeposited1 = baseRewardPool1.balanceOf(address(this));
-        uint256 bptDeposited2 = baseRewardPool2.balanceOf(address(this));
-        if (bptDeposited1 == 0 && bptDeposited2 == 0) {
-            // init the timestamp based on the 1st deposit
-            lastClaimTimestamp = block.timestamp;
-        }
-
-        if (bptBalance1 > 0) {
-            AURA_BOOSTER.deposit(pid1, bptBalance1, true);
-        }
-        if (bptBalance2 > 0) {
-            AURA_BOOSTER.deposit(pid2, bptBalance2, true);
-        }
+        asset1.transfer(ownerCached, asset1.balanceOf(address(this)));
+        asset2.transfer(ownerCached, asset2.balanceOf(address(this)));
     }
 
     ////////////////////////////////////////////////////////////////////////////
@@ -335,10 +338,10 @@ contract AuraAvatarTwoToken is
 
     // TODO: See if can use pricer v3
     function swapBalForUsdc(uint256 _balAmount) internal returns (uint256 usdcEarned) {
-        IAsset[] memory assets = new IAsset[](3);
-        assets[0] = IAsset(address(BAL));
-        assets[1] = IAsset(address(WETH));
-        assets[2] = IAsset(address(USDC));
+        IAsset[] memory assetArray = new IAsset[](3);
+        assetArray[0] = IAsset(address(BAL));
+        assetArray[1] = IAsset(address(WETH));
+        assetArray[2] = IAsset(address(USDC));
 
         int256[] memory limits = new int256[](3);
         limits[0] = int256(_balAmount);
@@ -370,7 +373,7 @@ contract AuraAvatarTwoToken is
         });
 
         int256[] memory assetBalances = BALANCER_VAULT.batchSwap(
-            IBalancerVault.SwapKind.GIVEN_IN, swaps, assets, fundManagement, limits, type(uint256).max
+            IBalancerVault.SwapKind.GIVEN_IN, swaps, assetArray, fundManagement, limits, type(uint256).max
         );
 
         usdcEarned = uint256(-assetBalances[assetBalances.length - 1]);
@@ -378,10 +381,10 @@ contract AuraAvatarTwoToken is
 
     function swapAuraForUsdc(uint256 _auraAmount) internal returns (uint256 usdcEarned) {
         // TODO: See if it makes sense to use better of two pools
-        IAsset[] memory assets = new IAsset[](3);
-        assets[0] = IAsset(address(AURA));
-        assets[1] = IAsset(address(WETH));
-        assets[2] = IAsset(address(USDC));
+        IAsset[] memory assetArray = new IAsset[](3);
+        assetArray[0] = IAsset(address(AURA));
+        assetArray[1] = IAsset(address(WETH));
+        assetArray[2] = IAsset(address(USDC));
 
         int256[] memory limits = new int256[](3);
         limits[0] = int256(_auraAmount);
@@ -413,7 +416,7 @@ contract AuraAvatarTwoToken is
         });
 
         int256[] memory assetBalances = BALANCER_VAULT.batchSwap(
-            IBalancerVault.SwapKind.GIVEN_IN, swaps, assets, fundManagement, limits, type(uint256).max
+            IBalancerVault.SwapKind.GIVEN_IN, swaps, assetArray, fundManagement, limits, type(uint256).max
         );
 
         usdcEarned = uint256(-assetBalances[assetBalances.length - 1]);
@@ -450,9 +453,9 @@ contract AuraAvatarTwoToken is
 
     // TODO: Check minOut
     function depositBalToBpt(uint256 _balAmount) internal {
-        IAsset[] memory assets = new IAsset[](2);
-        assets[0] = IAsset(address(BAL));
-        assets[1] = IAsset(address(WETH));
+        IAsset[] memory assetArray = new IAsset[](2);
+        assetArray[0] = IAsset(address(BAL));
+        assetArray[1] = IAsset(address(WETH));
 
         uint256[] memory maxAmountsIn = new uint256[](2);
         maxAmountsIn[0] = _balAmount;
@@ -463,7 +466,7 @@ contract AuraAvatarTwoToken is
             address(this),
             address(this),
             IBalancerVault.JoinPoolRequest({
-                assets: assets,
+                assets: assetArray,
                 maxAmountsIn: maxAmountsIn,
                 userData: abi.encode(
                     JoinKind.EXACT_TOKENS_IN_FOR_BPT_OUT,

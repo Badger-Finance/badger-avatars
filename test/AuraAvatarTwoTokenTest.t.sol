@@ -29,23 +29,29 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
         avatar = new AuraAvatarTwoToken(PID_80BADGER_20WBTC, PID_40WBTC_40DIGG_20GRAVIAURA);
         avatar.initialize(owner);
 
-        deal(address(avatar.bpt1()), address(avatar), 10e18, true);
-        deal(address(avatar.bpt2()), address(avatar), 20e18, true);
+        deal(address(avatar.asset1()), owner, 10e18, true);
+        deal(address(avatar.asset2()), owner, 20e18, true);
+
+        vm.startPrank(owner);
+        BPT_80BADGER_20WBTC.approve(address(avatar), 10e18);
+        BPT_40WBTC_40DIGG_20GRAVIAURA.approve(address(avatar), 20e18);
+        vm.stopPrank();
     }
 
     function testConstructor() public {
         assertEq(avatar.pid1(), PID_80BADGER_20WBTC);
         assertEq(avatar.pid2(), PID_40WBTC_40DIGG_20GRAVIAURA);
 
-        assertEq(address(avatar.bpt1()), address(BPT_80BADGER_20WBTC));
-        assertEq(address(avatar.bpt2()), address(BPT_40WBTC_40DIGG_20GRAVIAURA));
+        assertEq(address(avatar.asset1()), address(BPT_80BADGER_20WBTC));
+        assertEq(address(avatar.asset2()), address(BPT_40WBTC_40DIGG_20GRAVIAURA));
 
         assertEq(address(avatar.baseRewardPool1()), address(BASE_REWARD_POOL_80BADGER_20WBTC));
         assertEq(address(avatar.baseRewardPool2()), address(BASE_REWARD_POOL_40WBTC_40DIGG_20GRAVIAURA));
     }
 
-    function testDepositAll() public {
-        avatar.depositAll();
+    function testDeposit() public {
+        vm.prank(owner);
+        avatar.deposit(10e18, 20e18);
 
         assertEq(BPT_80BADGER_20WBTC.balanceOf(owner), 0);
         assertEq(BPT_40WBTC_40DIGG_20GRAVIAURA.balanceOf(address(avatar)), 0);
@@ -54,9 +60,20 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
         assertEq(BASE_REWARD_POOL_40WBTC_40DIGG_20GRAVIAURA.balanceOf(address(avatar)), 20e18);
     }
 
-    function testWithdrawToOwner() public {
+    function testTotalAssets() public {
         vm.prank(owner);
-        avatar.withdrawToOwner();
+        avatar.deposit(10e18, 20e18);
+
+        assertEq(BASE_REWARD_POOL_80BADGER_20WBTC.balanceOf(address(avatar)), 10e18);
+        assertEq(BASE_REWARD_POOL_40WBTC_40DIGG_20GRAVIAURA.balanceOf(address(avatar)), 20e18);
+    }
+
+    function testWithdrawAll() public {
+        vm.prank(owner);
+        avatar.deposit(10e18, 20e18);
+
+        vm.prank(owner);
+        avatar.withdrawAll();
 
         assertEq(BASE_REWARD_POOL_80BADGER_20WBTC.balanceOf(address(avatar)), 0);
         assertEq(BASE_REWARD_POOL_40WBTC_40DIGG_20GRAVIAURA.balanceOf(address(avatar)), 0);
@@ -65,16 +82,14 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
         assertEq(BPT_40WBTC_40DIGG_20GRAVIAURA.balanceOf(owner), 20e18);
     }
 
-    function testOnlyOwnerCanWithdrawToOwner() public {
+    function testOnlyOwnerCanWithdrawAll() public {
         vm.expectRevert("Ownable: caller is not the owner");
-        avatar.withdrawToOwner();
+        avatar.withdrawAll();
     }
 
     function testDepositFailsWithNothingToDeposit() public {
-        deal(address(avatar.bpt1()), address(avatar), 0, true);
-        deal(address(avatar.bpt2()), address(avatar), 0, true);
-
         vm.expectRevert(AuraAvatarTwoToken.NothingToDeposit.selector);
-        avatar.depositAll();
+        vm.prank(owner);
+        avatar.deposit(0, 0);
     }
 }
