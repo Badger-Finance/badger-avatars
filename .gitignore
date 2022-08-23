@@ -1,3 +1,6 @@
 cache/
 out/
 node_modules
+
+report/
+lcov.info

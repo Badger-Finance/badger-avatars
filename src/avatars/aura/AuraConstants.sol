@@ -52,6 +52,4 @@ abstract contract AuraConstants {
 
     uint256 internal constant USD_FEED_PRECISIONS = 1e8;
     uint256 internal constant AURA_WETH_TWAP_PRECISION = 1e18;
-
-    uint256 internal constant CLAIM_CADENCE = 1 weeks;
 }

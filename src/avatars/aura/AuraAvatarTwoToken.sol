@@ -21,16 +21,22 @@ struct TokenAmount {
     uint256 amount;
 }
 
-// TODO: See if move pausable to base
 contract AuraAvatarTwoToken is
     BaseAvatar,
+    PausableUpgradeable, // TODO: See if move pausable to base
     AuraConstants,
     AuraAvatarOracleUtils,
-    KeeperCompatibleInterface,
-    PausableUpgradeable
+    KeeperCompatibleInterface
 {
     ////////////////////////////////////////////////////////////////////////////
     // CONSTANTS
+    ////////////////////////////////////////////////////////////////////////////
+
+    // TODO: Maybe move to storage settable by owner
+    uint256 internal constant CLAIM_CADENCE = 1 weeks;
+
+    ////////////////////////////////////////////////////////////////////////////
+    // IMMUTABLES
     ////////////////////////////////////////////////////////////////////////////
 
     uint256 public immutable pid1;
@@ -60,7 +66,9 @@ contract AuraAvatarTwoToken is
     // ERRORS
     ////////////////////////////////////////////////////////////////////////////
     error NothingToDeposit();
+    error NoRewardsToProcess();
     error OnlyKeeperRegistry();
+    error InvalidBps(uint256 bps);
 
     ////////////////////////////////////////////////////////////////////////////
     // EVENTS
@@ -103,24 +111,26 @@ contract AuraAvatarTwoToken is
         slippageTolToUsdc = 9825; // 98.25%
         slippageTolBalToAuraBal = 9950; // 99.5%
 
-        // Booster approval for each bpt
+        // Booster approval for both bpt
         bpt1.approve(address(AURA_BOOSTER), type(uint256).max);
         bpt2.approve(address(AURA_BOOSTER), type(uint256).max);
 
+        // Balancer vault approvals
+        BAL.approve(address(BALANCER_VAULT), type(uint256).max);
+        AURA.approve(address(BALANCER_VAULT), type(uint256).max);
+        BPT_80BAL_20WETH.approve(address(BALANCER_VAULT), type(uint256).max);
+
         AURA.approve(address(AURA_LOCKER), type(uint256).max);
+
         BPT_80BAL_20WETH.approve(address(AURABAL_DEPOSITOR), type(uint256).max);
         AURABAL.approve(address(BAURABAL), type(uint256).max);
-
-        // Balancer vaults approvals
-        BPT_80BAL_20WETH.approve(address(BALANCER_VAULT), type(uint256).max);
-        AURA.approve(address(BALANCER_VAULT), type(uint256).max);
-        BAL.approve(address(BALANCER_VAULT), type(uint256).max);
     }
 
     ////////////////////////////////////////////////////////////////////////////
     // PUBLIC VIEW
     ////////////////////////////////////////////////////////////////////////////
 
+    // TODO: See if better name
     /// @dev Returns the name of the strategy
     function getName() external pure returns (string memory name_) {
         name_ = "Aura_Avatar";
@@ -152,10 +162,23 @@ contract AuraAvatarTwoToken is
     }
 
     ////////////////////////////////////////////////////////////////////////////
-    // PUBLIC: Permissioned
+    // PUBLIC: Owner
     ////////////////////////////////////////////////////////////////////////////
 
+    // TODO: See if move up hierarchy
+    function pause() external onlyOwner {
+        _pause();
+    }
+
+    function unpause() external onlyOwner {
+        _unpause();
+    }
+
     function setBalToUsdcBps(uint256 _balToUsdcBps) external onlyOwner {
+        if (_auraToUsdcBps > MAX_BPS) {
+            revert InvalidBps(_balToUsdcBps);
+        }
+
         uint256 oldBalToUsdcBps = balToUsdcBps;
         balToUsdcBps = _balToUsdcBps;
 
@@ -163,6 +186,10 @@ contract AuraAvatarTwoToken is
     }
 
     function setAuraToUsdcBps(uint256 _auraToUsdcBps) external onlyOwner {
+        if (_auraToUsdcBps > MAX_BPS) {
+            revert InvalidBps(_auraToUsdcBps);
+        }
+
         uint256 oldAuraToUsdcBps = auraToUsdcBps;
         auraToUsdcBps = _auraToUsdcBps;
 
@@ -191,14 +218,6 @@ contract AuraAvatarTwoToken is
         bpt2.transfer(ownerCached, bpt2.balanceOf(address(this)));
     }
 
-    function pause() external onlyOwner {
-        _pause();
-    }
-
-    function unpause() external onlyOwner {
-        _unpause();
-    }
-
     ////////////////////////////////////////////////////////////////////////////
     // PUBLIC
     ////////////////////////////////////////////////////////////////////////////
@@ -211,8 +230,9 @@ contract AuraAvatarTwoToken is
             revert NothingToDeposit();
         }
 
-        // TODO: Check this
-        if (baseRewardPool1.balanceOf(address(this)) == 0 && baseRewardPool2.balanceOf(address(this)) == 0) {
+        uint256 bptDeposited1 = baseRewardPool1.balanceOf(address(this));
+        uint256 bptDeposited2 = baseRewardPool2.balanceOf(address(this));
+        if (bptDeposited1 == 0 && bptDeposited2 == 0) {
             // init the timestamp based on the 1st deposit
             lastClaimTimestamp = block.timestamp;
         }
@@ -229,19 +249,37 @@ contract AuraAvatarTwoToken is
     // PUBLIC: Keeper
     ////////////////////////////////////////////////////////////////////////////
 
-    function checkUpkeep(bytes calldata) external view override returns (bool upkeepNeeded_, bytes memory) {
-        if ((block.timestamp - lastClaimTimestamp) > CLAIM_CADENCE) {
-            upkeepNeeded_ = true;
-        }
-    }
-
-    // TODO: Maybe do based on roles
+    // TODO: Maybe do based on roles + allow owner
     function performUpkeep(bytes calldata) external override onlyKeeperRegistry whenNotPaused {
         if ((block.timestamp - lastClaimTimestamp) > CLAIM_CADENCE) {
+            // Would revert if there's nothing to claim
             processRewards();
             lastClaimTimestamp = block.timestamp;
         }
     }
+
+    ////////////////////////////////////////////////////////////////////////////
+    // PUBLIC VIEW
+    ////////////////////////////////////////////////////////////////////////////
+
+    function checkUpkeep(bytes calldata) external view override returns (bool upkeepNeeded_, bytes memory) {
+        uint256 balPending1 = baseRewardPool1.earned(address(this));
+        uint256 balPending2 = baseRewardPool2.earned(address(this));
+
+        uint256 balBalance = BAL.balanceOf(address(this));
+
+        if ((block.timestamp - lastClaimTimestamp) > CLAIM_CADENCE) {
+            if (balPending1 == 0 && balPending2 == 0 && balBalance == 0) {
+                upkeepNeeded_ = false;
+            } else {
+                upkeepNeeded_ = true;
+            }
+        }
+    }
+
+    ////////////////////////////////////////////////////////////////////////////
+    // INTERNAL
+    ////////////////////////////////////////////////////////////////////////////
 
     function processRewards() internal {
         // 1. Claim BAL and AURA rewards
@@ -249,6 +287,10 @@ contract AuraAvatarTwoToken is
 
         uint256 totalBal = BAL.balanceOf(address(this));
         uint256 totalAura = AURA.balanceOf(address(this));
+
+        if (totalBal == 0) {
+            revert NoRewardsToProcess();
+        }
 
         // 2. Swap some for USDC
         uint256 balForUsdc = (totalBal * balToUsdcBps) / MAX_BPS;
@@ -280,10 +322,7 @@ contract AuraAvatarTwoToken is
             );
     }
 
-    ////////////////////////////////////////////////////////////////////////////
-    // INTERNAL
-    ////////////////////////////////////////////////////////////////////////////
-
+    // Shouldn't revert since others can claim for this contract
     function claimRewards() internal {
         if (baseRewardPool1.earned(address(this)) > 0) {
             baseRewardPool1.getReward();
