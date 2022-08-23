@@ -20,6 +20,7 @@ struct TokenAmount {
     uint256 amount;
 }
 
+// TODO: See if move pausable to base
 contract AuraAvatar is
     BaseAvatar,
     AuraConstants,
@@ -61,6 +62,7 @@ contract AuraAvatar is
     ////////////////////////////////////////////////////////////////////////////
     // ERRORS
     ////////////////////////////////////////////////////////////////////////////
+    error NothingToDepost();
     error OnlyKeeperRegistry();
 
     ////////////////////////////////////////////////////////////////////////////
@@ -90,6 +92,7 @@ contract AuraAvatar is
 
     function initialize(address _owner) public initializer {
         __BaseAvatar_init(_owner);
+        __Pausable_init();
 
         auraToUsdcBps = 3000; // 30%
         balToUsdcBps = 7000; // 70%
@@ -166,7 +169,6 @@ contract AuraAvatar is
     // PUBLIC: Permissioned
     ////////////////////////////////////////////////////////////////////////////
 
-    // TODO: See if events should emit old value
     function setBalToUsdcBps(uint256 _balToUsdcBps) external onlyOwner {
         uint256 oldBalToUsdcBps = balToUsdcBps;
         balToUsdcBps = _balToUsdcBps;
@@ -230,6 +232,13 @@ contract AuraAvatar is
     ////////////////////////////////////////////////////////////////////////////
 
     function depositAll() external whenNotPaused {
+        uint256 bpt80Badger20WbtcBalance  = BPT_80BADGER_20WBTC.balanceOf(address(this));
+        uint256 bpt40Wbtc40Digg20GraviAuraBalance = BPT_40WBTC_40DIGG_20GRAVIAURA.balanceOf(address(this));
+
+        if (bpt80Badger20WbtcBalance == 0 && bpt40Wbtc40Digg20GraviAuraBalance == 0) {
+            revert NothingToDeposit();
+        }
+
         // TODO: Check this
         if (
             BASE_REWARD_POOL_80BADGER_20WBTC.balanceOf(address(this)) == 0 &&
@@ -242,11 +251,9 @@ contract AuraAvatar is
             lastClaimTimestamp = block.timestamp;
         }
 
-        uint256 bpt80Badger20WbtcBalance  = BPT_80BADGER_20WBTC.balanceOf(address(this));
         if (bpt80Badger20WbtcBalance > 0) {
             AURA_BOOSTER.deposit(PID_80BADGER_20WBTC, bpt80Badger20WbtcBalance, true);
         }
-        uint256 bpt40Wbtc40Digg20GraviAuraBalance = BPT_40WBTC_40DIGG_20GRAVIAURA.balanceOf(address(this));
         if (bpt40Wbtc40Digg20GraviAuraBalance > 0) {
             AURA_BOOSTER.deposit(PID_40WBTC_40DIGG_20GRAVIAURA, bpt40Wbtc40Digg20GraviAuraBalance, true);
         }
