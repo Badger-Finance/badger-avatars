@@ -175,7 +175,7 @@ contract AuraAvatarTwoToken is
     }
 
     function setBalToUsdcBps(uint256 _balToUsdcBps) external onlyOwner {
-        if (_auraToUsdcBps > MAX_BPS) {
+        if (_balToUsdcBps > MAX_BPS) {
             revert InvalidBps(_balToUsdcBps);
         }
 
