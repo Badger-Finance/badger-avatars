@@ -9,20 +9,21 @@ abstract contract AuraAvatarOracleUtils {
     // CONSTANTS
     ////////////////////////////////////////////////////////////////////////////
 
+    // TODO: Check these constants. Maybe make settable?
     uint256 private constant TWAP_DURATION = 1 hours;
-    uint256 private constant MAX_LOOKBACK = 1 hours;
+    uint256 private constant MAX_LOOKBACK = 24 hours;
 
     ////////////////////////////////////////////////////////////////////////////
     // ERRORS
     ////////////////////////////////////////////////////////////////////////////
 
-    error StalePriceFeed();
+    error StalePriceFeed(uint256 currentTime, uint256 updateTime);
 
     function fetchPriceFromClFeed(IAggregatorV3 _feed) internal view returns (uint256 answerUint256_) {
         (, int256 answer,, uint256 updateTime,) = _feed.latestRoundData();
 
         if (block.timestamp - updateTime > MAX_LOOKBACK) {
-            revert StalePriceFeed();
+            revert StalePriceFeed(block.timestamp, updateTime);
         }
 
         answerUint256_ = uint256(answer);

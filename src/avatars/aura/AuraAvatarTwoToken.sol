@@ -7,15 +7,13 @@ import {PausableUpgradeable} from "openzeppelin-contracts-upgradeable/security/P
 import {BaseAvatar} from "../../lib/BaseAvatar.sol";
 import {AuraConstants} from "./AuraConstants.sol";
 import {AuraAvatarOracleUtils} from "./AuraAvatarOracleUtils.sol";
-import {KEEPER_REGISTRY} from "../BaseConstants.sol";
+import {MAX_BPS, KEEPER_REGISTRY} from "../BaseConstants.sol";
 
 import {IBaseRewardPool} from "../../interfaces/aura/IBaseRewardPool.sol";
 import {IAsset} from "../../interfaces/balancer/IAsset.sol";
 import {IBalancerVault, JoinKind} from "../../interfaces/balancer/IBalancerVault.sol";
 import {IPriceOracle} from "../../interfaces/balancer/IPriceOracle.sol";
 import {KeeperCompatibleInterface} from "../../interfaces/chainlink/KeeperCompatibleInterface.sol";
-
-uint256 constant MAX_BPS = 10000;
 
 struct TokenAmount {
     address token;
@@ -69,14 +67,16 @@ contract AuraAvatarTwoToken is
     ////////////////////////////////////////////////////////////////////////////
     // ERRORS
     ////////////////////////////////////////////////////////////////////////////
+
     error NothingToDeposit();
     error NoRewardsToProcess();
-    error OnlyKeeperRegistry();
+    error NotKeeperRegistry(address caller);
     error InvalidBps(uint256 bps);
 
     ////////////////////////////////////////////////////////////////////////////
     // EVENTS
     ////////////////////////////////////////////////////////////////////////////
+
     event KeeperRegistryUpdated(address indexed oldKeeperRegistry, address indexed newKeeperRegistry);
 
     event SellBpsBalToUsdUpdated(uint256 oldValue, uint256 newValue);
@@ -174,7 +174,7 @@ contract AuraAvatarTwoToken is
 
     modifier onlyKeeperRegistry() {
         if (msg.sender != keeperRegistry) {
-            revert OnlyKeeperRegistry();
+            revert NotKeeperRegistry(msg.sender);
         }
         _;
     }
@@ -358,6 +358,7 @@ contract AuraAvatarTwoToken is
         uint256 balForUsdc = (totalBal * sellBpsBalToUsd) / MAX_BPS;
         uint256 auraForUsdc = (totalAura * sellBpsAuraToUsd) / MAX_BPS;
 
+        // TODO: See if need to transfer to owner?
         uint256 usdcEarnedFromBal = swapBalForUsdc(balForUsdc);
         uint256 usdcEarnedFromAura = swapAuraForUsdc(auraForUsdc);
 
@@ -369,14 +370,15 @@ contract AuraAvatarTwoToken is
         uint256 balEthBptAmount = BPT_80BAL_20WETH.balanceOf(address(this));
         swapBptForAuraBal(balEthBptAmount);
 
-        // 5. Lock remaining AURA on behalf of Badger voter msig
+        // 5. Dogfood auraBAL in Badger vault in behalf of owner
+        BAURABAL.depositFor(owner(), AURABAL.balanceOf(address(this)));
+
+        // 6. Lock remaining AURA on behalf of Badger voter msig
         uint256 auraToLock = totalAura - auraForUsdc;
         AURA_LOCKER.lock(BADGER_VOTER, auraToLock);
 
-        // 6. Dogfood auraBAL in Badger vault in behalf of vault
-        BAURABAL.depositFor(owner(), AURABAL.balanceOf(address(this)));
-
         // Emit events for analysis
+        // TODO: Do I need address(this)? Is block.number redundant?
         emit RewardClaimed(address(this), address(BAL), totalBal, block.number, block.timestamp);
         emit RewardClaimed(address(this), address(AURA), totalAura, block.number, block.timestamp);
         emit RewardsToStable(

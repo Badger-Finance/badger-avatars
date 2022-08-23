@@ -50,6 +50,9 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
     }
 
     function testInitialize() public {
+        assertEq(avatar.owner(), owner);
+        assertFalse(avatar.paused());
+
         assertGt(avatar.sellBpsBalToUsd(), 0);
         assertGt(avatar.sellBpsAuraToUsd(), 0);
 
@@ -106,5 +109,40 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
         vm.expectRevert(AuraAvatarTwoToken.NothingToDeposit.selector);
         vm.prank(owner);
         avatar.deposit(0, 0);
+    }
+
+    function testProcessRewards() public {
+        vm.startPrank(owner);
+        avatar.deposit(10e18, 20e18);
+
+        (,, uint256 voterBalanceBefore,) = AURA_LOCKER.lockedBalances(BADGER_VOTER);
+        uint256 bauraBalBalanceBefore = BAURABAL.balanceOf(owner);
+
+        skip(1 hours);
+        avatar.processRewards();
+
+        (,, uint256 voterBalanceAfter,) = AURA_LOCKER.lockedBalances(BADGER_VOTER);
+
+        assertEq(BAL.balanceOf(address(avatar)), 0);
+        assertEq(AURA.balanceOf(address(avatar)), 0);
+
+        assertGt(voterBalanceAfter, voterBalanceBefore);
+        assertGt(BAURABAL.balanceOf(owner), bauraBalBalanceBefore);
+    }
+
+    function testOnlyOwnerCanProcessRewards() public {
+        vm.expectRevert("Ownable: caller is not the owner");
+        avatar.processRewards();
+    }
+
+    function testProcessRewardsFailsIfNothingToClaim() public {
+        vm.expectRevert(AuraAvatarTwoToken.NoRewardsToProcess.selector);
+        vm.prank(owner);
+        avatar.processRewards();
+    }
+
+    function testCheckUpkeep() public {
+        vm.prank(owner);
+        avatar.deposit(10e18, 20e18);
     }
 }
