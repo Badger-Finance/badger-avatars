@@ -15,10 +15,6 @@ import {IPriceOracle} from "../../interfaces/balancer/IPriceOracle.sol";
 import {IAggregatorV3} from "../../interfaces/chainlink/IAggregatorV3.sol";
 
 abstract contract AuraConstants {
-    ////////////////////////////////////////////////////////////////////////////
-    // CONSTANTS
-    ////////////////////////////////////////////////////////////////////////////
-
     IBalancerVault internal constant BALANCER_VAULT = IBalancerVault(0xBA12222222228d8Ba445958a75a0704d566BF2C8);
 
     IBooster internal constant AURA_BOOSTER = IBooster(0x7818A1DA7BD1E64c199029E86Ba244a9798eEE10);

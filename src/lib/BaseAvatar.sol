@@ -40,6 +40,7 @@ contract BaseAvatar is OwnableUpgradeable, Executor {
         onlyOwner
         returns (bool success)
     {
+        // TODO: Check why delegatecall
         return execute(to, value, data, Enum.Operation.DelegateCall, gasleft());
     }
 }
