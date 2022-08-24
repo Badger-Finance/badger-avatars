@@ -200,7 +200,7 @@ contract AuraAvatarTwoToken is
     ////////////////////////////////////////////////////////////////////////////
 
     modifier onlyOwnerOrManager() {
-        if (msg.sender != owner() || msg.sender != manager) {
+        if (msg.sender != owner() && msg.sender != manager) {
             revert NotOwnerOrManager(msg.sender);
         }
         _;
@@ -217,6 +217,7 @@ contract AuraAvatarTwoToken is
     // PUBLIC: Owner - Pausing
     ////////////////////////////////////////////////////////////////////////////
 
+    // TODO: Guardian
     function pause() external onlyOwnerOrManager {
         _pause();
     }
@@ -250,7 +251,7 @@ contract AuraAvatarTwoToken is
         emit ClaimFrequencyUpdated(oldClaimFrequency, _claimFrequency);
     }
 
-    function setSellBpsBalToUsdMin(uint256 _sellBpsBalToUsd) external onlyOwner {
+    function setSellBpsBalToUsd(uint256 _sellBpsBalToUsd) external onlyOwner {
         if (_sellBpsBalToUsd > MAX_BPS) {
             revert InvalidBps(_sellBpsBalToUsd);
         }
@@ -314,7 +315,7 @@ contract AuraAvatarTwoToken is
             revert InvalidBps(_minOutBpsBalToUsdVal);
         }
 
-        BpsConfig memory minOutBpsBalToUsdPtr = minOutBpsBalToUsd;
+        BpsConfig storage minOutBpsBalToUsdPtr = minOutBpsBalToUsd;
 
         uint256 minOutBpsBalToUsdMin = minOutBpsBalToUsdPtr.min;
         if (_minOutBpsBalToUsdVal < minOutBpsBalToUsdMin) {
@@ -332,7 +333,7 @@ contract AuraAvatarTwoToken is
             revert InvalidBps(_minOutBpsAuraToUsdVal);
         }
 
-        BpsConfig memory minOutBpsAuraToUsdPtr = minOutBpsAuraToUsd;
+        BpsConfig storage minOutBpsAuraToUsdPtr = minOutBpsAuraToUsd;
 
         uint256 minOutBpsAuraToUsdMin = minOutBpsAuraToUsdPtr.min;
         if (_minOutBpsAuraToUsdVal < minOutBpsAuraToUsdMin) {
@@ -350,7 +351,7 @@ contract AuraAvatarTwoToken is
             revert InvalidBps(_minOutBpsBalToAuraBalVal);
         }
 
-        BpsConfig memory minOutBpsBalToAuraBalPtr = minOutBpsBalToAuraBal;
+        BpsConfig storage minOutBpsBalToAuraBalPtr = minOutBpsBalToAuraBal;
 
         uint256 minOutBpsBalToAuraBalMin = minOutBpsBalToAuraBalPtr.min;
         if (_minOutBpsBalToAuraBalVal < minOutBpsBalToAuraBalMin) {
@@ -411,11 +412,7 @@ contract AuraAvatarTwoToken is
         emit Withdraw(address(asset2), bptDeposited2, block.timestamp);
     }
 
-    function processRewards() external onlyOwner {
-        processRewardsInternal();
-    }
-
-    // NOTE: Failsafe in case things go wrong
+    // NOTE: Failsafe in case things go wrong, want to sell through different pools
     function claimRewardsAndSendToOwner() public onlyOwner {
         // Update last claimed time
         lastClaimTimestamp = block.timestamp;
@@ -437,6 +434,15 @@ contract AuraAvatarTwoToken is
 
         emit RewardClaimed(address(BAL), totalBal, block.timestamp);
         emit RewardClaimed(address(AURA), totalAura, block.timestamp);
+    }
+
+    ////////////////////////////////////////////////////////////////////////////
+    // PUBLIC: Owner/Manager
+    ////////////////////////////////////////////////////////////////////////////
+
+    // NOTE: Can be called by techops to opportunistically harvest
+    function processRewards() external onlyOwnerOrManager {
+        processRewardsInternal();
     }
 
     ////////////////////////////////////////////////////////////////////////////
