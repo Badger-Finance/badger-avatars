@@ -39,6 +39,10 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
         vm.stopPrank();
     }
 
+    ////////////////////////////////////////////////////////////////////////////
+    // Initialization
+    ////////////////////////////////////////////////////////////////////////////
+
     function testConstructor() public {
         assertEq(avatar.pid1(), PID_80BADGER_20WBTC);
         assertEq(avatar.pid2(), PID_40WBTC_40DIGG_20GRAVIAURA);
@@ -72,6 +76,111 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
         assertGt(bpsVal, 0);
         assertGt(bpsMin, 0);
     }
+
+    ////////////////////////////////////////////////////////////////////////////
+    // Config: Owner
+    ////////////////////////////////////////////////////////////////////////////
+
+    function testSetManager() public {
+        vm.prank(owner);
+        avatar.setManager(address(10));
+
+        assertEq(avatar.manager(), address(10));
+    }
+
+    function testOnlyOwnerCanSetManager() public {
+        vm.expectRevert("Ownable: caller is not the owner");
+        avatar.setManager(address(0));
+    }
+
+    function testSetKeeper() public {
+        vm.prank(owner);
+        avatar.setKeeper(address(10));
+
+        assertEq(avatar.keeper(), address(10));
+    }
+
+    function testOnlyOwnerCanSetKeeper() public {
+        vm.expectRevert("Ownable: caller is not the owner");
+        avatar.setKeeper(address(0));
+    }
+
+    function testSetClaimFrequency() public {
+        vm.prank(owner);
+        avatar.setClaimFrequency(2 weeks);
+
+        assertEq(avatar.claimFrequency(), 2 weeks);
+    }
+
+    function testOnlyOwnerCanSetClaimFrequency() public {
+        vm.expectRevert("Ownable: caller is not the owner");
+        avatar.setClaimFrequency(2 weeks);
+    }
+
+    function testSetSellBpsBalToUsd() public {
+        vm.prank(owner);
+        avatar.setSellBpsBalToUsd(5000);
+
+        assertEq(avatar.sellBpsBalToUsd(), 5000);
+    }
+
+    function testSetSellBpsAuraToUsd() public {
+        vm.prank(owner);
+        avatar.setSellBpsAuraToUsd(5000);
+
+        assertEq(avatar.sellBpsAuraToUsd(), 5000);
+    }
+
+    function testSetMinOutBpsBalToUsdMin() public {
+        vm.prank(owner);
+        avatar.setMinOutBpsBalToUsdMin(5000);
+
+        (, uint256 val) = avatar.minOutBpsBalToUsd();
+        assertEq(val, 5000);
+    }
+
+    function testSetMinOutBpsAuraToUsdMin() public {
+        vm.prank(owner);
+        avatar.setMinOutBpsAuraToUsdMin(5000);
+
+        (, uint256 val) = avatar.minOutBpsAuraToUsd();
+        assertEq(val, 5000);
+    }
+
+    function testSetMinOutBpsBalToAuraBalMin() public {
+        vm.prank(owner);
+        avatar.setMinOutBpsBalToAuraBalMin(5000);
+
+        (, uint256 val) = avatar.minOutBpsBalToAuraBal();
+        assertEq(val, 5000);
+    }
+
+    ////////////////////////////////////////////////////////////////////////////
+    // Config: Manager/Owner
+    ////////////////////////////////////////////////////////////////////////////
+
+    function testSetMinOutBpsBalToUsdVal() external {
+        uint256 val;
+
+        vm.prank(owner);
+        avatar.setMinOutBpsBalToUsdVal(9100);
+        (val,) = avatar.minOutBpsBalToUsd();
+        assertEq(val, 9100);
+
+        vm.prank(manager);
+        avatar.setMinOutBpsBalToUsdVal(9200);
+        (val,) = avatar.minOutBpsBalToUsd();
+        assertEq(val, 9200);
+    }
+
+    function testOnlyOwnerOrManagerCanSetMinOutBpsBalToUsdVal() external {
+        vm.expectRevert(abi.encodeWithSelector(AuraAvatarTwoToken.NotOwnerOrManager.selector, (address(this))));
+        avatar.setMinOutBpsBalToUsdVal(9100);
+    }
+
+    ////////////////////////////////////////////////////////////////////////////
+    // Public: Owner
+    ////////////////////////////////////////////////////////////////////////////
 
     function testDeposit() public {
         vm.prank(owner);
@@ -144,8 +253,8 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
         assertGt(USDC.balanceOf(owner), usdcBalanceBefore);
     }
 
-    function testOnlyOwnerCanProcessRewards() public {
-        vm.expectRevert("Ownable: caller is not the owner");
+    function testOnlyOwnerOrManagerCanProcessRewards() public {
+        vm.expectRevert(abi.encodeWithSelector(AuraAvatarTwoToken.NotOwnerOrManager.selector, (address(this))));
         avatar.processRewards();
     }
 
@@ -158,10 +267,5 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
     function testCheckUpkeep() public {
         vm.prank(owner);
         avatar.deposit(10e18, 20e18);
-    }
-
-    function testOnlyOwnerSetManager() public {
-        vm.expectRevert("Ownable: caller is not the owner");
-        avatar.setManager(address(0));
     }
 }
