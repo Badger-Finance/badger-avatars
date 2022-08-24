@@ -117,6 +117,7 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
 
         (,, uint256 voterBalanceBefore,) = AURA_LOCKER.lockedBalances(BADGER_VOTER);
         uint256 bauraBalBalanceBefore = BAURABAL.balanceOf(owner);
+        uint256 usdcBalanceBefore = USDC.balanceOf(owner);
 
         skip(1 hours);
         avatar.processRewards();
@@ -128,6 +129,7 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
 
         assertGt(voterBalanceAfter, voterBalanceBefore);
         assertGt(BAURABAL.balanceOf(owner), bauraBalBalanceBefore);
+        assertGt(USDC.balanceOf(owner), usdcBalanceBefore);
     }
 
     function testOnlyOwnerCanProcessRewards() public {
