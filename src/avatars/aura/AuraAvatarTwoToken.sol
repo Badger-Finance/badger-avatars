@@ -29,7 +29,7 @@ struct BpsConfig {
 // TODO: Contract should never hold funds?
 //       Natspec
 //       Add role to that can adjust minOutBps
-//       Backup in case swaps are failing - sweep to owner
+//       Backup in case swaps are failing - sweep to owner callable by techops
 contract AuraAvatarTwoToken is
     BaseAvatar,
     PausableUpgradeable, // TODO: See if move pausable to base
@@ -101,6 +101,9 @@ contract AuraAvatarTwoToken is
     event MinOutBpsBalToUsdValUpdated(uint256 oldValue, uint256 newValue);
     event MinOutBpsAuraToUsdValUpdated(uint256 oldValue, uint256 newValue);
     event MinOutBpsBalToAuraBalValUpdated(uint256 oldValue, uint256 newValue);
+
+    event Deposit(address indexed token, uint256 amount, uint256 timestamp);
+    event Withdraw(address indexed token, uint256 amount, uint256 timestamp);
 
     event RewardsToStable(address indexed token, uint256 amount, uint256 timestamp);
     event RewardClaimed(address indexed token, uint256 amount, uint256 timestamp);
@@ -349,7 +352,6 @@ contract AuraAvatarTwoToken is
     // PUBLIC: Owner
     ////////////////////////////////////////////////////////////////////////////
 
-    // TODO: Events
     function deposit(uint256 _amountBpt1, uint256 _amountBpt2) external onlyOwner {
         if (_amountBpt1 == 0 && _amountBpt2 == 0) {
             revert NothingToDeposit();
@@ -370,9 +372,11 @@ contract AuraAvatarTwoToken is
             asset2.transferFrom(msg.sender, address(this), _amountBpt2);
             AURA_BOOSTER.deposit(pid2, _amountBpt2, true);
         }
+
+        emit Deposit(address(asset1), _amountBpt1, block.timestamp);
+        emit Deposit(address(asset2), _amountBpt2, block.timestamp);
     }
 
-    // TODO: Events
     function withdrawAll() external onlyOwner {
         uint256 bptDeposited1 = baseRewardPool1.balanceOf(address(this));
         if (bptDeposited1 > 0) {
@@ -383,9 +387,11 @@ contract AuraAvatarTwoToken is
             baseRewardPool2.withdrawAndUnwrap(bptDeposited2, true);
         }
 
-        address ownerCached = owner();
-        asset1.transfer(ownerCached, asset1.balanceOf(address(this)));
-        asset2.transfer(ownerCached, asset2.balanceOf(address(this)));
+        asset1.transfer(msg.sender, bptDeposited1);
+        asset2.transfer(msg.sender, bptDeposited2);
+
+        emit Withdraw(address(asset1), bptDeposited1, block.timestamp);
+        emit Withdraw(address(asset2), bptDeposited2, block.timestamp);
     }
 
     function processRewards() external onlyOwner {
@@ -473,7 +479,7 @@ contract AuraAvatarTwoToken is
         emit RewardsToStable(address(USDC), usdcEarnedFromBal + usdcEarnedFromAura, block.timestamp);
     }
 
-    // Shouldn't revert since others can claim for this contract
+    // NOTE: Shouldn't revert since others can claim for this contract
     function claimRewards() internal {
         if (baseRewardPool1.earned(address(this)) > 0) {
             baseRewardPool1.getReward();
