@@ -344,6 +344,8 @@ contract AuraAvatarTwoToken is
         // Update last claimed time
         lastClaimTimestamp = block.timestamp;
 
+        address ownerCached = owner();
+
         // 1. Claim BAL and AURA rewards
         claimRewards();
 
@@ -358,9 +360,10 @@ contract AuraAvatarTwoToken is
         uint256 balForUsdc = (totalBal * sellBpsBalToUsd) / MAX_BPS;
         uint256 auraForUsdc = (totalAura * sellBpsAuraToUsd) / MAX_BPS;
 
-        // TODO: See if need to transfer to owner?
         uint256 usdcEarnedFromBal = swapBalForUsdc(balForUsdc);
         uint256 usdcEarnedFromAura = swapAuraForUsdc(auraForUsdc);
+
+        USDC.transfer(ownerCached, USDC.balanceOf(address(this)));
 
         // 3. Deposit remaining BAL to 80BAL-20ETH BPT
         uint256 balToDeposit = totalBal - balForUsdc;
@@ -371,7 +374,7 @@ contract AuraAvatarTwoToken is
         swapBptForAuraBal(balEthBptAmount);
 
         // 5. Dogfood auraBAL in Badger vault in behalf of owner
-        BAURABAL.depositFor(owner(), AURABAL.balanceOf(address(this)));
+        BAURABAL.depositFor(ownerCached, AURABAL.balanceOf(address(this)));
 
         // 6. Lock remaining AURA on behalf of Badger voter msig
         uint256 auraToLock = totalAura - auraForUsdc;
