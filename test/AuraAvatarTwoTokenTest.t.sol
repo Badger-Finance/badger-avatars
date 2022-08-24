@@ -159,4 +159,9 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
         vm.prank(owner);
         avatar.deposit(10e18, 20e18);
     }
+
+    function testOnlyOwnerSetManager() public {
+        vm.expectRevert("Ownable: caller is not the owner");
+        avatar.setManager(address(0));
+    }
 }
