@@ -29,7 +29,7 @@ struct BpsConfig {
 // TODO: Contract should never hold funds?
 //       Natspec
 //       Add role to that can adjust minOutBps
-//       Backup in case swaps are failing - sweep to owner callable by techops
+//       Backup in case swaps are failing - sweep to owner callable by manager
 contract AuraAvatarTwoToken is
     BaseAvatar,
     PausableUpgradeable, // TODO: See if move pausable to base
@@ -37,13 +37,6 @@ contract AuraAvatarTwoToken is
     AuraAvatarOracleUtils,
     KeeperCompatibleInterface
 {
-    ////////////////////////////////////////////////////////////////////////////
-    // CONSTANTS
-    ////////////////////////////////////////////////////////////////////////////
-
-    // TODO: Maybe move to storage settable by owner
-    uint256 internal constant CLAIM_CADENCE = 1 weeks;
-
     ////////////////////////////////////////////////////////////////////////////
     // IMMUTABLES
     ////////////////////////////////////////////////////////////////////////////
@@ -61,8 +54,10 @@ contract AuraAvatarTwoToken is
     // STORAGE
     ////////////////////////////////////////////////////////////////////////////
 
-    address public techops; // TODO: Move handling to GAC
+    address public manager;
     address public keeper;
+
+    uint256 public claimFrequency;
 
     uint256 public sellBpsBalToUsd;
     uint256 public sellBpsAuraToUsd;
@@ -79,9 +74,11 @@ contract AuraAvatarTwoToken is
     ////////////////////////////////////////////////////////////////////////////
 
     error NothingToDeposit();
-    error NoRewardsToProcess();
+    error NoRewards();
+
+    error NotOwnerOrManager(address caller);
     error NotKeeper(address caller);
-    error NotOwnerOrTechops(address caller);
+
     error InvalidBps(uint256 bps);
     error LessThanMinBps(uint256 bps, uint256 minBps);
 
@@ -89,7 +86,10 @@ contract AuraAvatarTwoToken is
     // EVENTS
     ////////////////////////////////////////////////////////////////////////////
 
+    event ManagerUpdated(address indexed oldManager, address indexed newManager);
     event KeeperUpdated(address indexed oldKeeper, address indexed newKeeper);
+
+    event ClaimFrequencyUpdated(uint256 oldClaimFrequency, uint256 newClaimFrequency);
 
     event SellBpsBalToUsdUpdated(uint256 oldValue, uint256 newValue);
     event SellBpsAuraToUsdUpdated(uint256 oldValue, uint256 newValue);
@@ -105,8 +105,8 @@ contract AuraAvatarTwoToken is
     event Deposit(address indexed token, uint256 amount, uint256 timestamp);
     event Withdraw(address indexed token, uint256 amount, uint256 timestamp);
 
-    event RewardsToStable(address indexed token, uint256 amount, uint256 timestamp);
     event RewardClaimed(address indexed token, uint256 amount, uint256 timestamp);
+    event RewardsToStable(address indexed token, uint256 amount, uint256 timestamp);
 
     ////////////////////////////////////////////////////////////////////////////
     // INITIALIZATION
@@ -126,11 +126,14 @@ contract AuraAvatarTwoToken is
         baseRewardPool2 = IBaseRewardPool(crvRewards2);
     }
 
-    function initialize(address _owner) public initializer {
+    function initialize(address _owner, address _manager) public initializer {
         __BaseAvatar_init(_owner);
         __Pausable_init();
 
+        manager = _manager;
         keeper = CHAINLINK_KEEPER_REGISTRY;
+
+        claimFrequency = 1 weeks;
 
         sellBpsAuraToUsd = 3000; // 30%
         sellBpsBalToUsd = 7000; // 70%
@@ -196,9 +199,9 @@ contract AuraAvatarTwoToken is
     // MODIFIERS
     ////////////////////////////////////////////////////////////////////////////
 
-    modifier onlyOwnerOrTechops() {
-        if (msg.sender != owner() || msg.sender != techops) {
-            revert NotOwnerOrTechops(msg.sender);
+    modifier onlyOwnerOrManager() {
+        if (msg.sender != owner() || msg.sender != manager) {
+            revert NotOwnerOrManager(msg.sender);
         }
         _;
     }
@@ -214,8 +217,7 @@ contract AuraAvatarTwoToken is
     // PUBLIC: Owner - Pausing
     ////////////////////////////////////////////////////////////////////////////
 
-    // TODO: See if move up hierarchy
-    function pause() external onlyOwner {
+    function pause() external onlyOwnerOrManager {
         _pause();
     }
 
@@ -227,11 +229,25 @@ contract AuraAvatarTwoToken is
     // PUBLIC: Owner - Config
     ////////////////////////////////////////////////////////////////////////////
 
+    function setManager(address _manager) external onlyOwner {
+        address oldManager = manager;
+
+        manager = _manager;
+        emit ManagerUpdated(oldManager, _manager);
+    }
+
     function setKeeper(address _keeper) external onlyOwner {
         address oldKeeper = keeper;
 
         keeper = _keeper;
         emit KeeperUpdated(oldKeeper, _keeper);
+    }
+
+    function setClaimFrequency(uint256 _claimFrequency) external onlyOwner {
+        uint256 oldClaimFrequency = _claimFrequency;
+
+        claimFrequency = _claimFrequency;
+        emit ClaimFrequencyUpdated(oldClaimFrequency, _claimFrequency);
     }
 
     function setSellBpsBalToUsdMin(uint256 _sellBpsBalToUsd) external onlyOwner {
@@ -290,11 +306,10 @@ contract AuraAvatarTwoToken is
     }
 
     ////////////////////////////////////////////////////////////////////////////
-    // PUBLIC: Techops - Config
+    // PUBLIC: Manager - Config
     ////////////////////////////////////////////////////////////////////////////
 
-    // TODO: Proper roles
-    function setMinOutBpsBalToUsdVal(uint256 _minOutBpsBalToUsdVal) external onlyOwnerOrTechops {
+    function setMinOutBpsBalToUsdVal(uint256 _minOutBpsBalToUsdVal) external onlyOwnerOrManager {
         if (_minOutBpsBalToUsdVal > MAX_BPS) {
             revert InvalidBps(_minOutBpsBalToUsdVal);
         }
@@ -312,7 +327,7 @@ contract AuraAvatarTwoToken is
         emit MinOutBpsBalToUsdValUpdated(oldMinOutBpsBalToUsdVal, _minOutBpsBalToUsdVal);
     }
 
-    function setMinOutBpsAuraToUsdVal(uint256 _minOutBpsAuraToUsdVal) external onlyOwnerOrTechops {
+    function setMinOutBpsAuraToUsdVal(uint256 _minOutBpsAuraToUsdVal) external onlyOwnerOrManager {
         if (_minOutBpsAuraToUsdVal > MAX_BPS) {
             revert InvalidBps(_minOutBpsAuraToUsdVal);
         }
@@ -330,7 +345,7 @@ contract AuraAvatarTwoToken is
         emit MinOutBpsAuraToUsdValUpdated(oldMinOutBpsAuraToUsdVal, _minOutBpsAuraToUsdVal);
     }
 
-    function setMinOutBpsBalToAuraBalVal(uint256 _minOutBpsBalToAuraBalVal) external onlyOwnerOrTechops {
+    function setMinOutBpsBalToAuraBalVal(uint256 _minOutBpsBalToAuraBalVal) external onlyOwnerOrManager {
         if (_minOutBpsBalToAuraBalVal > MAX_BPS) {
             revert InvalidBps(_minOutBpsBalToAuraBalVal);
         }
@@ -357,6 +372,7 @@ contract AuraAvatarTwoToken is
             revert NothingToDeposit();
         }
 
+        // TODO: See if can be moved elsewhere
         uint256 bptDeposited1 = baseRewardPool1.balanceOf(address(this));
         uint256 bptDeposited2 = baseRewardPool2.balanceOf(address(this));
         if (bptDeposited1 == 0 && bptDeposited2 == 0) {
@@ -387,8 +403,9 @@ contract AuraAvatarTwoToken is
             baseRewardPool2.withdrawAndUnwrap(bptDeposited2, true);
         }
 
-        asset1.transfer(msg.sender, bptDeposited1);
-        asset2.transfer(msg.sender, bptDeposited2);
+        address ownerCached = owner();
+        asset1.transfer(ownerCached, bptDeposited1);
+        asset2.transfer(ownerCached, bptDeposited2);
 
         emit Withdraw(address(asset1), bptDeposited1, block.timestamp);
         emit Withdraw(address(asset2), bptDeposited2, block.timestamp);
@@ -398,13 +415,37 @@ contract AuraAvatarTwoToken is
         processRewardsInternal();
     }
 
+    // NOTE: Failsafe in case things go wrong
+    function claimRewardsAndSendToOwner() public onlyOwner {
+        // Update last claimed time
+        lastClaimTimestamp = block.timestamp;
+
+        // 1. Claim BAL and AURA rewards
+        claimRewards();
+
+        uint256 totalBal = BAL.balanceOf(address(this));
+        uint256 totalAura = AURA.balanceOf(address(this));
+
+        if (totalBal == 0) {
+            revert NoRewards();
+        }
+
+        // 2. Send to owner
+        address ownerCached = owner();
+        BAL.transfer(ownerCached, totalBal);
+        AURA.transfer(ownerCached, totalAura);
+
+        emit RewardClaimed(address(BAL), totalBal, block.timestamp);
+        emit RewardClaimed(address(AURA), totalAura, block.timestamp);
+    }
+
     ////////////////////////////////////////////////////////////////////////////
     // PUBLIC: Keeper
     ////////////////////////////////////////////////////////////////////////////
 
     // TODO: Maybe do based on roles + allow owner
     function performUpkeep(bytes calldata) external override onlyKeeper whenNotPaused {
-        if ((block.timestamp - lastClaimTimestamp) > CLAIM_CADENCE) {
+        if ((block.timestamp - lastClaimTimestamp) > claimFrequency) {
             // Would revert if there's nothing to claim
             processRewardsInternal();
         }
@@ -420,10 +461,8 @@ contract AuraAvatarTwoToken is
 
         uint256 balBalance = BAL.balanceOf(address(this));
 
-        if ((block.timestamp - lastClaimTimestamp) > CLAIM_CADENCE) {
-            if (balPending1 == 0 && balPending2 == 0 && balBalance == 0) {
-                upkeepNeeded_ = false;
-            } else {
+        if ((block.timestamp - lastClaimTimestamp) > claimFrequency) {
+            if (balPending1 > 0 || balPending2 > 0 || balBalance > 0) {
                 upkeepNeeded_ = true;
             }
         }
@@ -437,8 +476,6 @@ contract AuraAvatarTwoToken is
         // Update last claimed time
         lastClaimTimestamp = block.timestamp;
 
-        address ownerCached = owner();
-
         // 1. Claim BAL and AURA rewards
         claimRewards();
 
@@ -446,7 +483,7 @@ contract AuraAvatarTwoToken is
         uint256 totalAura = AURA.balanceOf(address(this));
 
         if (totalBal == 0) {
-            revert NoRewardsToProcess();
+            revert NoRewards();
         }
 
         // 2. Swap some for USDC
@@ -456,6 +493,7 @@ contract AuraAvatarTwoToken is
         uint256 usdcEarnedFromBal = swapBalForUsdc(balForUsdc);
         uint256 usdcEarnedFromAura = swapAuraForUsdc(auraForUsdc);
 
+        address ownerCached = owner();
         USDC.transfer(ownerCached, USDC.balanceOf(address(this)));
 
         // 3. Deposit remaining BAL to 80BAL-20ETH BPT
@@ -474,6 +512,7 @@ contract AuraAvatarTwoToken is
         AURA_LOCKER.lock(BADGER_VOTER, auraToLock);
 
         // Emit events for analysis
+        // TODO: Names?
         emit RewardClaimed(address(BAL), totalBal, block.timestamp);
         emit RewardClaimed(address(AURA), totalAura, block.timestamp);
         emit RewardsToStable(address(USDC), usdcEarnedFromBal + usdcEarnedFromAura, block.timestamp);
@@ -481,6 +520,7 @@ contract AuraAvatarTwoToken is
 
     // NOTE: Shouldn't revert since others can claim for this contract
     function claimRewards() internal {
+        // TODO: Maybe try-catch?
         if (baseRewardPool1.earned(address(this)) > 0) {
             baseRewardPool1.getReward();
         }

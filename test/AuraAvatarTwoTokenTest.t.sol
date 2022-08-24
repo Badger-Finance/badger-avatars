@@ -24,10 +24,11 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
         IBaseRewardPool(0x10Ca519614b0F3463890387c24819001AFfC5152);
 
     address constant owner = address(1);
+    address constant manager = address(2);
 
     function setUp() public {
         avatar = new AuraAvatarTwoToken(PID_80BADGER_20WBTC, PID_40WBTC_40DIGG_20GRAVIAURA);
-        avatar.initialize(owner);
+        avatar.initialize(owner, manager);
 
         deal(address(avatar.asset1()), owner, 10e18, true);
         deal(address(avatar.asset2()), owner, 20e18, true);
@@ -149,7 +150,7 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
     }
 
     function testProcessRewardsFailsIfNothingToClaim() public {
-        vm.expectRevert(AuraAvatarTwoToken.NoRewardsToProcess.selector);
+        vm.expectRevert(AuraAvatarTwoToken.NoRewards.selector);
         vm.prank(owner);
         avatar.processRewards();
     }
