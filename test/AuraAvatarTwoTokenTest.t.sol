@@ -56,9 +56,20 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
         assertGt(avatar.sellBpsBalToUsd(), 0);
         assertGt(avatar.sellBpsAuraToUsd(), 0);
 
-        assertGt(avatar.minOutBpsBalToUsd(), 0);
-        assertGt(avatar.minOutBpsAuraToUsd(), 0);
-        assertGt(avatar.minOutBpsBalToAuraBal(), 0);
+        uint256 bpsVal;
+        uint256 bpsMin;
+
+        (bpsVal, bpsMin) = avatar.minOutBpsBalToUsd();
+        assertGt(bpsVal, 0);
+        assertGt(bpsMin, 0);
+
+        (bpsVal, bpsMin) = avatar.minOutBpsAuraToUsd();
+        assertGt(bpsVal, 0);
+        assertGt(bpsMin, 0);
+
+        (bpsVal, bpsMin) = avatar.minOutBpsBalToAuraBal();
+        assertGt(bpsVal, 0);
+        assertGt(bpsMin, 0);
     }
 
     function testDeposit() public {
