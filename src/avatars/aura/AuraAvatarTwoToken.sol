@@ -87,10 +87,10 @@ contract AuraAvatarTwoToken is
     event MinOutBpsBalToAuraBalUpdated(uint256 oldValue, uint256 newValue);
 
     event RewardsToStable(
-        address indexed source, address indexed token, uint256 amount, uint256 indexed blockNumber, uint256 timestamp
+        address indexed token, uint256 amount, uint256 timestamp
     );
     event RewardClaimed(
-        address indexed source, address indexed token, uint256 amount, uint256 indexed blockNumber, uint256 timestamp
+        address indexed token, uint256 amount, uint256 timestamp
     );
 
     ////////////////////////////////////////////////////////////////////////////
@@ -381,11 +381,10 @@ contract AuraAvatarTwoToken is
         AURA_LOCKER.lock(BADGER_VOTER, auraToLock);
 
         // Emit events for analysis
-        // TODO: Do I need address(this)? Is block.number redundant?
-        emit RewardClaimed(address(this), address(BAL), totalBal, block.number, block.timestamp);
-        emit RewardClaimed(address(this), address(AURA), totalAura, block.number, block.timestamp);
+        emit RewardClaimed(address(BAL), totalBal, block.timestamp);
+        emit RewardClaimed(address(AURA), totalAura, block.timestamp);
         emit RewardsToStable(
-            address(this), address(USDC), usdcEarnedFromBal + usdcEarnedFromAura, block.number, block.timestamp
+            address(USDC), usdcEarnedFromBal + usdcEarnedFromAura, block.timestamp
             );
     }
 
