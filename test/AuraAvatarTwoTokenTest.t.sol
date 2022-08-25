@@ -86,6 +86,47 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
     }
 
     ////////////////////////////////////////////////////////////////////////////
+    // Pausing
+    ////////////////////////////////////////////////////////////////////////////
+
+    function test_pause() public {
+        vm.startPrank(owner);
+        avatar.pause();
+
+        assertTrue(avatar.paused());
+
+        avatar.unpause();
+        vm.stopPrank();
+
+        vm.prank(manager);
+        avatar.pause();
+        assertTrue(avatar.paused());
+    }
+
+    function test_pause_permissions() public {
+        vm.expectRevert(abi.encodeWithSelector(AuraAvatarTwoToken.NotOwnerOrManager.selector, (address(this))));
+        avatar.pause();
+    }
+
+    function test_unpause() public {
+        vm.startPrank(owner);
+        avatar.pause();
+
+        assertTrue(avatar.paused());
+
+        avatar.unpause();
+        assertFalse(avatar.paused());
+    }
+
+    function test_unpause_permissions() public {
+        vm.prank(owner);
+        avatar.pause();
+
+        vm.expectRevert("Ownable: caller is not the owner");
+        avatar.unpause();
+    }
+
+    ////////////////////////////////////////////////////////////////////////////
     // Config: Owner
     ////////////////////////////////////////////////////////////////////////////
 
@@ -470,6 +511,7 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
         vm.prank(owner);
         avatar.deposit(10e18, 20e18);
 
+        skip(1 weeks - 1);
         vm.expectRevert(
             abi.encodeWithSelector(
                 AuraAvatarTwoToken.TooSoon.selector, block.timestamp, avatar.lastClaimTimestamp(), avatar.claimFrequency()
