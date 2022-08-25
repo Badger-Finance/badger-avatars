@@ -11,6 +11,7 @@ abstract contract AuraAvatarOracleUtils {
 
     // TODO: Check these constants. Maybe make settable?
     uint256 private constant TWAP_DURATION = 1 hours;
+    // TODO: Different for different feeds?
     uint256 private constant MAX_LOOKBACK = 24 hours;
 
     ////////////////////////////////////////////////////////////////////////////
@@ -19,6 +20,7 @@ abstract contract AuraAvatarOracleUtils {
 
     error StalePriceFeed(uint256 currentTime, uint256 updateTime, uint256 maxDuration);
 
+    // TODO: More checks?
     function fetchPriceFromClFeed(IAggregatorV3 _feed) internal view returns (uint256 answerUint256_) {
         (, int256 answer,, uint256 updateTime,) = _feed.latestRoundData();
 
@@ -29,6 +31,7 @@ abstract contract AuraAvatarOracleUtils {
         answerUint256_ = uint256(answer);
     }
 
+    // TODO: Check decimals and base
     function fetchPriceFromBalancerTwap(IPriceOracle _pool) internal view returns (uint256 price_) {
         IPriceOracle.OracleAverageQuery[] memory queries = new IPriceOracle.OracleAverageQuery[](1);
 

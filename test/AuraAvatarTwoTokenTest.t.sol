@@ -1,12 +1,16 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.16;
 
+import {console2 as console} from "forge-std/console2.sol";
 import {Test} from "forge-std/Test.sol";
 import {IERC20Upgradeable} from "openzeppelin-contracts-upgradeable/interfaces/IERC20Upgradeable.sol";
 
 import {IBaseRewardPool} from "../src/interfaces/aura/IBaseRewardPool.sol";
+import {IAggregatorV3} from "../src/interfaces/chainlink/IAggregatorV3.sol";
 import {AuraAvatarTwoToken, TokenAmount} from "../src/avatars/aura/AuraAvatarTwoToken.sol";
 import {AuraConstants} from "../src/avatars/aura/AuraConstants.sol";
+
+import {MockV3Aggregator} from "./mocks/MockV3Aggregator.sol";
 
 uint256 constant PID_80BADGER_20WBTC = 11;
 uint256 constant PID_40WBTC_40DIGG_20GRAVIAURA = 18;
@@ -421,18 +425,38 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
         assertFalse(upkeepNeeded);
     }
 
-    // function test_performUpkeep() public {
-    //     vm.prank(owner);
-    //     avatar.deposit(10e18, 20e18);
+    function forwardClFeed(IAggregatorV3 _feed) internal {
+        int256 lastAnswer = _feed.latestAnswer();
+        vm.etch(address(_feed), type(MockV3Aggregator).runtimeCode);
+        MockV3Aggregator(address(_feed)).updateAnswer(lastAnswer);
+    }
 
-    //     skip(1 weeks);
+    function forwardClFeed(IAggregatorV3 _feed, uint256 _duration) internal {
+        int256 lastAnswer = _feed.latestAnswer();
+        uint256 lastTimestamp = _feed.latestTimestamp();
+        vm.etch(address(_feed), type(MockV3Aggregator).runtimeCode);
+        MockV3Aggregator(address(_feed)).updateAnswerAndTimestamp(lastAnswer, lastTimestamp + _duration);
+    }
 
-    //     vm.prank(keeper);
-    //     avatar.performUpkeep(new bytes(0));
+    function test_performUpkeep() public {
+        vm.prank(owner);
+        avatar.deposit(10e18, 20e18);
 
-    //     (bool upkeepNeeded,) = avatar.checkUpkeep(new bytes(0));
-    //     assertFalse(upkeepNeeded);
-    // }
+        skip(1 weeks);
+
+        bool upkeepNeeded;
+        (upkeepNeeded,) = avatar.checkUpkeep(new bytes(0));
+        assertTrue(upkeepNeeded);
+
+        forwardClFeed(BAL_USD_FEED, 1 weeks);
+        forwardClFeed(ETH_USD_FEED, 1 weeks);
+
+        vm.prank(keeper);
+        avatar.performUpkeep(new bytes(0));
+
+        (upkeepNeeded,) = avatar.checkUpkeep(new bytes(0));
+        assertFalse(upkeepNeeded);
+    }
 
     function test_performUpkeep_permissions() public {
         vm.prank(owner);

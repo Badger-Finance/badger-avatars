@@ -179,6 +179,8 @@ contract AuraAvatarTwoToken is
         name_ = "Aura_Avatar";
     }
 
+    // TODO: Version?
+
     function assets() external view returns (IERC20Upgradeable[2] memory assets_) {
         assets_[0] = asset1;
         assets_[1] = asset2;
