@@ -65,6 +65,7 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
         assertFalse(avatar.paused());
 
         assertEq(avatar.manager(), manager);
+        assertEq(avatar.keeper(), keeper);
 
         assertGt(avatar.sellBpsBalToUsd(), 0);
         assertGt(avatar.sellBpsAuraToUsd(), 0);
@@ -85,22 +86,29 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
         assertGt(bpsMin, 0);
     }
 
+    function test_assets() public {
+        IERC20Upgradeable[2] memory assets = avatar.assets();
+
+        assertEq(address(assets[0]), address(BPT_80BADGER_20WBTC));
+        assertEq(address(assets[1]), address(BPT_40WBTC_40DIGG_20GRAVIAURA));
+    }
+
     ////////////////////////////////////////////////////////////////////////////
     // Pausing
     ////////////////////////////////////////////////////////////////////////////
 
     function test_pause() public {
-        vm.startPrank(owner);
-        avatar.pause();
+        address[2] memory actors = [owner, manager];
+        for (uint256 i; i < actors.length; ++i) {
+            uint256 snapId = vm.snapshot();
 
-        assertTrue(avatar.paused());
+            vm.prank(actors[i]);
+            avatar.pause();
 
-        avatar.unpause();
-        vm.stopPrank();
+            assertTrue(avatar.paused());
 
-        vm.prank(manager);
-        avatar.pause();
-        assertTrue(avatar.paused());
+            vm.revertTo(snapId);
+        }
     }
 
     function test_pause_permissions() public {
@@ -122,8 +130,16 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
         vm.prank(owner);
         avatar.pause();
 
-        vm.expectRevert("Ownable: caller is not the owner");
-        avatar.unpause();
+        address[2] memory actors = [address(this), manager];
+        for (uint256 i; i < actors.length; ++i) {
+            uint256 snapId = vm.snapshot();
+
+            vm.expectRevert("Ownable: caller is not the owner");
+            vm.prank(actors[i]);
+            avatar.unpause();
+
+            vm.revertTo(snapId);
+        }
     }
 
     ////////////////////////////////////////////////////////////////////////////
@@ -354,7 +370,7 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
     }
 
     ////////////////////////////////////////////////////////////////////////////
-    // Public: Owner
+    // Actions: Owner
     ////////////////////////////////////////////////////////////////////////////
 
     function test_deposit() public {
@@ -370,6 +386,17 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
         assertEq(avatar.lastClaimTimestamp(), block.timestamp);
     }
 
+    function test_deposit_permissions() public {
+        vm.expectRevert("Ownable: caller is not the owner");
+        avatar.deposit(1, 1);
+    }
+
+    function test_deposit_empty() public {
+        vm.expectRevert(AuraAvatarTwoToken.NothingToDeposit.selector);
+        vm.prank(owner);
+        avatar.deposit(0, 0);
+    }
+
     function test_totalAssets() public {
         vm.prank(owner);
         avatar.deposit(10e18, 20e18);
@@ -377,11 +404,6 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
         uint256[2] memory amounts = avatar.totalAssets();
         assertEq(amounts[0], 10e18);
         assertEq(amounts[1], 20e18);
-    }
-
-    function test_deposit_permissions() public {
-        vm.expectRevert("Ownable: caller is not the owner");
-        avatar.deposit(1, 1);
     }
 
     function test_withdrawAll() public {
@@ -403,14 +425,45 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
         avatar.withdrawAll();
     }
 
-    function test_deposit_empty() public {
-        vm.expectRevert(AuraAvatarTwoToken.NothingToDeposit.selector);
+    function test_claimRewardsAndSendToOwner() public {
         vm.prank(owner);
-        avatar.deposit(0, 0);
+        avatar.deposit(10e18, 20e18);
+
+        vm.prank(owner);
+        avatar.withdrawAll();
+
+        assertEq(BASE_REWARD_POOL_80BADGER_20WBTC.balanceOf(address(avatar)), 0);
+        assertEq(BASE_REWARD_POOL_40WBTC_40DIGG_20GRAVIAURA.balanceOf(address(avatar)), 0);
+
+        assertEq(BPT_80BADGER_20WBTC.balanceOf(owner), 10e18);
+        assertEq(BPT_40WBTC_40DIGG_20GRAVIAURA.balanceOf(owner), 20e18);
     }
 
+    function test_claimRewardsAndSendToOwner_permissions() public {
+        address[2] memory actors = [address(this), manager];
+        for (uint256 i; i < actors.length; ++i) {
+            uint256 snapId = vm.snapshot();
+
+            vm.expectRevert("Ownable: caller is not the owner");
+            vm.prank(actors[i]);
+            avatar.claimRewardsAndSendToOwner();
+
+            vm.revertTo(snapId);
+        }
+    }
+
+    function test_claimRewardsAndSendToOwner_noRewards() public {
+        vm.expectRevert(AuraAvatarTwoToken.NoRewards.selector);
+        vm.prank(owner);
+        avatar.claimRewardsAndSendToOwner();
+    }
+
+    ////////////////////////////////////////////////////////////////////////////
+    // Actions: Owner/Manager
+    ////////////////////////////////////////////////////////////////////////////
+
     function test_processRewards() public {
-        vm.startPrank(owner);
+        vm.prank(owner);
         avatar.deposit(10e18, 20e18);
 
         (,, uint256 voterBalanceBefore,) = AURA_LOCKER.lockedBalances(BADGER_VOTER);
@@ -418,16 +471,25 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
         uint256 usdcBalanceBefore = USDC.balanceOf(owner);
 
         skip(1 hours);
-        avatar.processRewards();
 
-        (,, uint256 voterBalanceAfter,) = AURA_LOCKER.lockedBalances(BADGER_VOTER);
+        address[2] memory actors = [owner, manager];
+        for (uint256 i; i < actors.length; ++i) {
+            uint256 snapId = vm.snapshot();
 
-        assertEq(BAL.balanceOf(address(avatar)), 0);
-        assertEq(AURA.balanceOf(address(avatar)), 0);
+            vm.prank(actors[i]);
+            avatar.processRewards();
 
-        assertGt(voterBalanceAfter, voterBalanceBefore);
-        assertGt(BAURABAL.balanceOf(owner), bauraBalBalanceBefore);
-        assertGt(USDC.balanceOf(owner), usdcBalanceBefore);
+            (,, uint256 voterBalanceAfter,) = AURA_LOCKER.lockedBalances(BADGER_VOTER);
+
+            assertEq(BAL.balanceOf(address(avatar)), 0);
+            assertEq(AURA.balanceOf(address(avatar)), 0);
+
+            assertGt(voterBalanceAfter, voterBalanceBefore);
+            assertGt(BAURABAL.balanceOf(owner), bauraBalBalanceBefore);
+            assertGt(USDC.balanceOf(owner), usdcBalanceBefore);
+
+            vm.revertTo(snapId);
+        }
     }
 
     function test_processRewards_permissions() public {
@@ -435,11 +497,15 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
         avatar.processRewards();
     }
 
-    function test_processRewards_nothingToClaim() public {
+    function test_processRewards_noRewards() public {
         vm.expectRevert(AuraAvatarTwoToken.NoRewards.selector);
         vm.prank(owner);
         avatar.processRewards();
     }
+
+    ////////////////////////////////////////////////////////////////////////////
+    // Actions: Keeper
+    ////////////////////////////////////////////////////////////////////////////
 
     function test_checkUpkeep() public {
         vm.prank(owner);
@@ -466,19 +532,6 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
         assertFalse(upkeepNeeded);
     }
 
-    function forwardClFeed(IAggregatorV3 _feed) internal {
-        int256 lastAnswer = _feed.latestAnswer();
-        vm.etch(address(_feed), type(MockV3Aggregator).runtimeCode);
-        MockV3Aggregator(address(_feed)).updateAnswer(lastAnswer);
-    }
-
-    function forwardClFeed(IAggregatorV3 _feed, uint256 _duration) internal {
-        int256 lastAnswer = _feed.latestAnswer();
-        uint256 lastTimestamp = _feed.latestTimestamp();
-        vm.etch(address(_feed), type(MockV3Aggregator).runtimeCode);
-        MockV3Aggregator(address(_feed)).updateAnswerAndTimestamp(lastAnswer, lastTimestamp + _duration);
-    }
-
     function test_performUpkeep() public {
         vm.prank(owner);
         avatar.deposit(10e18, 20e18);
@@ -503,8 +556,16 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
         vm.prank(owner);
         avatar.deposit(10e18, 20e18);
 
-        vm.expectRevert(abi.encodeWithSelector(AuraAvatarTwoToken.NotKeeper.selector, address(this)));
-        avatar.performUpkeep(new bytes(0));
+        address[3] memory actors = [address(this), owner, manager];
+        for (uint256 i; i < actors.length; ++i) {
+            uint256 snapId = vm.snapshot();
+
+            vm.expectRevert(abi.encodeWithSelector(AuraAvatarTwoToken.NotKeeper.selector, actors[i]));
+            vm.prank(actors[i]);
+            avatar.performUpkeep(new bytes(0));
+
+            vm.revertTo(snapId);
+        }
     }
 
     function test_performUpkeep_premature() public {
@@ -519,5 +580,22 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
         );
         vm.prank(keeper);
         avatar.performUpkeep(new bytes(0));
+    }
+
+    ////////////////////////////////////////////////////////////////////////////
+    // Internal helpers
+    ////////////////////////////////////////////////////////////////////////////
+
+    function forwardClFeed(IAggregatorV3 _feed) internal {
+        int256 lastAnswer = _feed.latestAnswer();
+        vm.etch(address(_feed), type(MockV3Aggregator).runtimeCode);
+        MockV3Aggregator(address(_feed)).updateAnswer(lastAnswer);
+    }
+
+    function forwardClFeed(IAggregatorV3 _feed, uint256 _duration) internal {
+        int256 lastAnswer = _feed.latestAnswer();
+        uint256 lastTimestamp = _feed.latestTimestamp();
+        vm.etch(address(_feed), type(MockV3Aggregator).runtimeCode);
+        MockV3Aggregator(address(_feed)).updateAnswerAndTimestamp(lastAnswer, lastTimestamp + _duration);
     }
 }
