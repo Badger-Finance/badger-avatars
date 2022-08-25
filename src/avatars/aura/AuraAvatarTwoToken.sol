@@ -170,37 +170,6 @@ contract AuraAvatarTwoToken is
     }
 
     ////////////////////////////////////////////////////////////////////////////
-    // PUBLIC VIEW
-    ////////////////////////////////////////////////////////////////////////////
-
-    // TODO: See if better name
-    /// @dev Returns the name of the strategy
-    function getName() external pure returns (string memory name_) {
-        name_ = "Aura_Avatar";
-    }
-
-    // TODO: Version?
-
-    function assets() external view returns (IERC20Upgradeable[2] memory assets_) {
-        assets_[0] = asset1;
-        assets_[1] = asset2;
-    }
-
-    function totalAssets() external view returns (uint256[2] memory assetAmounts_) {
-        assetAmounts_[0] = baseRewardPool1.balanceOf(address(this));
-        assetAmounts_[1] = baseRewardPool2.balanceOf(address(this));
-    }
-
-    /// @dev Returns the name of the strategy
-    function pendingRewards() external view returns (TokenAmount[2] memory rewards_) {
-        uint256 balEarned = baseRewardPool1.earned(address(this));
-        balEarned += baseRewardPool2.earned(address(this));
-
-        rewards_[0] = TokenAmount(address(BAL), balEarned);
-        rewards_[1] = TokenAmount(address(AURA), getMintableAuraRewards(balEarned));
-    }
-
-    ////////////////////////////////////////////////////////////////////////////
     // MODIFIERS
     ////////////////////////////////////////////////////////////////////////////
 
@@ -466,6 +435,54 @@ contract AuraAvatarTwoToken is
     // PUBLIC VIEW
     ////////////////////////////////////////////////////////////////////////////
 
+    // TODO: See if better name
+    /// @dev Returns the name of the strategy
+    function getName() external pure returns (string memory name_) {
+        name_ = "Aura_Avatar";
+    }
+
+    // TODO: Version?
+
+    function assets() external view returns (IERC20Upgradeable[2] memory assets_) {
+        assets_[0] = asset1;
+        assets_[1] = asset2;
+    }
+
+    function totalAssets() external view returns (uint256[2] memory assetAmounts_) {
+        assetAmounts_[0] = baseRewardPool1.balanceOf(address(this));
+        assetAmounts_[1] = baseRewardPool2.balanceOf(address(this));
+    }
+
+    /// @dev Returns the name of the strategy
+    function pendingRewards() external view returns (TokenAmount[2] memory rewards_) {
+        uint256 balEarned = baseRewardPool1.earned(address(this));
+        balEarned += baseRewardPool2.earned(address(this));
+
+        rewards_[0] = TokenAmount(address(BAL), balEarned);
+        rewards_[1] = TokenAmount(address(AURA), getMintableAuraRewards(balEarned));
+    }
+
+    // NOTE: Returns in 6 decimal precision
+    function getBalAmountInUsd(uint256 _balAmount) public view returns (uint256 usdcAmount_) {
+        uint256 balInUsd = fetchPriceFromClFeed(BAL_USD_FEED);
+        // TODO: No hardcode
+        usdcAmount_ = (_balAmount * balInUsd) / USD_FEED_PRECISIONS / 10 ** 12;
+    }
+
+    // NOTE: Returns in 6 decimal precision
+    function getAuraAmountInUsd(uint256 _auraAmount) public view returns (uint256 usdcAmount_) {
+        uint256 auraInEth = fetchPriceFromBalancerTwap(BPT_80AURA_20WETH);
+        uint256 ethInUsd = fetchPriceFromClFeed(ETH_USD_FEED);
+        // TODO: No hardcode
+        usdcAmount_ = (_auraAmount * auraInEth * ethInUsd) / USD_FEED_PRECISIONS / AURA_WETH_TWAP_PRECISION / 10 ** 12;
+    }
+
+    function getMinBpt(uint256 _balAmount) public view returns (uint256 minOut_) {
+        uint256 bptOraclePrice = fetchBptPriceFromBalancerTwap(IPriceOracle(address(BPT_80BAL_20WETH)));
+
+        minOut_ = (((_balAmount * 1e18) / bptOraclePrice) * minOutBpsBalToAuraBal.val) / MAX_BPS;
+    }
+
     function checkUpkeep(bytes calldata) external view override returns (bool upkeepNeeded_, bytes memory) {
         uint256 balPending1 = baseRewardPool1.earned(address(this));
         uint256 balPending2 = baseRewardPool2.earned(address(this));
@@ -551,7 +568,7 @@ contract AuraAvatarTwoToken is
         int256[] memory limits = new int256[](3);
         limits[0] = int256(_balAmount);
         // Assumes USDC is pegged. We should sell for other stableecoins if not
-        limits[2] = int256((getBalAmountInUsd(_balAmount) * minOutBpsBalToUsd.val) / MAX_BPS); //
+        limits[2] = -int256((getBalAmountInUsd(_balAmount) * minOutBpsBalToUsd.val) / MAX_BPS); //
         IBalancerVault.BatchSwapStep[] memory swaps = new IBalancerVault.BatchSwapStep[](2);
         // BAL --> WETH
         swaps[0] = IBalancerVault.BatchSwapStep({
@@ -594,7 +611,7 @@ contract AuraAvatarTwoToken is
         int256[] memory limits = new int256[](3);
         limits[0] = int256(_auraAmount);
         // Assumes USDC is pegged. We should sell for other stableecoins if not
-        limits[2] = int256((getAuraAmountInUsd(_auraAmount) * minOutBpsAuraToUsd.val) / MAX_BPS);
+        limits[2] = -int256((getAuraAmountInUsd(_auraAmount) * minOutBpsAuraToUsd.val) / MAX_BPS);
 
         IBalancerVault.BatchSwapStep[] memory swaps = new IBalancerVault.BatchSwapStep[](2);
         // AURA --> WETH
@@ -687,25 +704,6 @@ contract AuraAvatarTwoToken is
     ////////////////////////////////////////////////////////////////////////////
     // INTERNAL VIEW
     ////////////////////////////////////////////////////////////////////////////
-
-    function getBalAmountInUsd(uint256 _balAmount) internal view returns (uint256 usdcAmount_) {
-        // TODO: Check
-        uint256 balInUsd = fetchPriceFromClFeed(BAL_USD_FEED);
-        usdcAmount_ = (_balAmount * balInUsd) / USD_FEED_PRECISIONS;
-    }
-
-    function getAuraAmountInUsd(uint256 _auraAmount) internal view returns (uint256 usdcAmount_) {
-        uint256 auraInEth = fetchPriceFromBalancerTwap(BPT_80AURA_20WETH);
-        uint256 ethInUsd = fetchPriceFromClFeed(ETH_USD_FEED);
-
-        usdcAmount_ = (_auraAmount * auraInEth * ethInUsd) / USD_FEED_PRECISIONS / AURA_WETH_TWAP_PRECISION;
-    }
-
-    function getMinBpt(uint256 _balAmount) internal view returns (uint256 minOut_) {
-        uint256 bptOraclePrice = fetchBptPriceFromBalancerTwap(IPriceOracle(address(BPT_80BAL_20WETH)));
-
-        minOut_ = (((_balAmount * 1e18) / bptOraclePrice) * minOutBpsBalToAuraBal.val) / MAX_BPS;
-    }
 
     /// @notice Returns the expected amount of AURA to be minted given an amount of BAL rewards
     /// @dev ref: https://etherscan.io/address/0xc0c293ce456ff0ed870add98a0828dd4d2903dbf#code#F1#L86
