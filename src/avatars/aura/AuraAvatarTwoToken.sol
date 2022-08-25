@@ -7,7 +7,7 @@ import {PausableUpgradeable} from "openzeppelin-contracts-upgradeable/security/P
 import {BaseAvatar} from "../../lib/BaseAvatar.sol";
 import {AuraConstants} from "./AuraConstants.sol";
 import {AuraAvatarOracleUtils} from "./AuraAvatarOracleUtils.sol";
-import {MAX_BPS, CHAINLINK_KEEPER_REGISTRY} from "../BaseConstants.sol";
+import {MAX_BPS} from "../BaseConstants.sol";
 
 import {IBaseRewardPool} from "../../interfaces/aura/IBaseRewardPool.sol";
 import {IAsset} from "../../interfaces/balancer/IAsset.sol";
@@ -73,14 +73,17 @@ contract AuraAvatarTwoToken is
     // ERRORS
     ////////////////////////////////////////////////////////////////////////////
 
-    error NothingToDeposit();
-    error NoRewards();
-
     error NotOwnerOrManager(address caller);
     error NotKeeper(address caller);
 
     error InvalidBps(uint256 bps);
     error LessThanMinBps(uint256 bps, uint256 minBps);
+
+    error NothingToDeposit();
+    error NoRewards();
+
+    // TODO: Name?
+    error TooSoon(uint256 currentTime, uint256 updateTime, uint256 minDuration);
 
     ////////////////////////////////////////////////////////////////////////////
     // EVENTS
@@ -126,12 +129,12 @@ contract AuraAvatarTwoToken is
         baseRewardPool2 = IBaseRewardPool(crvRewards2);
     }
 
-    function initialize(address _owner, address _manager) public initializer {
+    function initialize(address _owner, address _manager, address _keeper) public initializer {
         __BaseAvatar_init(_owner);
         __Pausable_init();
 
         manager = _manager;
-        keeper = CHAINLINK_KEEPER_REGISTRY;
+        keeper = _keeper;
 
         claimFrequency = 1 weeks;
 
@@ -449,12 +452,14 @@ contract AuraAvatarTwoToken is
     // PUBLIC: Keeper
     ////////////////////////////////////////////////////////////////////////////
 
-    // TODO: Maybe do based on roles + allow owner
     function performUpkeep(bytes calldata) external override onlyKeeper whenNotPaused {
-        if ((block.timestamp - lastClaimTimestamp) > claimFrequency) {
-            // Would revert if there's nothing to claim
-            processRewardsInternal();
+        uint256 lastClaimTimestampCached = lastClaimTimestamp;
+        uint256 claimFrequencyCached = claimFrequency;
+        if ((block.timestamp - lastClaimTimestampCached) < claimFrequencyCached) {
+            revert TooSoon(block.timestamp, lastClaimTimestampCached, claimFrequencyCached);
         }
+
+        processRewardsInternal();
     }
 
     ////////////////////////////////////////////////////////////////////////////
@@ -467,7 +472,7 @@ contract AuraAvatarTwoToken is
 
         uint256 balBalance = BAL.balanceOf(address(this));
 
-        if ((block.timestamp - lastClaimTimestamp) > claimFrequency) {
+        if ((block.timestamp - lastClaimTimestamp) >= claimFrequency) {
             if (balPending1 > 0 || balPending2 > 0 || balBalance > 0) {
                 upkeepNeeded_ = true;
             }

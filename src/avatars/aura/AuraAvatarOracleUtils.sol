@@ -17,13 +17,13 @@ abstract contract AuraAvatarOracleUtils {
     // ERRORS
     ////////////////////////////////////////////////////////////////////////////
 
-    error StalePriceFeed(uint256 currentTime, uint256 updateTime);
+    error StalePriceFeed(uint256 currentTime, uint256 updateTime, uint256 maxDuration);
 
     function fetchPriceFromClFeed(IAggregatorV3 _feed) internal view returns (uint256 answerUint256_) {
         (, int256 answer,, uint256 updateTime,) = _feed.latestRoundData();
 
         if (block.timestamp - updateTime > MAX_LOOKBACK) {
-            revert StalePriceFeed(block.timestamp, updateTime);
+            revert StalePriceFeed(block.timestamp, updateTime, MAX_LOOKBACK);
         }
 
         answerUint256_ = uint256(answer);

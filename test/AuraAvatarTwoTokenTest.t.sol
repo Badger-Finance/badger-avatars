@@ -26,10 +26,11 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
 
     address constant owner = address(1);
     address constant manager = address(2);
+    address constant keeper = address(3);
 
     function setUp() public {
         avatar = new AuraAvatarTwoToken(PID_80BADGER_20WBTC, PID_40WBTC_40DIGG_20GRAVIAURA);
-        avatar.initialize(owner, manager);
+        avatar.initialize(owner, manager, keeper);
 
         deal(address(avatar.asset1()), owner, 10e18, true);
         deal(address(avatar.asset2()), owner, 20e18, true);
@@ -320,6 +321,8 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
 
         assertEq(BASE_REWARD_POOL_80BADGER_20WBTC.balanceOf(address(avatar)), 10e18);
         assertEq(BASE_REWARD_POOL_40WBTC_40DIGG_20GRAVIAURA.balanceOf(address(avatar)), 20e18);
+
+        assertEq(avatar.lastClaimTimestamp(), block.timestamp);
     }
 
     function test_totalAssets() public {
@@ -383,7 +386,7 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
     }
 
     function test_processRewards_permissions() public {
-        vm.expectRevert(abi.encodeWithSelector(AuraAvatarTwoToken.NotOwnerOrManager.selector, (address(this))));
+        vm.expectRevert(abi.encodeWithSelector(AuraAvatarTwoToken.NotOwnerOrManager.selector, address(this)));
         avatar.processRewards();
     }
 
@@ -397,7 +400,58 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
         vm.prank(owner);
         avatar.deposit(10e18, 20e18);
 
+        skip(1 weeks);
+
         (bool upkeepNeeded,) = avatar.checkUpkeep(new bytes(0));
+        assertTrue(upkeepNeeded);
+    }
+
+    function test_checkUpkeep_premature() public {
+        vm.prank(owner);
+        avatar.deposit(10e18, 20e18);
+
+        bool upkeepNeeded;
+
+        (upkeepNeeded,) = avatar.checkUpkeep(new bytes(0));
         assertFalse(upkeepNeeded);
+
+        skip(1 weeks - 1);
+
+        (upkeepNeeded,) = avatar.checkUpkeep(new bytes(0));
+        assertFalse(upkeepNeeded);
+    }
+
+    // function test_performUpkeep() public {
+    //     vm.prank(owner);
+    //     avatar.deposit(10e18, 20e18);
+
+    //     skip(1 weeks);
+
+    //     vm.prank(keeper);
+    //     avatar.performUpkeep(new bytes(0));
+
+    //     (bool upkeepNeeded,) = avatar.checkUpkeep(new bytes(0));
+    //     assertFalse(upkeepNeeded);
+    // }
+
+    function test_performUpkeep_permissions() public {
+        vm.prank(owner);
+        avatar.deposit(10e18, 20e18);
+
+        vm.expectRevert(abi.encodeWithSelector(AuraAvatarTwoToken.NotKeeper.selector, address(this)));
+        avatar.performUpkeep(new bytes(0));
+    }
+
+    function test_performUpkeep_premature() public {
+        vm.prank(owner);
+        avatar.deposit(10e18, 20e18);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                AuraAvatarTwoToken.TooSoon.selector, block.timestamp, avatar.lastClaimTimestamp(), avatar.claimFrequency()
+            )
+        );
+        vm.prank(keeper);
+        avatar.performUpkeep(new bytes(0));
     }
 }
