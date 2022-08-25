@@ -399,14 +399,15 @@ contract AuraAvatarTwoToken is
         emit Deposit(address(asset2), _amountBpt2, block.timestamp);
     }
 
+    // NOTE: Doesn't claim rewards
     function withdrawAll() external onlyOwner {
         uint256 bptDeposited1 = baseRewardPool1.balanceOf(address(this));
         if (bptDeposited1 > 0) {
-            baseRewardPool1.withdrawAndUnwrap(bptDeposited1, true);
+            baseRewardPool1.withdrawAndUnwrap(bptDeposited1, false);
         }
         uint256 bptDeposited2 = baseRewardPool2.balanceOf(address(this));
         if (bptDeposited2 > 0) {
-            baseRewardPool2.withdrawAndUnwrap(bptDeposited2, true);
+            baseRewardPool2.withdrawAndUnwrap(bptDeposited2, false);
         }
 
         address ownerCached = owner();
