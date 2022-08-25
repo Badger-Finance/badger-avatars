@@ -20,11 +20,11 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
     AuraAvatarTwoToken avatar;
 
     IERC20Upgradeable constant BPT_80BADGER_20WBTC = IERC20Upgradeable(0xb460DAa847c45f1C4a41cb05BFB3b51c92e41B36);
-    IBaseRewardPool constant BASE_REWARD_POOL_80BADGER_20WBTC =
-        IBaseRewardPool(0xCea3aa5b2a50e39c7C7755EbFF1e9E1e1516D3f5);
-
     IERC20Upgradeable constant BPT_40WBTC_40DIGG_20GRAVIAURA =
         IERC20Upgradeable(0x8eB6c82C3081bBBd45DcAC5afA631aaC53478b7C);
+
+    IBaseRewardPool constant BASE_REWARD_POOL_80BADGER_20WBTC =
+        IBaseRewardPool(0xCea3aa5b2a50e39c7C7755EbFF1e9E1e1516D3f5);
     IBaseRewardPool constant BASE_REWARD_POOL_40WBTC_40DIGG_20GRAVIAURA =
         IBaseRewardPool(0x10Ca519614b0F3463890387c24819001AFfC5152);
 
@@ -429,14 +429,22 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
         vm.prank(owner);
         avatar.deposit(10e18, 20e18);
 
+        skip(1 hours);
+
+        assertGt(BASE_REWARD_POOL_80BADGER_20WBTC.earned(address(avatar)), 0);
+        assertGt(BASE_REWARD_POOL_40WBTC_40DIGG_20GRAVIAURA.earned(address(avatar)), 0);
+
         vm.prank(owner);
-        avatar.withdrawAll();
+        avatar.claimRewardsAndSendToOwner();
 
-        assertEq(BASE_REWARD_POOL_80BADGER_20WBTC.balanceOf(address(avatar)), 0);
-        assertEq(BASE_REWARD_POOL_40WBTC_40DIGG_20GRAVIAURA.balanceOf(address(avatar)), 0);
+        assertEq(BASE_REWARD_POOL_80BADGER_20WBTC.earned(address(avatar)), 0);
+        assertEq(BASE_REWARD_POOL_40WBTC_40DIGG_20GRAVIAURA.earned(address(avatar)), 0);
 
-        assertEq(BPT_80BADGER_20WBTC.balanceOf(owner), 10e18);
-        assertEq(BPT_40WBTC_40DIGG_20GRAVIAURA.balanceOf(owner), 20e18);
+        assertEq(BAL.balanceOf(address(avatar)), 0);
+        assertEq(AURA.balanceOf(address(avatar)), 0);
+
+        assertGt(BAL.balanceOf(owner), 0);
+        assertGt(AURA.balanceOf(owner), 0);
     }
 
     function test_claimRewardsAndSendToOwner_permissions() public {
@@ -472,6 +480,9 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
 
         skip(1 hours);
 
+        assertGt(BASE_REWARD_POOL_80BADGER_20WBTC.earned(address(avatar)), 0);
+        assertGt(BASE_REWARD_POOL_40WBTC_40DIGG_20GRAVIAURA.earned(address(avatar)), 0);
+
         address[2] memory actors = [owner, manager];
         for (uint256 i; i < actors.length; ++i) {
             uint256 snapId = vm.snapshot();
@@ -480,6 +491,9 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
             avatar.processRewards();
 
             (,, uint256 voterBalanceAfter,) = AURA_LOCKER.lockedBalances(BADGER_VOTER);
+
+            assertEq(BASE_REWARD_POOL_80BADGER_20WBTC.earned(address(avatar)), 0);
+            assertEq(BASE_REWARD_POOL_40WBTC_40DIGG_20GRAVIAURA.earned(address(avatar)), 0);
 
             assertEq(BAL.balanceOf(address(avatar)), 0);
             assertEq(AURA.balanceOf(address(avatar)), 0);
