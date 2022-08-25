@@ -420,9 +420,6 @@ contract AuraAvatarTwoToken is
 
     // NOTE: Failsafe in case things go wrong, want to sell through different pools
     function claimRewardsAndSendToOwner() public onlyOwner {
-        // Update last claimed time
-        lastClaimTimestamp = block.timestamp;
-
         // 1. Claim BAL and AURA rewards
         claimRewards();
 
@@ -487,9 +484,6 @@ contract AuraAvatarTwoToken is
     ////////////////////////////////////////////////////////////////////////////
 
     function processRewardsInternal() internal {
-        // Update last claimed time
-        lastClaimTimestamp = block.timestamp;
-
         // 1. Claim BAL and AURA rewards
         claimRewards();
 
@@ -534,6 +528,9 @@ contract AuraAvatarTwoToken is
 
     // NOTE: Shouldn't revert since others can claim for this contract
     function claimRewards() internal {
+        // Update last claimed time
+        lastClaimTimestamp = block.timestamp;
+
         // TODO: Maybe try-catch?
         if (baseRewardPool1.earned(address(this)) > 0) {
             baseRewardPool1.getReward();
