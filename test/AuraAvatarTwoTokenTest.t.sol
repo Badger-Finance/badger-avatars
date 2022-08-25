@@ -396,5 +396,8 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
     function test_checkUpkeep() public {
         vm.prank(owner);
         avatar.deposit(10e18, 20e18);
+
+        (bool upkeepNeeded,) = avatar.checkUpkeep(new bytes(0));
+        assertFalse(upkeepNeeded);
     }
 }
