@@ -152,6 +152,7 @@ contract AuraAvatarTwoToken is
             min: 9000 // 90%
         });
 
+        // TODO: safeApprove
         // Booster approval for both bpt
         asset1.approve(address(AURA_BOOSTER), type(uint256).max);
         asset2.approve(address(AURA_BOOSTER), type(uint256).max);
@@ -217,7 +218,7 @@ contract AuraAvatarTwoToken is
     }
 
     function setClaimFrequency(uint256 _claimFrequency) external onlyOwner {
-        uint256 oldClaimFrequency = _claimFrequency;
+        uint256 oldClaimFrequency = claimFrequency;
 
         claimFrequency = _claimFrequency;
         emit ClaimFrequencyUpdated(oldClaimFrequency, _claimFrequency);
@@ -282,6 +283,7 @@ contract AuraAvatarTwoToken is
     // PUBLIC: Manager - Config
     ////////////////////////////////////////////////////////////////////////////
 
+    // TODO: val can't be less than min
     function setMinOutBpsBalToUsdcVal(uint256 _minOutBpsBalToUsdcVal) external onlyOwnerOrManager {
         if (_minOutBpsBalToUsdcVal > MAX_BPS) {
             revert InvalidBps(_minOutBpsBalToUsdcVal);
@@ -464,8 +466,8 @@ contract AuraAvatarTwoToken is
     // NOTE: Assumes USDC is pegged. We should sell for other stableecoins if not
     function getBalAmountInUsdc(uint256 _balAmount) public view returns (uint256 usdcAmount_) {
         uint256 balInUsd = fetchPriceFromClFeed(BAL_USD_FEED);
-        // TODO: No hardcode
-        usdcAmount_ = (_balAmount * balInUsd) / USD_FEED_PRECISIONS / 10 ** 12;
+        // TODO: See if can overflow
+        usdcAmount_ = (_balAmount * balInUsd) / BAL_USD_FEED_DIVISOR;
     }
 
     // TODO: Move to CL feed once that's up
@@ -473,11 +475,11 @@ contract AuraAvatarTwoToken is
     function getAuraAmountInUsdc(uint256 _auraAmount) public view returns (uint256 usdcAmount_) {
         uint256 auraInEth = fetchPriceFromBalancerTwap(BPT_80AURA_20WETH);
         uint256 ethInUsd = fetchPriceFromClFeed(ETH_USD_FEED);
-        // TODO: No hardcode
-        usdcAmount_ = (_auraAmount * auraInEth * ethInUsd) / USD_FEED_PRECISIONS / AURA_WETH_TWAP_PRECISION / 10 ** 12;
+        // TODO: See if can overflow
+        usdcAmount_ = (_auraAmount * auraInEth * ethInUsd) / AURA_USD_FEED_DIVISOR;
     }
 
-    // TODO: Use invariant, totalSupply and BAL/ETH feed for this instead of twap?
+    // TODO: Maybe use invariant, totalSupply and BAL/ETH feed for this instead of twap?
     function getBalAmountInBpt(uint256 _balAmount) public view returns (uint256 bptAmount_) {
         uint256 bptPriceInBal = fetchBptPriceFromBalancerTwap(IPriceOracle(address(BPT_80BAL_20WETH)));
         bptAmount_ = (_balAmount * PRECISION) / bptPriceInBal;
@@ -566,6 +568,7 @@ contract AuraAvatarTwoToken is
 
         int256[] memory limits = new int256[](3);
         limits[0] = int256(_balAmount);
+        // TODO: Don't cast CL feed
         limits[2] = -int256((getBalAmountInUsdc(_balAmount) * minOutBpsBalToUsdc.val) / MAX_BPS); //
         IBalancerVault.BatchSwapStep[] memory swaps = new IBalancerVault.BatchSwapStep[](2);
         // BAL --> WETH
@@ -609,6 +612,7 @@ contract AuraAvatarTwoToken is
         int256[] memory limits = new int256[](3);
         limits[0] = int256(_auraAmount);
         // Assumes USDC is pegged. We should sell for other stableecoins if not
+        // TODO: Don't cast CL feed
         limits[2] = -int256((getAuraAmountInUsdc(_auraAmount) * minOutBpsAuraToUsdc.val) / MAX_BPS);
 
         IBalancerVault.BatchSwapStep[] memory swaps = new IBalancerVault.BatchSwapStep[](2);

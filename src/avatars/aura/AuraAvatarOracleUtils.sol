@@ -9,6 +9,7 @@ abstract contract AuraAvatarOracleUtils {
     // CONSTANTS
     ////////////////////////////////////////////////////////////////////////////
 
+    // TODO: Make settable
     uint256 private constant TWAP_DURATION = 1 hours;
     uint256 private constant MAX_STALENESS_DURATION = 24 hours;
 

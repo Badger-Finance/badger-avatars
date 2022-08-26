@@ -4,6 +4,7 @@ pragma solidity 0.8.16;
 import {console2 as console} from "forge-std/console2.sol";
 import {Test} from "forge-std/Test.sol";
 import {IERC20Upgradeable} from "openzeppelin-contracts-upgradeable/interfaces/IERC20Upgradeable.sol";
+import {TransparentUpgradeableProxy} from "openzeppelin-contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
 
 import {IBaseRewardPool} from "../src/interfaces/aura/IBaseRewardPool.sol";
 import {IAggregatorV3} from "../src/interfaces/chainlink/IAggregatorV3.sol";
@@ -15,7 +16,7 @@ import {MockV3Aggregator} from "./mocks/MockV3Aggregator.sol";
 uint256 constant PID_80BADGER_20WBTC = 11;
 uint256 constant PID_40WBTC_40DIGG_20GRAVIAURA = 18;
 
-// TODO: Maybe add event tests
+// TODO: Add event tests
 contract AuraAvatarTwoTokenTest is Test, AuraConstants {
     AuraAvatarTwoToken avatar;
 
@@ -87,6 +88,29 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
         (bpsVal, bpsMin) = avatar.minOutBpsBalToBpt();
         assertGt(bpsVal, 0);
         assertGt(bpsMin, 0);
+    }
+
+    function test_proxy_immutables() public {
+        address logic = address(new AuraAvatarTwoToken(PID_80BADGER_20WBTC, PID_40WBTC_40DIGG_20GRAVIAURA));
+        AuraAvatarTwoToken avatarProxy = AuraAvatarTwoToken(
+            address(
+                new TransparentUpgradeableProxy(logic, address(4), 
+                                                abi.encodeCall(
+                                                    AuraAvatarTwoToken.initialize,
+                                                    (owner, manager, keeper)
+                                                )
+                                        )
+            )
+        );
+
+        assertEq(avatarProxy.pid1(), PID_80BADGER_20WBTC);
+        assertEq(avatarProxy.pid2(), PID_40WBTC_40DIGG_20GRAVIAURA);
+
+        assertEq(address(avatarProxy.asset1()), address(BPT_80BADGER_20WBTC));
+        assertEq(address(avatarProxy.asset2()), address(BPT_40WBTC_40DIGG_20GRAVIAURA));
+
+        assertEq(address(avatarProxy.baseRewardPool1()), address(BASE_REWARD_POOL_80BADGER_20WBTC));
+        assertEq(address(avatarProxy.baseRewardPool2()), address(BASE_REWARD_POOL_40WBTC_40DIGG_20GRAVIAURA));
     }
 
     // TODO: Test double init fails
@@ -602,6 +626,13 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
         vm.prank(keeper);
         avatar.performUpkeep(new bytes(0));
     }
+
+    ////////////////////////////////////////////////////////////////////////////
+    // MISC
+    ////////////////////////////////////////////////////////////////////////////
+
+    // TODO: Add failing test when slippage tolerance is 100% or high (as a sanity check for oracles)
+    // TODO: Test BAL/ETH bpt => auraBAL through both pools
 
     ////////////////////////////////////////////////////////////////////////////
     // Internal helpers
