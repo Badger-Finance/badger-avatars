@@ -12,7 +12,7 @@ contract AvatarTemplateTest is BaseFixture {
         BaseFixture.setUp();
     }
 
-    function testInitialize() public {
+    function test_initialize() public {
         assertEq(address(avatar_template.owner()), owner);
     }
 
@@ -31,4 +31,11 @@ contract AvatarTemplateTest is BaseFixture {
         assertEq(token.balanceOf(address(avatar_template)), 0);
         assertEq(token.balanceOf(address(this)), 1e18);
     }
+
+    function test_call_permissions() public {
+        vm.expectRevert("Ownable: caller is not the owner");
+        avatar_template.call(address(0), 0, new bytes(0));
+    }
+
+    // TODO: Test multiple actions in a single call
 }

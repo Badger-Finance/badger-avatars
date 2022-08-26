@@ -26,10 +26,8 @@ struct BpsConfig {
     uint256 min;
 }
 
-// TODO: Contract should never hold funds?
-//       Natspec
-//       Add role to that can adjust minOutBps
-//       Backup in case swaps are failing - sweep to owner callable by manager
+// TODO: Natspec
+// NOTE: Ideally, contract should never hold funds
 contract AuraAvatarTwoToken is
     BaseAvatar,
     PausableUpgradeable, // TODO: See if move pausable to base

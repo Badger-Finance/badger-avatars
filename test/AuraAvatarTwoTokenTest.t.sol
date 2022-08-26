@@ -33,6 +33,7 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
     address constant keeper = address(3);
 
     function setUp() public {
+        // TODO: Remove hardcoded block
         vm.createSelectFork("mainnet", 15397859);
 
         avatar = new AuraAvatarTwoToken(PID_80BADGER_20WBTC, PID_40WBTC_40DIGG_20GRAVIAURA);
@@ -87,6 +88,10 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
         assertGt(bpsVal, 0);
         assertGt(bpsMin, 0);
     }
+
+    // TODO: Test double init fails
+
+    // TODO: Test ownership transfer
 
     function test_assets() public {
         IERC20Upgradeable[2] memory assets = avatar.assets();
