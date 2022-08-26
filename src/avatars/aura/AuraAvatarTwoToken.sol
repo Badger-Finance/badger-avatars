@@ -65,7 +65,7 @@ contract AuraAvatarTwoToken is
     BpsConfig public minOutBpsBalToUsd;
     BpsConfig public minOutBpsAuraToUsd;
 
-    BpsConfig public minOutBpsBalToAuraBal; // TODO: Divide into two steps?
+    BpsConfig public minOutBpsBalToBpt;
 
     uint256 public lastClaimTimestamp;
 
@@ -99,11 +99,11 @@ contract AuraAvatarTwoToken is
 
     event MinOutBpsBalToUsdMinUpdated(uint256 oldValue, uint256 newValue);
     event MinOutBpsAuraToUsdMinUpdated(uint256 oldValue, uint256 newValue);
-    event MinOutBpsBalToAuraBalMinUpdated(uint256 oldValue, uint256 newValue);
+    event MinOutBpsBalToBptMinUpdated(uint256 oldValue, uint256 newValue);
 
     event MinOutBpsBalToUsdValUpdated(uint256 oldValue, uint256 newValue);
     event MinOutBpsAuraToUsdValUpdated(uint256 oldValue, uint256 newValue);
-    event MinOutBpsBalToAuraBalValUpdated(uint256 oldValue, uint256 newValue);
+    event MinOutBpsBalToBptValUpdated(uint256 oldValue, uint256 newValue);
 
     event Deposit(address indexed token, uint256 amount, uint256 timestamp);
     event Withdraw(address indexed token, uint256 amount, uint256 timestamp);
@@ -149,7 +149,7 @@ contract AuraAvatarTwoToken is
             val: 9825, // 98.25%
             min: 9000 // 90%
         });
-        minOutBpsBalToAuraBal = BpsConfig({
+        minOutBpsBalToBpt = BpsConfig({
             val: 9950, // 99.5%
             min: 9000 // 90%
         });
@@ -269,15 +269,15 @@ contract AuraAvatarTwoToken is
         emit MinOutBpsAuraToUsdMinUpdated(oldMinOutBpsAuraToUsdMin, _minOutBpsAuraToUsdMin);
     }
 
-    function setMinOutBpsBalToAuraBalMin(uint256 _minOutBpsBalToAuraBalMin) external onlyOwner {
-        if (_minOutBpsBalToAuraBalMin > MAX_BPS) {
-            revert InvalidBps(_minOutBpsBalToAuraBalMin);
+    function setMinOutBpsBalToBptMin(uint256 _minOutBpsBalToBptMin) external onlyOwner {
+        if (_minOutBpsBalToBptMin > MAX_BPS) {
+            revert InvalidBps(_minOutBpsBalToBptMin);
         }
 
-        uint256 oldMinOutBpsBalToAuraBalMin = minOutBpsBalToAuraBal.min;
-        minOutBpsBalToAuraBal.min = _minOutBpsBalToAuraBalMin;
+        uint256 oldMinOutBpsBalToBptMin = minOutBpsBalToBpt.min;
+        minOutBpsBalToBpt.min = _minOutBpsBalToBptMin;
 
-        emit MinOutBpsBalToAuraBalMinUpdated(oldMinOutBpsBalToAuraBalMin, _minOutBpsBalToAuraBalMin);
+        emit MinOutBpsBalToBptMinUpdated(oldMinOutBpsBalToBptMin, _minOutBpsBalToBptMin);
     }
 
     ////////////////////////////////////////////////////////////////////////////
@@ -320,22 +320,22 @@ contract AuraAvatarTwoToken is
         emit MinOutBpsAuraToUsdValUpdated(oldMinOutBpsAuraToUsdVal, _minOutBpsAuraToUsdVal);
     }
 
-    function setMinOutBpsBalToAuraBalVal(uint256 _minOutBpsBalToAuraBalVal) external onlyOwnerOrManager {
-        if (_minOutBpsBalToAuraBalVal > MAX_BPS) {
-            revert InvalidBps(_minOutBpsBalToAuraBalVal);
+    function setMinOutBpsBalToBptVal(uint256 _minOutBpsBalToBptVal) external onlyOwnerOrManager {
+        if (_minOutBpsBalToBptVal > MAX_BPS) {
+            revert InvalidBps(_minOutBpsBalToBptVal);
         }
 
-        BpsConfig storage minOutBpsBalToAuraBalPtr = minOutBpsBalToAuraBal;
+        BpsConfig storage minOutBpsBalToBptPtr = minOutBpsBalToBpt;
 
-        uint256 minOutBpsBalToAuraBalMin = minOutBpsBalToAuraBalPtr.min;
-        if (_minOutBpsBalToAuraBalVal < minOutBpsBalToAuraBalMin) {
-            revert LessThanMinBps(_minOutBpsBalToAuraBalVal, minOutBpsBalToAuraBalMin);
+        uint256 minOutBpsBalToBptMin = minOutBpsBalToBptPtr.min;
+        if (_minOutBpsBalToBptVal < minOutBpsBalToBptMin) {
+            revert LessThanMinBps(_minOutBpsBalToBptVal, minOutBpsBalToBptMin);
         }
 
-        uint256 oldMinOutBpsBalToAuraBalVal = minOutBpsBalToAuraBalPtr.val;
-        minOutBpsBalToAuraBalPtr.val = _minOutBpsBalToAuraBalVal;
+        uint256 oldMinOutBpsBalToBptVal = minOutBpsBalToBptPtr.val;
+        minOutBpsBalToBptPtr.val = _minOutBpsBalToBptVal;
 
-        emit MinOutBpsBalToAuraBalValUpdated(oldMinOutBpsBalToAuraBalVal, _minOutBpsBalToAuraBalVal);
+        emit MinOutBpsBalToBptValUpdated(oldMinOutBpsBalToBptVal, _minOutBpsBalToBptVal);
     }
 
     ////////////////////////////////////////////////////////////////////////////
@@ -437,11 +437,13 @@ contract AuraAvatarTwoToken is
 
     // TODO: See if better name
     /// @dev Returns the name of the strategy
-    function getName() external pure returns (string memory name_) {
-        name_ = "Aura_Avatar";
+    function name() external pure returns (string memory name_) {
+        name_ = "Avatar_Aura";
     }
 
-    // TODO: Version?
+    function version() external pure returns (string memory version_) {
+        version_ = "0.0.1";
+    }
 
     function assets() external view returns (IERC20Upgradeable[2] memory assets_) {
         assets_[0] = asset1;
@@ -470,6 +472,7 @@ contract AuraAvatarTwoToken is
     }
 
     // NOTE: Returns in 6 decimal precision
+    // TODO: Move to CL feed once that's up
     function getAuraAmountInUsd(uint256 _auraAmount) public view returns (uint256 usdcAmount_) {
         uint256 auraInEth = fetchPriceFromBalancerTwap(BPT_80AURA_20WETH);
         uint256 ethInUsd = fetchPriceFromClFeed(ETH_USD_FEED);
@@ -477,10 +480,11 @@ contract AuraAvatarTwoToken is
         usdcAmount_ = (_auraAmount * auraInEth * ethInUsd) / USD_FEED_PRECISIONS / AURA_WETH_TWAP_PRECISION / 10 ** 12;
     }
 
-    function getMinBpt(uint256 _balAmount) public view returns (uint256 minOut_) {
-        uint256 bptOraclePrice = fetchBptPriceFromBalancerTwap(IPriceOracle(address(BPT_80BAL_20WETH)));
-
-        minOut_ = (((_balAmount * 1e18) / bptOraclePrice) * minOutBpsBalToAuraBal.val) / MAX_BPS;
+    // TODO: Use invariant, totalSupply and BAL/ETH feed for this instead of twap?
+    function getBalAmountInBpt(uint256 _balAmount) public view returns (uint256 bptAmount_) {
+        uint256 bptPriceInBal = fetchBptPriceFromBalancerTwap(IPriceOracle(address(BPT_80BAL_20WETH)));
+        // TODO: No hardcode
+        bptAmount_ = (_balAmount * 1e18) / bptPriceInBal;
     }
 
     function checkUpkeep(bytes calldata) external view override returns (bool upkeepNeeded_, bytes memory) {
@@ -511,7 +515,7 @@ contract AuraAvatarTwoToken is
             revert NoRewards();
         }
 
-        // 2. Swap some for USDC
+        // 2. Swap some for USDC and send to owner
         uint256 balForUsdc = (totalBal * sellBpsBalToUsd) / MAX_BPS;
         uint256 auraForUsdc = (totalAura * sellBpsAuraToUsd) / MAX_BPS;
 
@@ -529,7 +533,7 @@ contract AuraAvatarTwoToken is
         uint256 balEthBptAmount = BPT_80BAL_20WETH.balanceOf(address(this));
         swapBptForAuraBal(balEthBptAmount);
 
-        // 5. Dogfood auraBAL in Badger vault in behalf of owner
+        // 5. Dogfood auraBAL in Badger vault on behalf of owner
         BAURABAL.depositFor(ownerCached, AURABAL.balanceOf(address(this)));
 
         // 6. Lock remaining AURA on behalf of Badger voter msig
@@ -645,7 +649,6 @@ contract AuraAvatarTwoToken is
         usdcEarned = uint256(-assetBalances[assetBalances.length - 1]);
     }
 
-    // TODO: Check this
     function swapBptForAuraBal(uint256 _bptAmount) internal {
         IBalancerVault.SingleSwap memory swapParam = IBalancerVault.SingleSwap({
             poolId: AURABAL_BAL_ETH_POOL_ID,
@@ -663,18 +666,18 @@ contract AuraAvatarTwoToken is
             toInternalBalance: false
         });
 
+        // Take the trade if we get more than 1: 1 auraBal out
         try BALANCER_VAULT.swap(
             swapParam,
             fundManagement,
-            _bptAmount, // by sims should output more auraBAL than by direct depositing. worst 1:1
+            _bptAmount, // minOut
             type(uint256).max
         ) returns (uint256) {} catch {
-            // fallback, assuming that not even 1:1 was offered and pool is skewed in opposit direction
+            // Otherwise deposit
             AURABAL_DEPOSITOR.deposit(_bptAmount, true, address(0));
         }
     }
 
-    // TODO: Check minOut
     function depositBalToBpt(uint256 _balAmount) internal {
         IAsset[] memory assetArray = new IAsset[](2);
         assetArray[0] = IAsset(address(BAL));
@@ -694,7 +697,7 @@ contract AuraAvatarTwoToken is
                 userData: abi.encode(
                     JoinKind.EXACT_TOKENS_IN_FOR_BPT_OUT,
                     maxAmountsIn,
-                    getMinBpt(_balAmount) // minOut // TODO: Need a separate bps?
+                    (getBalAmountInBpt(_balAmount) * minOutBpsBalToBpt.val) / MAX_BPS
                 ),
                 fromInternalBalance: false
             })
