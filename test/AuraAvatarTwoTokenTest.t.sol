@@ -70,17 +70,17 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
         assertEq(avatar.manager(), manager);
         assertEq(avatar.keeper(), keeper);
 
-        assertGt(avatar.sellBpsBalToUsd(), 0);
-        assertGt(avatar.sellBpsAuraToUsd(), 0);
+        assertGt(avatar.sellBpsBalToUsdc(), 0);
+        assertGt(avatar.sellBpsAuraToUsdc(), 0);
 
         uint256 bpsVal;
         uint256 bpsMin;
 
-        (bpsVal, bpsMin) = avatar.minOutBpsBalToUsd();
+        (bpsVal, bpsMin) = avatar.minOutBpsBalToUsdc();
         assertGt(bpsVal, 0);
         assertGt(bpsMin, 0);
 
-        (bpsVal, bpsMin) = avatar.minOutBpsAuraToUsd();
+        (bpsVal, bpsMin) = avatar.minOutBpsAuraToUsdc();
         assertGt(bpsVal, 0);
         assertGt(bpsMin, 0);
 
@@ -189,78 +189,78 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
         avatar.setClaimFrequency(2 weeks);
     }
 
-    function test_setSellBpsBalToUsd() public {
+    function test_setSellBpsBalToUsdc() public {
         vm.prank(owner);
-        avatar.setSellBpsBalToUsd(5000);
+        avatar.setSellBpsBalToUsdc(5000);
 
-        assertEq(avatar.sellBpsBalToUsd(), 5000);
+        assertEq(avatar.sellBpsBalToUsdc(), 5000);
     }
 
     function test_setSellBpsBalToUsd_invalidValues() external {
         vm.prank(owner);
         vm.expectRevert(abi.encodeWithSelector(AuraAvatarTwoToken.InvalidBps.selector, 1000000));
-        avatar.setSellBpsBalToUsd(1000000);
+        avatar.setSellBpsBalToUsdc(1000000);
     }
 
     function test_setSellBpsBalToUsd_permissions() public {
         vm.expectRevert("Ownable: caller is not the owner");
-        avatar.setSellBpsBalToUsd(5000);
+        avatar.setSellBpsBalToUsdc(5000);
     }
 
-    function test_setSellBpsAuraToUsd() public {
+    function test_setSellBpsAuraToUsdc() public {
         vm.prank(owner);
-        avatar.setSellBpsAuraToUsd(5000);
+        avatar.setSellBpsAuraToUsdc(5000);
 
-        assertEq(avatar.sellBpsAuraToUsd(), 5000);
+        assertEq(avatar.sellBpsAuraToUsdc(), 5000);
     }
 
     function test_setSellBpsAuraToUsd_invalidValues() external {
         vm.prank(owner);
         vm.expectRevert(abi.encodeWithSelector(AuraAvatarTwoToken.InvalidBps.selector, 1000000));
-        avatar.setSellBpsAuraToUsd(1000000);
+        avatar.setSellBpsAuraToUsdc(1000000);
     }
 
     function test_setSellBpsAuraToUsd_permissions() public {
         vm.expectRevert("Ownable: caller is not the owner");
-        avatar.setSellBpsAuraToUsd(5000);
+        avatar.setSellBpsAuraToUsdc(5000);
     }
 
-    function test_setMinOutBpsBalToUsdMin() public {
+    function test_setMinOutBpsBalToUsdcMin() public {
         vm.prank(owner);
-        avatar.setMinOutBpsBalToUsdMin(5000);
+        avatar.setMinOutBpsBalToUsdcMin(5000);
 
-        (, uint256 val) = avatar.minOutBpsBalToUsd();
+        (, uint256 val) = avatar.minOutBpsBalToUsdc();
         assertEq(val, 5000);
     }
 
-    function test_setMinOutBpsBalToUsdMin_invalidValues() external {
+    function test_setMinOutBpsBalToUsdcMin_invalidValues() external {
         vm.prank(owner);
         vm.expectRevert(abi.encodeWithSelector(AuraAvatarTwoToken.InvalidBps.selector, 1000000));
-        avatar.setMinOutBpsBalToUsdMin(1000000);
+        avatar.setMinOutBpsBalToUsdcMin(1000000);
     }
 
-    function test_setMinOutBpsBalToUsdMin_permissions() public {
+    function test_setMinOutBpsBalToUsdcMin_permissions() public {
         vm.expectRevert("Ownable: caller is not the owner");
-        avatar.setMinOutBpsBalToUsdMin(5000);
+        avatar.setMinOutBpsBalToUsdcMin(5000);
     }
 
-    function test_setMinOutBpsAuraToUsdMin() public {
+    function test_setMinOutBpsAuraToUsdcMin() public {
         vm.prank(owner);
-        avatar.setMinOutBpsAuraToUsdMin(5000);
+        avatar.setMinOutBpsAuraToUsdcMin(5000);
 
-        (, uint256 val) = avatar.minOutBpsAuraToUsd();
+        (, uint256 val) = avatar.minOutBpsAuraToUsdc();
         assertEq(val, 5000);
     }
 
-    function test_setMinOutBpsAuraToUsdMin_invalidValues() external {
+    function test_setMinOutBpsAuraToUsdcMin_invalidValues() external {
         vm.prank(owner);
         vm.expectRevert(abi.encodeWithSelector(AuraAvatarTwoToken.InvalidBps.selector, 1000000));
-        avatar.setMinOutBpsAuraToUsdMin(1000000);
+        avatar.setMinOutBpsAuraToUsdcMin(1000000);
     }
 
-    function test_setMinOutBpsAuraToUsdMin_permissions() public {
+    function test_setMinOutBpsAuraToUsdcMin_permissions() public {
         vm.expectRevert("Ownable: caller is not the owner");
-        avatar.setMinOutBpsAuraToUsdMin(5000);
+        avatar.setMinOutBpsAuraToUsdcMin(5000);
     }
 
     function test_setMinOutBpsBalToBptMin() public {
@@ -286,64 +286,64 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
     // Config: Manager/Owner
     ////////////////////////////////////////////////////////////////////////////
 
-    function test_setMinOutBpsBalToUsdVal() external {
+    function test_setMinOutBpsBalToUsdcVal() external {
         uint256 val;
 
         vm.prank(owner);
-        avatar.setMinOutBpsBalToUsdVal(9100);
-        (val,) = avatar.minOutBpsBalToUsd();
+        avatar.setMinOutBpsBalToUsdcVal(9100);
+        (val,) = avatar.minOutBpsBalToUsdc();
         assertEq(val, 9100);
 
         vm.prank(manager);
-        avatar.setMinOutBpsBalToUsdVal(9200);
-        (val,) = avatar.minOutBpsBalToUsd();
+        avatar.setMinOutBpsBalToUsdcVal(9200);
+        (val,) = avatar.minOutBpsBalToUsdc();
         assertEq(val, 9200);
     }
 
-    function test_setMinOutBpsBalToUsdVal_invalidValues() external {
+    function test_setMinOutBpsBalToUsdcVal_invalidValues() external {
         vm.startPrank(owner);
-        avatar.setMinOutBpsBalToUsdMin(9000);
+        avatar.setMinOutBpsBalToUsdcMin(9000);
 
         vm.expectRevert(abi.encodeWithSelector(AuraAvatarTwoToken.LessThanMinBps.selector, 1000, 9000));
-        avatar.setMinOutBpsBalToUsdVal(1000);
+        avatar.setMinOutBpsBalToUsdcVal(1000);
 
         vm.expectRevert(abi.encodeWithSelector(AuraAvatarTwoToken.InvalidBps.selector, 1000000));
-        avatar.setMinOutBpsBalToUsdVal(1000000);
+        avatar.setMinOutBpsBalToUsdcVal(1000000);
     }
 
-    function test_setMinOutBpsBalToUsdVal_permissions() external {
+    function test_setMinOutBpsBalToUsdcVal_permissions() external {
         vm.expectRevert(abi.encodeWithSelector(AuraAvatarTwoToken.NotOwnerOrManager.selector, (address(this))));
-        avatar.setMinOutBpsBalToUsdVal(9100);
+        avatar.setMinOutBpsBalToUsdcVal(9100);
     }
 
-    function test_setMinOutBpsAuraToUsdVal() external {
+    function test_setMinOutBpsAuraToUsdcVal() external {
         uint256 val;
 
         vm.prank(owner);
-        avatar.setMinOutBpsAuraToUsdVal(9100);
-        (val,) = avatar.minOutBpsAuraToUsd();
+        avatar.setMinOutBpsAuraToUsdcVal(9100);
+        (val,) = avatar.minOutBpsAuraToUsdc();
         assertEq(val, 9100);
 
         vm.prank(manager);
-        avatar.setMinOutBpsAuraToUsdVal(9200);
-        (val,) = avatar.minOutBpsAuraToUsd();
+        avatar.setMinOutBpsAuraToUsdcVal(9200);
+        (val,) = avatar.minOutBpsAuraToUsdc();
         assertEq(val, 9200);
     }
 
-    function test_setMinOutBpsAuraToUsdVal_invalidValues() external {
+    function test_setMinOutBpsAuraToUsdcVal_invalidValues() external {
         vm.startPrank(owner);
-        avatar.setMinOutBpsAuraToUsdMin(9000);
+        avatar.setMinOutBpsAuraToUsdcMin(9000);
 
         vm.expectRevert(abi.encodeWithSelector(AuraAvatarTwoToken.LessThanMinBps.selector, 1000, 9000));
-        avatar.setMinOutBpsAuraToUsdVal(1000);
+        avatar.setMinOutBpsAuraToUsdcVal(1000);
 
         vm.expectRevert(abi.encodeWithSelector(AuraAvatarTwoToken.InvalidBps.selector, 1000000));
-        avatar.setMinOutBpsAuraToUsdVal(1000000);
+        avatar.setMinOutBpsAuraToUsdcVal(1000000);
     }
 
-    function test_setMinOutBpsAuraToUsdVal_permissions() external {
+    function test_setMinOutBpsAuraToUsdcVal_permissions() external {
         vm.expectRevert(abi.encodeWithSelector(AuraAvatarTwoToken.NotOwnerOrManager.selector, address(this)));
-        avatar.setMinOutBpsAuraToUsdVal(9100);
+        avatar.setMinOutBpsAuraToUsdcVal(9100);
     }
 
     function test_setMinOutBpsBalToBptVal() external {
