@@ -12,17 +12,10 @@ import {GlobalAccessControlManaged} from "./GlobalAccessControlManaged.sol";
  */
 contract BaseAvatar is OwnableUpgradeable, Executor {
     function __BaseAvatar_init(address _owner) public onlyInitializing {
+        // TODO: Why unchained?
         __Ownable_init_unchained();
 
         transferOwnership(_owner);
-    }
-
-    /// ===== View Functions =====
-
-    /// @notice Used to track the deployed version of BaseAvatar.
-    /// @return Current version of the contract.
-    function baseAvatarVersion() external pure returns (string memory) {
-        return "1.0";
     }
 
     /// ===== Permissioned Actions: Owner =====
@@ -41,6 +34,6 @@ contract BaseAvatar is OwnableUpgradeable, Executor {
         returns (bool success)
     {
         // TODO: Check why delegatecall
-        return execute(to, value, data, Enum.Operation.DelegateCall, gasleft());
+        return execute(to, value, data, Enum.Operation.Call, gasleft());
     }
 }

@@ -698,7 +698,7 @@ contract AuraAvatarTwoToken is
                     JoinKind.EXACT_TOKENS_IN_FOR_BPT_OUT,
                     maxAmountsIn,
                     (getBalAmountInBpt(_balAmount) * minOutBpsBalToBpt.val) / MAX_BPS
-                ),
+                    ),
                 fromInternalBalance: false
             })
         );
