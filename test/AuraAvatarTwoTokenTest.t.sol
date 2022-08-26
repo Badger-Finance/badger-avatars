@@ -5,6 +5,7 @@ import {console2 as console} from "forge-std/console2.sol";
 import {Test} from "forge-std/Test.sol";
 import {IERC20Upgradeable} from "openzeppelin-contracts-upgradeable/interfaces/IERC20Upgradeable.sol";
 import {TransparentUpgradeableProxy} from "openzeppelin-contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
+import {ProxyAdmin} from "openzeppelin-contracts/proxy/transparent/ProxyAdmin.sol";
 
 import {IBaseRewardPool} from "../src/interfaces/aura/IBaseRewardPool.sol";
 import {IAggregatorV3} from "../src/interfaces/chainlink/IAggregatorV3.sol";
@@ -91,17 +92,11 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
     }
 
     function test_proxy_immutables() public {
+        ProxyAdmin proxyAdmin = new ProxyAdmin();
         address logic = address(new AuraAvatarTwoToken(PID_80BADGER_20WBTC, PID_40WBTC_40DIGG_20GRAVIAURA));
-        AuraAvatarTwoToken avatarProxy = AuraAvatarTwoToken(
-            address(
-                new TransparentUpgradeableProxy(logic, address(4), 
-                                                abi.encodeCall(
-                                                    AuraAvatarTwoToken.initialize,
-                                                    (owner, manager, keeper)
-                                                )
-                                        )
-            )
-        );
+        bytes memory data = abi.encodeCall(AuraAvatarTwoToken.initialize, (owner, manager, keeper));
+        AuraAvatarTwoToken avatarProxy =
+            AuraAvatarTwoToken(address(new TransparentUpgradeableProxy(logic, address(proxyAdmin), data)));
 
         assertEq(avatarProxy.pid1(), PID_80BADGER_20WBTC);
         assertEq(avatarProxy.pid2(), PID_40WBTC_40DIGG_20GRAVIAURA);
@@ -258,9 +253,14 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
     }
 
     function test_setMinOutBpsBalToUsdcMin_invalidValues() external {
-        vm.prank(owner);
+        vm.startPrank(owner);
+        avatar.setMinOutBpsBalToUsdcVal(9500);
+
         vm.expectRevert(abi.encodeWithSelector(AuraAvatarTwoToken.InvalidBps.selector, 1000000));
         avatar.setMinOutBpsBalToUsdcMin(1000000);
+
+        vm.expectRevert(abi.encodeWithSelector(AuraAvatarTwoToken.MoreThanBpsVal.selector, 9600, 9500));
+        avatar.setMinOutBpsBalToUsdcMin(9600);
     }
 
     function test_setMinOutBpsBalToUsdcMin_permissions() public {
@@ -277,9 +277,14 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
     }
 
     function test_setMinOutBpsAuraToUsdcMin_invalidValues() external {
-        vm.prank(owner);
+        vm.startPrank(owner);
+        avatar.setMinOutBpsAuraToUsdcVal(9500);
+
         vm.expectRevert(abi.encodeWithSelector(AuraAvatarTwoToken.InvalidBps.selector, 1000000));
         avatar.setMinOutBpsAuraToUsdcMin(1000000);
+
+        vm.expectRevert(abi.encodeWithSelector(AuraAvatarTwoToken.MoreThanBpsVal.selector, 9600, 9500));
+        avatar.setMinOutBpsAuraToUsdcMin(9600);
     }
 
     function test_setMinOutBpsAuraToUsdcMin_permissions() public {
@@ -296,9 +301,14 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
     }
 
     function test_setMinOutBpsBalToBptMin_invalidValues() external {
-        vm.prank(owner);
+        vm.startPrank(owner);
+        avatar.setMinOutBpsBalToBptVal(9500);
+
         vm.expectRevert(abi.encodeWithSelector(AuraAvatarTwoToken.InvalidBps.selector, 1000000));
         avatar.setMinOutBpsBalToBptMin(1000000);
+
+        vm.expectRevert(abi.encodeWithSelector(AuraAvatarTwoToken.MoreThanBpsVal.selector, 9600, 9500));
+        avatar.setMinOutBpsBalToBptMin(9600);
     }
 
     function test_setMinOutBpsBalToBptMin_permissions() public {
@@ -328,11 +338,11 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
         vm.startPrank(owner);
         avatar.setMinOutBpsBalToUsdcMin(9000);
 
-        vm.expectRevert(abi.encodeWithSelector(AuraAvatarTwoToken.LessThanMinBps.selector, 1000, 9000));
-        avatar.setMinOutBpsBalToUsdcVal(1000);
-
         vm.expectRevert(abi.encodeWithSelector(AuraAvatarTwoToken.InvalidBps.selector, 1000000));
         avatar.setMinOutBpsBalToUsdcVal(1000000);
+
+        vm.expectRevert(abi.encodeWithSelector(AuraAvatarTwoToken.LessThanBpsMin.selector, 1000, 9000));
+        avatar.setMinOutBpsBalToUsdcVal(1000);
     }
 
     function test_setMinOutBpsBalToUsdcVal_permissions() external {
@@ -358,11 +368,11 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
         vm.startPrank(owner);
         avatar.setMinOutBpsAuraToUsdcMin(9000);
 
-        vm.expectRevert(abi.encodeWithSelector(AuraAvatarTwoToken.LessThanMinBps.selector, 1000, 9000));
-        avatar.setMinOutBpsAuraToUsdcVal(1000);
-
         vm.expectRevert(abi.encodeWithSelector(AuraAvatarTwoToken.InvalidBps.selector, 1000000));
         avatar.setMinOutBpsAuraToUsdcVal(1000000);
+
+        vm.expectRevert(abi.encodeWithSelector(AuraAvatarTwoToken.LessThanBpsMin.selector, 1000, 9000));
+        avatar.setMinOutBpsAuraToUsdcVal(1000);
     }
 
     function test_setMinOutBpsAuraToUsdcVal_permissions() external {
@@ -388,11 +398,11 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
         vm.startPrank(owner);
         avatar.setMinOutBpsBalToBptMin(9000);
 
-        vm.expectRevert(abi.encodeWithSelector(AuraAvatarTwoToken.LessThanMinBps.selector, 1000, 9000));
-        avatar.setMinOutBpsBalToBptVal(1000);
-
         vm.expectRevert(abi.encodeWithSelector(AuraAvatarTwoToken.InvalidBps.selector, 1000000));
         avatar.setMinOutBpsBalToBptVal(1000000);
+
+        vm.expectRevert(abi.encodeWithSelector(AuraAvatarTwoToken.LessThanBpsMin.selector, 1000, 9000));
+        avatar.setMinOutBpsBalToBptVal(1000);
     }
 
     function test_setMinOutBpsBalToBptVal_permissions() external {

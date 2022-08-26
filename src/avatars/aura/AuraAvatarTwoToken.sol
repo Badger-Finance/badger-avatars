@@ -75,7 +75,8 @@ contract AuraAvatarTwoToken is
     error NotKeeper(address caller);
 
     error InvalidBps(uint256 bps);
-    error LessThanMinBps(uint256 bps, uint256 minBps);
+    error LessThanBpsMin(uint256 bpsVal, uint256 bpsMin);
+    error MoreThanBpsVal(uint256 bpsMin, uint256 bpsVal);
 
     error NothingToDeposit();
     error NoRewards();
@@ -251,8 +252,15 @@ contract AuraAvatarTwoToken is
             revert InvalidBps(_minOutBpsBalToUsdcMin);
         }
 
-        uint256 oldMinOutBpsBalToUsdcMin = minOutBpsBalToUsdc.min;
-        minOutBpsBalToUsdc.min = _minOutBpsBalToUsdcMin;
+        BpsConfig storage minOutBpsBalToUsdcPtr = minOutBpsBalToUsdc;
+
+        uint256 minOutBpsBalToUsdcVal = minOutBpsBalToUsdcPtr.val;
+        if (_minOutBpsBalToUsdcMin > minOutBpsBalToUsdcVal) {
+            revert MoreThanBpsVal(_minOutBpsBalToUsdcMin, minOutBpsBalToUsdcVal);
+        }
+
+        uint256 oldMinOutBpsBalToUsdcMin = minOutBpsBalToUsdcPtr.min;
+        minOutBpsBalToUsdcPtr.min = _minOutBpsBalToUsdcMin;
 
         emit MinOutBpsBalToUsdcMinUpdated(oldMinOutBpsBalToUsdcMin, _minOutBpsBalToUsdcMin);
     }
@@ -260,6 +268,13 @@ contract AuraAvatarTwoToken is
     function setMinOutBpsAuraToUsdcMin(uint256 _minOutBpsAuraToUsdcMin) external onlyOwner {
         if (_minOutBpsAuraToUsdcMin > MAX_BPS) {
             revert InvalidBps(_minOutBpsAuraToUsdcMin);
+        }
+
+        BpsConfig storage minOutBpsAuraToUsdcPtr = minOutBpsAuraToUsdc;
+
+        uint256 minOutBpsAuraToUsdcVal = minOutBpsAuraToUsdcPtr.val;
+        if (_minOutBpsAuraToUsdcMin > minOutBpsAuraToUsdcVal) {
+            revert MoreThanBpsVal(_minOutBpsAuraToUsdcMin, minOutBpsAuraToUsdcVal);
         }
 
         uint256 oldMinOutBpsAuraToUsdcMin = minOutBpsAuraToUsdc.min;
@@ -273,6 +288,13 @@ contract AuraAvatarTwoToken is
             revert InvalidBps(_minOutBpsBalToBptMin);
         }
 
+        BpsConfig storage minOutBpsBalToBptPtr = minOutBpsBalToBpt;
+
+        uint256 minOutBpsBalToBptVal = minOutBpsBalToBptPtr.val;
+        if (_minOutBpsBalToBptMin > minOutBpsBalToBptVal) {
+            revert MoreThanBpsVal(_minOutBpsBalToBptMin, minOutBpsBalToBptVal);
+        }
+
         uint256 oldMinOutBpsBalToBptMin = minOutBpsBalToBpt.min;
         minOutBpsBalToBpt.min = _minOutBpsBalToBptMin;
 
@@ -283,7 +305,6 @@ contract AuraAvatarTwoToken is
     // PUBLIC: Manager - Config
     ////////////////////////////////////////////////////////////////////////////
 
-    // TODO: val can't be less than min
     function setMinOutBpsBalToUsdcVal(uint256 _minOutBpsBalToUsdcVal) external onlyOwnerOrManager {
         if (_minOutBpsBalToUsdcVal > MAX_BPS) {
             revert InvalidBps(_minOutBpsBalToUsdcVal);
@@ -293,7 +314,7 @@ contract AuraAvatarTwoToken is
 
         uint256 minOutBpsBalToUsdcMin = minOutBpsBalToUsdcPtr.min;
         if (_minOutBpsBalToUsdcVal < minOutBpsBalToUsdcMin) {
-            revert LessThanMinBps(_minOutBpsBalToUsdcVal, minOutBpsBalToUsdcMin);
+            revert LessThanBpsMin(_minOutBpsBalToUsdcVal, minOutBpsBalToUsdcMin);
         }
 
         uint256 oldMinOutBpsBalToUsdcVal = minOutBpsBalToUsdcPtr.val;
@@ -311,7 +332,7 @@ contract AuraAvatarTwoToken is
 
         uint256 minOutBpsAuraToUsdcMin = minOutBpsAuraToUsdcPtr.min;
         if (_minOutBpsAuraToUsdcVal < minOutBpsAuraToUsdcMin) {
-            revert LessThanMinBps(_minOutBpsAuraToUsdcVal, minOutBpsAuraToUsdcMin);
+            revert LessThanBpsMin(_minOutBpsAuraToUsdcVal, minOutBpsAuraToUsdcMin);
         }
 
         uint256 oldMinOutBpsAuraToUsdcVal = minOutBpsAuraToUsdcPtr.val;
@@ -329,7 +350,7 @@ contract AuraAvatarTwoToken is
 
         uint256 minOutBpsBalToBptMin = minOutBpsBalToBptPtr.min;
         if (_minOutBpsBalToBptVal < minOutBpsBalToBptMin) {
-            revert LessThanMinBps(_minOutBpsBalToBptVal, minOutBpsBalToBptMin);
+            revert LessThanBpsMin(_minOutBpsBalToBptVal, minOutBpsBalToBptMin);
         }
 
         uint256 oldMinOutBpsBalToBptVal = minOutBpsBalToBptPtr.val;
