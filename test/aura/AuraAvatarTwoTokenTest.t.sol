@@ -12,6 +12,8 @@ import {MockV3Aggregator} from "../mocks/MockV3Aggregator.sol";
 import {MAX_BPS, PID_80BADGER_20WBTC, PID_40WBTC_40DIGG_20GRAVIAURA} from "../../src/BaseConstants.sol";
 import {AuraAvatarTwoToken, TokenAmount} from "../../src/aura/AuraAvatarTwoToken.sol";
 import {AuraConstants} from "../../src/aura/AuraConstants.sol";
+import {IAsset} from "../../src/interfaces/balancer/IAsset.sol";
+import {IBalancerVault, JoinKind} from "../../src/interfaces/balancer/IBalancerVault.sol";
 import {IBaseRewardPool} from "../../src/interfaces/aura/IBaseRewardPool.sol";
 import {IAggregatorV3} from "../../src/interfaces/chainlink/IAggregatorV3.sol";
 
@@ -107,19 +109,36 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
         assertEq(address(avatarProxy.baseRewardPool2()), address(BASE_REWARD_POOL_40WBTC_40DIGG_20GRAVIAURA));
     }
 
+    function test_initialize_double() public {
+        vm.expectRevert("Initializable: contract is already initialized");
+        avatar.initialize(address(this), address(this), address(this));
+    }
+
     function test_name() public {
         assertEq(avatar.name(), "Avatar_AuraTwoToken_20WBTC-80BADGER_40WBTC-40DIGG-20graviAURA");
     }
-
-    // TODO: Test double init fails
-
-    // TODO: Test ownership transfer
 
     function test_assets() public {
         IERC20MetadataUpgradeable[2] memory assets = avatar.assets();
 
         assertEq(address(assets[0]), address(BPT_80BADGER_20WBTC));
         assertEq(address(assets[1]), address(BPT_40WBTC_40DIGG_20GRAVIAURA));
+    }
+
+    ////////////////////////////////////////////////////////////////////////////
+    // Ownership
+    ////////////////////////////////////////////////////////////////////////////
+
+    function test_transferOwnership() public {
+        vm.prank(owner);
+        avatar.transferOwnership(address(this));
+
+        assertEq(avatar.owner(), address(this));
+    }
+
+    function test_transferOwnership_permissions() public {
+        vm.expectRevert("Ownable: caller is not the owner");
+        avatar.transferOwnership(address(this));
     }
 
     ////////////////////////////////////////////////////////////////////////////
@@ -674,7 +693,42 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
         avatar.processRewards();
     }
 
-    // TODO: Test BAL/ETH bpt => auraBAL through both pools
+    function test_processRewards_aurabalDeposit() public {
+        (, uint256[] memory balances,) = BALANCER_VAULT.getPoolTokens(AURABAL_BAL_WETH_POOL_ID);
+
+        if (balances[1] > balances[0]) {
+            uint256 bptAmount = 2 * (balances[1] - balances[0]);
+
+            deal(address(BPT_80BAL_20WETH), address(this), bptAmount, true);
+            BPT_80BAL_20WETH.approve(address(BALANCER_VAULT), bptAmount);
+
+            IAsset[] memory assetArray = new IAsset[](2);
+            assetArray[0] = IAsset(address(BPT_80BAL_20WETH));
+            assetArray[1] = IAsset(address(AURABAL));
+
+            uint256[] memory maxAmountsIn = new uint256[](2);
+            maxAmountsIn[0] = bptAmount;
+            maxAmountsIn[1] = 0;
+
+            BALANCER_VAULT.joinPool(
+                AURABAL_BAL_WETH_POOL_ID,
+                address(this),
+                address(this),
+                IBalancerVault.JoinPoolRequest({
+                    assets: assetArray,
+                    maxAmountsIn: maxAmountsIn,
+                    userData: abi.encode(JoinKind.EXACT_TOKENS_IN_FOR_BPT_OUT, maxAmountsIn, 0),
+                    fromInternalBalance: false
+                })
+            );
+        }
+
+        vm.startPrank(owner);
+        avatar.deposit(10e18, 20e18);
+
+        skip(1 hours);
+        avatar.processRewards();
+    }
 
     ////////////////////////////////////////////////////////////////////////////
     // Internal helpers

@@ -504,7 +504,6 @@ contract AuraAvatarTwoToken is
 
     // NOTE: Assumes USDC is pegged. We should sell for other stableecoins if not
     function getAuraAmountInUsdc(uint256 _auraAmount) public view returns (uint256 usdcAmount_) {
-        // TODO: What happens if no observations?
         uint256 auraInEth = fetchPriceFromBalancerTwap(BPT_80AURA_20WETH);
         uint256 ethInUsd = fetchPriceFromClFeed(ETH_USD_FEED);
         // Divisor is 10^38 and uint256 max ~ 10^77 so this shouldn't overflow for normal amounts
@@ -588,7 +587,6 @@ contract AuraAvatarTwoToken is
     }
 
     // NOTE: Shouldn't revert since others can claim for this contract
-    // TODO: Claim extra rewards?
     function claimRewards() internal {
         // Update last claimed time
         lastClaimTimestamp = block.timestamp;
@@ -602,7 +600,6 @@ contract AuraAvatarTwoToken is
         }
     }
 
-    // TODO: See if can use pricer v3
     function swapBalForUsdc(uint256 _balAmount) internal returns (uint256 usdcEarned) {
         IAsset[] memory assetArray = new IAsset[](3);
         assetArray[0] = IAsset(address(BAL));
@@ -645,7 +642,6 @@ contract AuraAvatarTwoToken is
     }
 
     function swapAuraForUsdc(uint256 _auraAmount) internal returns (uint256 usdcEarned) {
-        // TODO: See if it makes sense to use better of two pools
         IAsset[] memory assetArray = new IAsset[](3);
         assetArray[0] = IAsset(address(AURA));
         assetArray[1] = IAsset(address(WETH));
@@ -690,7 +686,7 @@ contract AuraAvatarTwoToken is
 
     function swapBptForAuraBal(uint256 _bptAmount) internal {
         IBalancerVault.SingleSwap memory swapParam = IBalancerVault.SingleSwap({
-            poolId: AURABAL_BAL_ETH_POOL_ID,
+            poolId: AURABAL_BAL_WETH_POOL_ID,
             kind: IBalancerVault.SwapKind.GIVEN_IN,
             assetIn: IAsset(address(BPT_80BAL_20WETH)),
             assetOut: IAsset(address(AURABAL)),
@@ -705,7 +701,6 @@ contract AuraAvatarTwoToken is
             toInternalBalance: false
         });
 
-        // TODO: Test this
         // Take the trade if we get more than 1: 1 auraBal out
         try BALANCER_VAULT.swap(
             swapParam,
