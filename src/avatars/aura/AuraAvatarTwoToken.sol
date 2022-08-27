@@ -1,14 +1,17 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.16;
 
-import {IERC20Upgradeable} from "openzeppelin-contracts-upgradeable/interfaces/IERC20Upgradeable.sol";
 import {PausableUpgradeable} from "openzeppelin-contracts-upgradeable/security/PausableUpgradeable.sol";
+import {SafeERC20Upgradeable} from "openzeppelin-contracts-upgradeable/token/ERC20/utils/SafeERC20Upgradeable.sol";
+import {IERC20MetadataUpgradeable} from
+    "openzeppelin-contracts-upgradeable/token/ERC20/extensions/IERC20MetadataUpgradeable.sol";
 
 import {BaseAvatar} from "../../lib/BaseAvatar.sol";
 import {AuraConstants} from "./AuraConstants.sol";
 import {AuraAvatarOracleUtils} from "./AuraAvatarOracleUtils.sol";
 import {MAX_BPS, PRECISION} from "../BaseConstants.sol";
 
+import {IAuraToken} from "../../interfaces/aura/IAuraToken.sol";
 import {IBaseRewardPool} from "../../interfaces/aura/IBaseRewardPool.sol";
 import {IAsset} from "../../interfaces/balancer/IAsset.sol";
 import {IBalancerVault, JoinKind} from "../../interfaces/balancer/IBalancerVault.sol";
@@ -20,7 +23,7 @@ struct TokenAmount {
     uint256 amount;
 }
 
-// TODO: Storage packing?
+// TODO: Storage packing? Check if that works with proxy upgrades?
 struct BpsConfig {
     uint256 val;
     uint256 min;
@@ -36,14 +39,21 @@ contract AuraAvatarTwoToken is
     KeeperCompatibleInterface
 {
     ////////////////////////////////////////////////////////////////////////////
+    // LIBRARIES
+    ////////////////////////////////////////////////////////////////////////////
+
+    using SafeERC20Upgradeable for IERC20MetadataUpgradeable;
+
+    ////////////////////////////////////////////////////////////////////////////
     // IMMUTABLES
     ////////////////////////////////////////////////////////////////////////////
 
+    // TODO: Check if this can cause issues
     uint256 public immutable pid1;
     uint256 public immutable pid2;
 
-    IERC20Upgradeable public immutable asset1;
-    IERC20Upgradeable public immutable asset2;
+    IERC20MetadataUpgradeable public immutable asset1;
+    IERC20MetadataUpgradeable public immutable asset2;
 
     IBaseRewardPool public immutable baseRewardPool1;
     IBaseRewardPool public immutable baseRewardPool2;
@@ -121,8 +131,8 @@ contract AuraAvatarTwoToken is
         (address lpToken1,,, address crvRewards1,,) = AURA_BOOSTER.poolInfo(_pid1);
         (address lpToken2,,, address crvRewards2,,) = AURA_BOOSTER.poolInfo(_pid2);
 
-        asset1 = IERC20Upgradeable(lpToken1);
-        asset2 = IERC20Upgradeable(lpToken2);
+        asset1 = IERC20MetadataUpgradeable(lpToken1);
+        asset2 = IERC20MetadataUpgradeable(lpToken2);
 
         baseRewardPool1 = IBaseRewardPool(crvRewards1);
         baseRewardPool2 = IBaseRewardPool(crvRewards2);
@@ -153,20 +163,19 @@ contract AuraAvatarTwoToken is
             min: 9000 // 90%
         });
 
-        // TODO: safeApprove
         // Booster approval for both bpt
-        asset1.approve(address(AURA_BOOSTER), type(uint256).max);
-        asset2.approve(address(AURA_BOOSTER), type(uint256).max);
+        asset1.safeApprove(address(AURA_BOOSTER), type(uint256).max);
+        asset2.safeApprove(address(AURA_BOOSTER), type(uint256).max);
 
         // Balancer vault approvals
-        BAL.approve(address(BALANCER_VAULT), type(uint256).max);
-        AURA.approve(address(BALANCER_VAULT), type(uint256).max);
-        BPT_80BAL_20WETH.approve(address(BALANCER_VAULT), type(uint256).max);
+        BAL.safeApprove(address(BALANCER_VAULT), type(uint256).max);
+        AURA.safeApprove(address(BALANCER_VAULT), type(uint256).max);
+        BPT_80BAL_20WETH.safeApprove(address(BALANCER_VAULT), type(uint256).max);
 
-        AURA.approve(address(AURA_LOCKER), type(uint256).max);
+        AURA.safeApprove(address(AURA_LOCKER), type(uint256).max);
 
-        BPT_80BAL_20WETH.approve(address(AURABAL_DEPOSITOR), type(uint256).max);
-        AURABAL.approve(address(BAURABAL), type(uint256).max);
+        BPT_80BAL_20WETH.safeApprove(address(AURABAL_DEPOSITOR), type(uint256).max);
+        AURABAL.safeApprove(address(BAURABAL), type(uint256).max);
     }
 
     ////////////////////////////////////////////////////////////////////////////
@@ -191,7 +200,6 @@ contract AuraAvatarTwoToken is
     // PUBLIC: Owner - Pausing
     ////////////////////////////////////////////////////////////////////////////
 
-    // TODO: Guardian
     function pause() external onlyOwnerOrManager {
         _pause();
     }
@@ -434,8 +442,8 @@ contract AuraAvatarTwoToken is
     ////////////////////////////////////////////////////////////////////////////
 
     // NOTE: Can be called by techops to opportunistically harvest
-    function processRewards() external onlyOwnerOrManager {
-        processRewardsInternal();
+    function processRewards() external onlyOwnerOrManager returns (TokenAmount[] memory processed_) {
+        processed_ = processRewardsInternal();
     }
 
     ////////////////////////////////////////////////////////////////////////////
@@ -456,17 +464,16 @@ contract AuraAvatarTwoToken is
     // PUBLIC VIEW
     ////////////////////////////////////////////////////////////////////////////
 
-    // TODO: See if better name
     /// @dev Returns the name of the strategy
-    function name() external pure returns (string memory name_) {
-        name_ = "Avatar_Aura";
+    function name() external view returns (string memory name_) {
+        name_ = string.concat("Avatar_AuraTwoToken", "_", asset1.symbol(), "_", asset2.symbol());
     }
 
     function version() external pure returns (string memory version_) {
         version_ = "0.0.1";
     }
 
-    function assets() external view returns (IERC20Upgradeable[2] memory assets_) {
+    function assets() external view returns (IERC20MetadataUpgradeable[2] memory assets_) {
         assets_[0] = asset1;
         assets_[1] = asset2;
     }
@@ -476,27 +483,31 @@ contract AuraAvatarTwoToken is
         assetAmounts_[1] = baseRewardPool2.balanceOf(address(this));
     }
 
+    // NOTE: Includes BAL/AURA in the contract
     function pendingRewards() external view returns (TokenAmount[2] memory rewards_) {
         uint256 balEarned = baseRewardPool1.earned(address(this));
         balEarned += baseRewardPool2.earned(address(this));
 
-        rewards_[0] = TokenAmount(address(BAL), balEarned);
-        rewards_[1] = TokenAmount(address(AURA), getMintableAuraRewards(balEarned));
+        uint256 totalBal = balEarned + BAL.balanceOf(address(this));
+        uint256 totalAura = getMintableAuraRewards(balEarned) + AURA.balanceOf(address(this));
+
+        rewards_[0] = TokenAmount(address(BAL), totalBal);
+        rewards_[1] = TokenAmount(address(AURA), totalAura);
     }
 
     // NOTE: Assumes USDC is pegged. We should sell for other stableecoins if not
     function getBalAmountInUsdc(uint256 _balAmount) public view returns (uint256 usdcAmount_) {
         uint256 balInUsd = fetchPriceFromClFeed(BAL_USD_FEED);
-        // TODO: See if can overflow
+        // Divisor is 10^20 and uint256 max ~ 10^77 so this shouldn't overflow for normal amounts
         usdcAmount_ = (_balAmount * balInUsd) / BAL_USD_FEED_DIVISOR;
     }
 
-    // TODO: Move to CL feed once that's up
     // NOTE: Assumes USDC is pegged. We should sell for other stableecoins if not
     function getAuraAmountInUsdc(uint256 _auraAmount) public view returns (uint256 usdcAmount_) {
+        // TODO: What happens if no observations?
         uint256 auraInEth = fetchPriceFromBalancerTwap(BPT_80AURA_20WETH);
         uint256 ethInUsd = fetchPriceFromClFeed(ETH_USD_FEED);
-        // TODO: See if can overflow
+        // Divisor is 10^38 and uint256 max ~ 10^77 so this shouldn't overflow for normal amounts
         usdcAmount_ = (_auraAmount * auraInEth * ethInUsd) / AURA_USD_FEED_DIVISOR;
     }
 
@@ -523,7 +534,7 @@ contract AuraAvatarTwoToken is
     // INTERNAL
     ////////////////////////////////////////////////////////////////////////////
 
-    function processRewardsInternal() internal {
+    function processRewardsInternal() internal returns (TokenAmount[] memory processed_) {
         // 1. Claim BAL and AURA rewards
         claimRewards();
 
@@ -541,8 +552,10 @@ contract AuraAvatarTwoToken is
         uint256 usdcEarnedFromBal = swapBalForUsdc(balForUsdc);
         uint256 usdcEarnedFromAura = swapAuraForUsdc(auraForUsdc);
 
+        uint256 totalUsdcEarned = usdcEarnedFromBal + usdcEarnedFromAura;
+
         address ownerCached = owner();
-        USDC.transfer(ownerCached, USDC.balanceOf(address(this)));
+        USDC.transfer(ownerCached, totalUsdcEarned);
 
         // 3. Deposit remaining BAL to 80BAL-20ETH BPT
         uint256 balToDeposit = totalBal - balForUsdc;
@@ -553,20 +566,29 @@ contract AuraAvatarTwoToken is
         swapBptForAuraBal(balEthBptAmount);
 
         // 5. Dogfood auraBAL in Badger vault on behalf of owner
+        uint256 auraBalToDeposit = AURABAL.balanceOf(address(this));
         BAURABAL.depositFor(ownerCached, AURABAL.balanceOf(address(this)));
 
         // 6. Lock remaining AURA on behalf of Badger voter msig
         uint256 auraToLock = totalAura - auraForUsdc;
         AURA_LOCKER.lock(BADGER_VOTER, auraToLock);
 
+        // Return processed amounts
+        // TODO: Return vlAura and bauraBal?
+        processed_ = new TokenAmount[](3);
+        processed_[0] = TokenAmount(address(USDC), totalUsdcEarned);
+        processed_[1] = TokenAmount(address(AURA), auraToLock);
+        processed_[2] = TokenAmount(address(AURABAL), auraBalToDeposit);
+
         // Emit events for analysis
-        // TODO: Names?
         emit RewardClaimed(address(BAL), totalBal, block.timestamp);
         emit RewardClaimed(address(AURA), totalAura, block.timestamp);
-        emit RewardsToStable(address(USDC), usdcEarnedFromBal + usdcEarnedFromAura, block.timestamp);
+
+        emit RewardsToStable(address(USDC), totalUsdcEarned, block.timestamp);
     }
 
     // NOTE: Shouldn't revert since others can claim for this contract
+    // TODO: Claim extra rewards?
     function claimRewards() internal {
         // Update last claimed time
         lastClaimTimestamp = block.timestamp;
@@ -589,7 +611,6 @@ contract AuraAvatarTwoToken is
 
         int256[] memory limits = new int256[](3);
         limits[0] = int256(_balAmount);
-        // TODO: Don't cast CL feed
         limits[2] = -int256((getBalAmountInUsdc(_balAmount) * minOutBpsBalToUsdc.val) / MAX_BPS); //
         IBalancerVault.BatchSwapStep[] memory swaps = new IBalancerVault.BatchSwapStep[](2);
         // BAL --> WETH
@@ -633,7 +654,6 @@ contract AuraAvatarTwoToken is
         int256[] memory limits = new int256[](3);
         limits[0] = int256(_auraAmount);
         // Assumes USDC is pegged. We should sell for other stableecoins if not
-        // TODO: Don't cast CL feed
         limits[2] = -int256((getAuraAmountInUsdc(_auraAmount) * minOutBpsAuraToUsdc.val) / MAX_BPS);
 
         IBalancerVault.BatchSwapStep[] memory swaps = new IBalancerVault.BatchSwapStep[](2);
@@ -733,16 +753,16 @@ contract AuraAvatarTwoToken is
     function getMintableAuraRewards(uint256 _balAmount) internal view returns (uint256 amount) {
         // NOTE: Only correct if AURA.minterMinted() == 0
         //       minterMinted is a private var in the contract, so we can't access it directly
-        uint256 emissionsMinted = AURA.totalSupply() - AURA.INIT_MINT_AMOUNT();
+        uint256 emissionsMinted = AURA.totalSupply() - IAuraToken(address(AURA)).INIT_MINT_AMOUNT();
 
-        uint256 cliff = emissionsMinted / AURA.reductionPerCliff();
-        uint256 totalCliffs = AURA.totalCliffs();
+        uint256 cliff = emissionsMinted / IAuraToken(address(AURA)).reductionPerCliff();
+        uint256 totalCliffs = IAuraToken(address(AURA)).totalCliffs();
 
         if (cliff < totalCliffs) {
             uint256 reduction = (((totalCliffs - cliff) * 5) / 2) + 700;
             amount = (_balAmount * reduction) / totalCliffs;
 
-            uint256 amtTillMax = AURA.EMISSIONS_MAX_SUPPLY() - emissionsMinted;
+            uint256 amtTillMax = IAuraToken(address(AURA)).EMISSIONS_MAX_SUPPLY() - emissionsMinted;
             if (amount > amtTillMax) {
                 amount = amtTillMax;
             }

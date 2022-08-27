@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.16;
 
-import {IERC20Upgradeable} from "openzeppelin-contracts-upgradeable/interfaces/IERC20Upgradeable.sol";
+import {IERC20MetadataUpgradeable} from
+    "openzeppelin-contracts-upgradeable/token/ERC20/extensions/IERC20MetadataUpgradeable.sol";
 
 import {IAuraLocker} from "../../interfaces/aura/IAuraLocker.sol";
-import {IAuraToken} from "../../interfaces/aura/IAuraToken.sol";
 import {IBaseRewardPool} from "../../interfaces/aura/IBaseRewardPool.sol";
 import {IBooster} from "../../interfaces/aura/IBooster.sol";
 import {ICrvDepositorWrapper} from "../../interfaces/aura/ICrvDepositorWrapper.sol";
@@ -28,12 +28,18 @@ abstract contract AuraConstants {
     IVault internal constant BAURABAL = IVault(0x37d9D2C6035b744849C15F1BFEE8F268a20fCBd8);
     address internal constant BADGER_VOTER = address(0xA9ed98B5Fb8428d68664f3C5027c62A10d45826b);
 
-    IAuraToken internal constant AURA = IAuraToken(0xC0c293ce456fF0ED870ADd98a0828Dd4d2903DBF);
-    IERC20Upgradeable internal constant BAL = IERC20Upgradeable(0xba100000625a3754423978a60c9317c58a424e3D);
-    IERC20Upgradeable internal constant WETH = IERC20Upgradeable(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
-    IERC20Upgradeable internal constant USDC = IERC20Upgradeable(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
-    IERC20Upgradeable internal constant AURABAL = IERC20Upgradeable(0x616e8BfA43F920657B3497DBf40D6b1A02D4608d);
-    IERC20Upgradeable internal constant BPT_80BAL_20WETH = IERC20Upgradeable(0x5c6Ee304399DBdB9C8Ef030aB642B10820DB8F56);
+    IERC20MetadataUpgradeable internal constant AURA =
+        IERC20MetadataUpgradeable(0xC0c293ce456fF0ED870ADd98a0828Dd4d2903DBF);
+    IERC20MetadataUpgradeable internal constant BAL =
+        IERC20MetadataUpgradeable(0xba100000625a3754423978a60c9317c58a424e3D);
+    IERC20MetadataUpgradeable internal constant WETH =
+        IERC20MetadataUpgradeable(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
+    IERC20MetadataUpgradeable internal constant USDC =
+        IERC20MetadataUpgradeable(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
+    IERC20MetadataUpgradeable internal constant AURABAL =
+        IERC20MetadataUpgradeable(0x616e8BfA43F920657B3497DBf40D6b1A02D4608d);
+    IERC20MetadataUpgradeable internal constant BPT_80BAL_20WETH =
+        IERC20MetadataUpgradeable(0x5c6Ee304399DBdB9C8Ef030aB642B10820DB8F56);
 
     bytes32 internal constant BAL_WETH_POOL_ID = 0x5c6ee304399dbdb9c8ef030ab642b10820db8f56000200000000000000000014;
     bytes32 internal constant AURA_WETH_POOL_ID = 0xcfca23ca9ca720b6e98e3eb9b6aa0ffc4a5c08b9000200000000000000000274; // 50AURA-50WETH
@@ -46,7 +52,6 @@ abstract contract AuraConstants {
 
     IPriceOracle internal constant BPT_80AURA_20WETH = IPriceOracle(0xc29562b045D80fD77c69Bec09541F5c16fe20d9d); // POL from AURA
 
-    // TODO: See if can overflow
-    uint256 internal constant BAL_USD_FEED_DIVISOR = 1e30;
-    uint256 internal constant AURA_USD_FEED_DIVISOR = 1e48;
+    uint256 internal constant BAL_USD_FEED_DIVISOR = 1e20;
+    uint256 internal constant AURA_USD_FEED_DIVISOR = 1e38;
 }

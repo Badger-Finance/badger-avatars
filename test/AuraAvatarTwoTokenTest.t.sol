@@ -3,9 +3,10 @@ pragma solidity 0.8.16;
 
 import {console2 as console} from "forge-std/console2.sol";
 import {Test} from "forge-std/Test.sol";
-import {IERC20Upgradeable} from "openzeppelin-contracts-upgradeable/interfaces/IERC20Upgradeable.sol";
 import {TransparentUpgradeableProxy} from "openzeppelin-contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
 import {ProxyAdmin} from "openzeppelin-contracts/proxy/transparent/ProxyAdmin.sol";
+import {IERC20MetadataUpgradeable} from
+    "openzeppelin-contracts-upgradeable/token/ERC20/extensions/IERC20MetadataUpgradeable.sol";
 
 import {IBaseRewardPool} from "../src/interfaces/aura/IBaseRewardPool.sol";
 import {IAggregatorV3} from "../src/interfaces/chainlink/IAggregatorV3.sol";
@@ -21,9 +22,10 @@ uint256 constant PID_40WBTC_40DIGG_20GRAVIAURA = 18;
 contract AuraAvatarTwoTokenTest is Test, AuraConstants {
     AuraAvatarTwoToken avatar;
 
-    IERC20Upgradeable constant BPT_80BADGER_20WBTC = IERC20Upgradeable(0xb460DAa847c45f1C4a41cb05BFB3b51c92e41B36);
-    IERC20Upgradeable constant BPT_40WBTC_40DIGG_20GRAVIAURA =
-        IERC20Upgradeable(0x8eB6c82C3081bBBd45DcAC5afA631aaC53478b7C);
+    IERC20MetadataUpgradeable constant BPT_80BADGER_20WBTC =
+        IERC20MetadataUpgradeable(0xb460DAa847c45f1C4a41cb05BFB3b51c92e41B36);
+    IERC20MetadataUpgradeable constant BPT_40WBTC_40DIGG_20GRAVIAURA =
+        IERC20MetadataUpgradeable(0x8eB6c82C3081bBBd45DcAC5afA631aaC53478b7C);
 
     IBaseRewardPool constant BASE_REWARD_POOL_80BADGER_20WBTC =
         IBaseRewardPool(0xCea3aa5b2a50e39c7C7755EbFF1e9E1e1516D3f5);
@@ -94,9 +96,9 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
     function test_proxy_immutables() public {
         ProxyAdmin proxyAdmin = new ProxyAdmin();
         address logic = address(new AuraAvatarTwoToken(PID_80BADGER_20WBTC, PID_40WBTC_40DIGG_20GRAVIAURA));
-        bytes memory data = abi.encodeCall(AuraAvatarTwoToken.initialize, (owner, manager, keeper));
+        bytes memory initData = abi.encodeCall(AuraAvatarTwoToken.initialize, (owner, manager, keeper));
         AuraAvatarTwoToken avatarProxy =
-            AuraAvatarTwoToken(address(new TransparentUpgradeableProxy(logic, address(proxyAdmin), data)));
+            AuraAvatarTwoToken(address(new TransparentUpgradeableProxy(logic, address(proxyAdmin), initData)));
 
         assertEq(avatarProxy.pid1(), PID_80BADGER_20WBTC);
         assertEq(avatarProxy.pid2(), PID_40WBTC_40DIGG_20GRAVIAURA);
@@ -108,12 +110,16 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
         assertEq(address(avatarProxy.baseRewardPool2()), address(BASE_REWARD_POOL_40WBTC_40DIGG_20GRAVIAURA));
     }
 
+    function test_name() public {
+        assertEq(avatar.name(), "Avatar_AuraTwoToken_20WBTC-80BADGER_40WBTC-40DIGG-20graviAURA");
+    }
+
     // TODO: Test double init fails
 
     // TODO: Test ownership transfer
 
     function test_assets() public {
-        IERC20Upgradeable[2] memory assets = avatar.assets();
+        IERC20MetadataUpgradeable[2] memory assets = avatar.assets();
 
         assertEq(address(assets[0]), address(BPT_80BADGER_20WBTC));
         assertEq(address(assets[1]), address(BPT_40WBTC_40DIGG_20GRAVIAURA));
@@ -640,6 +646,11 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
     ////////////////////////////////////////////////////////////////////////////
     // MISC
     ////////////////////////////////////////////////////////////////////////////
+
+    function test_debug() public {
+        console.log(avatar.getBalAmountInUsdc(1e18));
+        console.log(avatar.getAuraAmountInUsdc(1e18));
+    }
 
     // TODO: Add failing test when slippage tolerance is 100% or high (as a sanity check for oracles)
     // TODO: Test BAL/ETH bpt => auraBAL through both pools

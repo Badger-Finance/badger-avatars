@@ -30,7 +30,6 @@ abstract contract AuraAvatarOracleUtils {
         answerUint256_ = uint256(answer);
     }
 
-    // TODO: Check decimals and base
     function fetchPriceFromBalancerTwap(IPriceOracle _pool) internal view returns (uint256 price_) {
         IPriceOracle.OracleAverageQuery[] memory queries = new IPriceOracle.OracleAverageQuery[](1);
 
@@ -42,7 +41,6 @@ abstract contract AuraAvatarOracleUtils {
         price_ = _pool.getTimeWeightedAverage(queries)[0];
     }
 
-    // TODO: Check decimals and base
     function fetchBptPriceFromBalancerTwap(IPriceOracle _pool) internal view returns (uint256 price_) {
         IPriceOracle.OracleAverageQuery[] memory queries = new IPriceOracle.OracleAverageQuery[](1);
 
