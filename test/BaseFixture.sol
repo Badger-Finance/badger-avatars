@@ -3,7 +3,7 @@ pragma solidity 0.8.16;
 
 import {Test} from "forge-std/Test.sol";
 
-import {Avatar} from "src/avatars/template/Avatar.sol";
+import {Avatar} from "src/template/Avatar.sol";
 
 contract BaseFixture is Test {
     // ==================

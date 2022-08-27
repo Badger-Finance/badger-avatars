@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.16;
 
-import {BaseAvatar} from "../../lib/BaseAvatar.sol";
+import {BaseAvatar} from "../lib/BaseAvatar.sol";
 
 contract Avatar is BaseAvatar {
     /// @dev Initialize the Avatar with security settings and the designated owner

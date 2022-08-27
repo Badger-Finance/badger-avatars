@@ -8,15 +8,12 @@ import {ProxyAdmin} from "openzeppelin-contracts/proxy/transparent/ProxyAdmin.so
 import {IERC20MetadataUpgradeable} from
     "openzeppelin-contracts-upgradeable/token/ERC20/extensions/IERC20MetadataUpgradeable.sol";
 
-import {IBaseRewardPool} from "../src/interfaces/aura/IBaseRewardPool.sol";
-import {IAggregatorV3} from "../src/interfaces/chainlink/IAggregatorV3.sol";
-import {AuraAvatarTwoToken, TokenAmount} from "../src/avatars/aura/AuraAvatarTwoToken.sol";
-import {AuraConstants} from "../src/avatars/aura/AuraConstants.sol";
-
-import {MockV3Aggregator} from "./mocks/MockV3Aggregator.sol";
-
-uint256 constant PID_80BADGER_20WBTC = 11;
-uint256 constant PID_40WBTC_40DIGG_20GRAVIAURA = 18;
+import {MockV3Aggregator} from "../mocks/MockV3Aggregator.sol";
+import {MAX_BPS, PID_80BADGER_20WBTC, PID_40WBTC_40DIGG_20GRAVIAURA} from "../../src/BaseConstants.sol";
+import {AuraAvatarTwoToken, TokenAmount} from "../../src/aura/AuraAvatarTwoToken.sol";
+import {AuraConstants} from "../../src/aura/AuraConstants.sol";
+import {IBaseRewardPool} from "../../src/interfaces/aura/IBaseRewardPool.sol";
+import {IAggregatorV3} from "../../src/interfaces/chainlink/IAggregatorV3.sol";
 
 // TODO: Add event tests
 contract AuraAvatarTwoTokenTest is Test, AuraConstants {
@@ -652,7 +649,31 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
         console.log(avatar.getAuraAmountInUsdc(1e18));
     }
 
-    // TODO: Add failing test when slippage tolerance is 100% or high (as a sanity check for oracles)
+    function test_processRewards_highBalMinBps() public {
+        vm.startPrank(owner);
+        avatar.deposit(10e18, 20e18);
+
+        skip(1 hours);
+
+        avatar.setMinOutBpsBalToUsdcVal(MAX_BPS);
+
+        vm.expectRevert("BAL#507");
+        avatar.processRewards();
+    }
+
+    // TODO: This might not revert, maybe remove?
+    function test_processRewards_highAuraMinBps() public {
+        vm.startPrank(owner);
+        avatar.deposit(10e18, 20e18);
+
+        skip(1 hours);
+
+        avatar.setMinOutBpsAuraToUsdcVal(MAX_BPS);
+
+        vm.expectRevert("BAL#507");
+        avatar.processRewards();
+    }
+
     // TODO: Test BAL/ETH bpt => auraBAL through both pools
 
     ////////////////////////////////////////////////////////////////////////////

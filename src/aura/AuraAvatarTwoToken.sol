@@ -6,17 +6,17 @@ import {SafeERC20Upgradeable} from "openzeppelin-contracts-upgradeable/token/ERC
 import {IERC20MetadataUpgradeable} from
     "openzeppelin-contracts-upgradeable/token/ERC20/extensions/IERC20MetadataUpgradeable.sol";
 
-import {BaseAvatar} from "../../lib/BaseAvatar.sol";
+import {BaseAvatar} from "../lib/BaseAvatar.sol";
 import {AuraConstants} from "./AuraConstants.sol";
 import {AuraAvatarOracleUtils} from "./AuraAvatarOracleUtils.sol";
 import {MAX_BPS, PRECISION} from "../BaseConstants.sol";
 
-import {IAuraToken} from "../../interfaces/aura/IAuraToken.sol";
-import {IBaseRewardPool} from "../../interfaces/aura/IBaseRewardPool.sol";
-import {IAsset} from "../../interfaces/balancer/IAsset.sol";
-import {IBalancerVault, JoinKind} from "../../interfaces/balancer/IBalancerVault.sol";
-import {IPriceOracle} from "../../interfaces/balancer/IPriceOracle.sol";
-import {KeeperCompatibleInterface} from "../../interfaces/chainlink/KeeperCompatibleInterface.sol";
+import {IAuraToken} from "../interfaces/aura/IAuraToken.sol";
+import {IBaseRewardPool} from "../interfaces/aura/IBaseRewardPool.sol";
+import {IAsset} from "../interfaces/balancer/IAsset.sol";
+import {IBalancerVault, JoinKind} from "../interfaces/balancer/IBalancerVault.sol";
+import {IPriceOracle} from "../interfaces/balancer/IPriceOracle.sol";
+import {KeeperCompatibleInterface} from "../interfaces/chainlink/KeeperCompatibleInterface.sol";
 
 struct TokenAmount {
     address token;

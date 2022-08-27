@@ -4,15 +4,15 @@ pragma solidity 0.8.16;
 import {IERC20MetadataUpgradeable} from
     "openzeppelin-contracts-upgradeable/token/ERC20/extensions/IERC20MetadataUpgradeable.sol";
 
-import {IAuraLocker} from "../../interfaces/aura/IAuraLocker.sol";
-import {IBaseRewardPool} from "../../interfaces/aura/IBaseRewardPool.sol";
-import {IBooster} from "../../interfaces/aura/IBooster.sol";
-import {ICrvDepositorWrapper} from "../../interfaces/aura/ICrvDepositorWrapper.sol";
-import {ICrvDepositor} from "../../interfaces/aura/ICrvDepositor.sol";
-import {IVault} from "../../interfaces/badger/IVault.sol";
-import {IBalancerVault} from "../../interfaces/balancer/IBalancerVault.sol";
-import {IPriceOracle} from "../../interfaces/balancer/IPriceOracle.sol";
-import {IAggregatorV3} from "../../interfaces/chainlink/IAggregatorV3.sol";
+import {IAuraLocker} from "../interfaces/aura/IAuraLocker.sol";
+import {IBaseRewardPool} from "../interfaces/aura/IBaseRewardPool.sol";
+import {IBooster} from "../interfaces/aura/IBooster.sol";
+import {ICrvDepositorWrapper} from "../interfaces/aura/ICrvDepositorWrapper.sol";
+import {ICrvDepositor} from "../interfaces/aura/ICrvDepositor.sol";
+import {IVault} from "../interfaces/badger/IVault.sol";
+import {IBalancerVault} from "../interfaces/balancer/IBalancerVault.sol";
+import {IPriceOracle} from "../interfaces/balancer/IPriceOracle.sol";
+import {IAggregatorV3} from "../interfaces/chainlink/IAggregatorV3.sol";
 
 abstract contract AuraConstants {
     IBalancerVault internal constant BALANCER_VAULT = IBalancerVault(0xBA12222222228d8Ba445958a75a0704d566BF2C8);
