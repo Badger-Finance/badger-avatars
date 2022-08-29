@@ -35,6 +35,32 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
     address constant manager = address(2);
     address constant keeper = address(3);
 
+    ////////////////////////////////////////////////////////////////////////////
+    // EVENTS
+    ////////////////////////////////////////////////////////////////////////////
+
+    event ManagerUpdated(address indexed oldManager, address indexed newManager);
+    event KeeperUpdated(address indexed oldKeeper, address indexed newKeeper);
+
+    event ClaimFrequencyUpdated(uint256 oldClaimFrequency, uint256 newClaimFrequency);
+
+    event SellBpsBalToUsdcUpdated(uint256 oldValue, uint256 newValue);
+    event SellBpsAuraToUsdcUpdated(uint256 oldValue, uint256 newValue);
+
+    event MinOutBpsBalToUsdcMinUpdated(uint256 oldValue, uint256 newValue);
+    event MinOutBpsAuraToUsdcMinUpdated(uint256 oldValue, uint256 newValue);
+    event MinOutBpsBalToBptMinUpdated(uint256 oldValue, uint256 newValue);
+
+    event MinOutBpsBalToUsdcValUpdated(uint256 oldValue, uint256 newValue);
+    event MinOutBpsAuraToUsdcValUpdated(uint256 oldValue, uint256 newValue);
+    event MinOutBpsBalToBptValUpdated(uint256 oldValue, uint256 newValue);
+
+    event Deposit(address indexed token, uint256 amount, uint256 timestamp);
+    event Withdraw(address indexed token, uint256 amount, uint256 timestamp);
+
+    event RewardClaimed(address indexed token, uint256 amount, uint256 timestamp);
+    event RewardsToStable(address indexed token, uint256 amount, uint256 timestamp);
+
     function setUp() public {
         // TODO: Remove hardcoded block
         vm.createSelectFork("mainnet", 15397859);
@@ -196,9 +222,11 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
 
     function test_setManager() public {
         vm.prank(owner);
-        avatar.setManager(address(10));
+        vm.expectEmit(true, true, false, false);
+        emit ManagerUpdated(address(this), manager);
+        avatar.setManager(address(this));
 
-        assertEq(avatar.manager(), address(10));
+        assertEq(avatar.manager(), address(this));
     }
 
     function test_setManager_permissions() public {
@@ -208,9 +236,11 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
 
     function test_setKeeper() public {
         vm.prank(owner);
-        avatar.setKeeper(address(10));
+        vm.expectEmit(true, true, false, false);
+        emit KeeperUpdated(address(this), keeper);
+        avatar.setKeeper(address(this));
 
-        assertEq(avatar.keeper(), address(10));
+        assertEq(avatar.keeper(), address(this));
     }
 
     function test_setKeeper_permissions() public {
@@ -220,6 +250,8 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
 
     function test_setClaimFrequency() public {
         vm.prank(owner);
+        vm.expectEmit(false, false, false, true);
+        emit ClaimFrequencyUpdated(2 weeks, 1 weeks);
         avatar.setClaimFrequency(2 weeks);
 
         assertEq(avatar.claimFrequency(), 2 weeks);
@@ -232,6 +264,8 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
 
     function test_setSellBpsBalToUsdc() public {
         vm.prank(owner);
+        vm.expectEmit(false, false, false, true);
+        emit SellBpsBalToUsdcUpdated(5000, 7000);
         avatar.setSellBpsBalToUsdc(5000);
 
         assertEq(avatar.sellBpsBalToUsdc(), 5000);
@@ -250,6 +284,8 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
 
     function test_setSellBpsAuraToUsdc() public {
         vm.prank(owner);
+        vm.expectEmit(false, false, false, true);
+        emit SellBpsAuraToUsdcUpdated(5000, 3000);
         avatar.setSellBpsAuraToUsdc(5000);
 
         assertEq(avatar.sellBpsAuraToUsdc(), 5000);
@@ -268,6 +304,8 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
 
     function test_setMinOutBpsBalToUsdcMin() public {
         vm.prank(owner);
+        vm.expectEmit(false, false, false, true);
+        emit MinOutBpsBalToUsdcMinUpdated(5000, 9000);
         avatar.setMinOutBpsBalToUsdcMin(5000);
 
         (, uint256 val) = avatar.minOutBpsBalToUsdc();
@@ -292,6 +330,8 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
 
     function test_setMinOutBpsAuraToUsdcMin() public {
         vm.prank(owner);
+        vm.expectEmit(false, false, false, true);
+        emit MinOutBpsAuraToUsdcMinUpdated(5000, 9000);
         avatar.setMinOutBpsAuraToUsdcMin(5000);
 
         (, uint256 val) = avatar.minOutBpsAuraToUsdc();
@@ -316,6 +356,8 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
 
     function test_setMinOutBpsBalToBptMin() public {
         vm.prank(owner);
+        vm.expectEmit(false, false, false, true);
+        emit MinOutBpsBalToBptMinUpdated(5000, 9000);
         avatar.setMinOutBpsBalToBptMin(5000);
 
         (, uint256 val) = avatar.minOutBpsBalToBpt();
@@ -346,6 +388,8 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
         uint256 val;
 
         vm.prank(owner);
+        vm.expectEmit(false, false, false, true);
+        emit MinOutBpsBalToUsdcValUpdated(9100, 9825);
         avatar.setMinOutBpsBalToUsdcVal(9100);
         (val,) = avatar.minOutBpsBalToUsdc();
         assertEq(val, 9100);
@@ -376,6 +420,8 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
         uint256 val;
 
         vm.prank(owner);
+        vm.expectEmit(false, false, false, true);
+        emit MinOutBpsAuraToUsdcValUpdated(9100, 9825);
         avatar.setMinOutBpsAuraToUsdcVal(9100);
         (val,) = avatar.minOutBpsAuraToUsdc();
         assertEq(val, 9100);
@@ -406,6 +452,8 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
         uint256 val;
 
         vm.prank(owner);
+        vm.expectEmit(false, false, false, true);
+        emit MinOutBpsBalToBptValUpdated(9100, 9950);
         avatar.setMinOutBpsBalToBptVal(9100);
         (val,) = avatar.minOutBpsBalToBpt();
         assertEq(val, 9100);
@@ -438,6 +486,10 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
 
     function test_deposit() public {
         vm.prank(owner);
+        vm.expectEmit(true, false, false, true);
+        emit Deposit(address(BPT_80BADGER_20WBTC), 10e18, block.timestamp);
+        vm.expectEmit(true, false, false, true);
+        emit Deposit(address(BPT_40WBTC_40DIGG_20GRAVIAURA), 20e18, block.timestamp);
         avatar.deposit(10e18, 20e18);
 
         assertEq(BPT_80BADGER_20WBTC.balanceOf(owner), 0);
@@ -474,6 +526,10 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
         avatar.deposit(10e18, 20e18);
 
         vm.prank(owner);
+        vm.expectEmit(true, false, false, true);
+        emit Withdraw(address(BPT_80BADGER_20WBTC), 10e18, block.timestamp);
+        vm.expectEmit(true, false, false, true);
+        emit Withdraw(address(BPT_40WBTC_40DIGG_20GRAVIAURA), 20e18, block.timestamp);
         avatar.withdrawAll();
 
         assertEq(BASE_REWARD_POOL_80BADGER_20WBTC.balanceOf(address(avatar)), 0);
@@ -494,10 +550,19 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
 
         skip(1 hours);
 
-        assertGt(BASE_REWARD_POOL_80BADGER_20WBTC.earned(address(avatar)), 0);
-        assertGt(BASE_REWARD_POOL_40WBTC_40DIGG_20GRAVIAURA.earned(address(avatar)), 0);
+        uint256 balReward1 = BASE_REWARD_POOL_80BADGER_20WBTC.earned(address(avatar));
+        uint256 balReward2 = BASE_REWARD_POOL_40WBTC_40DIGG_20GRAVIAURA.earned(address(avatar));
+
+        uint256 auraReward = avatar.getMintableAuraForBalAmount(balReward1 + balReward2);
+
+        assertGt(balReward1, 0);
+        assertGt(balReward2, 0);
 
         vm.prank(owner);
+        vm.expectEmit(true, false, false, true);
+        emit RewardClaimed(address(BAL), balReward1 + balReward2, block.timestamp);
+        vm.expectEmit(true, false, false, true);
+        emit RewardClaimed(address(AURA), auraReward, block.timestamp);
         avatar.claimRewardsAndSendToOwner();
 
         assertEq(BASE_REWARD_POOL_80BADGER_20WBTC.earned(address(avatar)), 0);
@@ -551,6 +616,8 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
             uint256 snapId = vm.snapshot();
 
             vm.prank(actors[i]);
+            vm.expectEmit(false, false, false, false);
+            emit RewardsToStable(address(USDC), 0, block.timestamp);
             avatar.processRewards();
 
             (,, uint256 voterBalanceAfter,) = AURA_LOCKER.lockedBalances(BADGER_VOTER);

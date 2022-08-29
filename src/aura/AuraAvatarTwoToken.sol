@@ -98,21 +98,21 @@ contract AuraAvatarTwoToken is
     // EVENTS
     ////////////////////////////////////////////////////////////////////////////
 
-    event ManagerUpdated(address indexed oldManager, address indexed newManager);
-    event KeeperUpdated(address indexed oldKeeper, address indexed newKeeper);
+    event ManagerUpdated(address indexed newManager, address indexed oldManager);
+    event KeeperUpdated(address indexed newKeeper, address indexed oldKeeper);
 
-    event ClaimFrequencyUpdated(uint256 oldClaimFrequency, uint256 newClaimFrequency);
+    event ClaimFrequencyUpdated(uint256 newClaimFrequency, uint256 oldClaimFrequency);
 
-    event SellBpsBalToUsdcUpdated(uint256 oldValue, uint256 newValue);
-    event SellBpsAuraToUsdcUpdated(uint256 oldValue, uint256 newValue);
+    event SellBpsBalToUsdcUpdated(uint256 newValue, uint256 oldValue);
+    event SellBpsAuraToUsdcUpdated(uint256 newValue, uint256 oldValue);
 
-    event MinOutBpsBalToUsdcMinUpdated(uint256 oldValue, uint256 newValue);
-    event MinOutBpsAuraToUsdcMinUpdated(uint256 oldValue, uint256 newValue);
-    event MinOutBpsBalToBptMinUpdated(uint256 oldValue, uint256 newValue);
+    event MinOutBpsBalToUsdcMinUpdated(uint256 newValue, uint256 oldValue);
+    event MinOutBpsAuraToUsdcMinUpdated(uint256 newValue, uint256 oldValue);
+    event MinOutBpsBalToBptMinUpdated(uint256 newValue, uint256 oldValue);
 
-    event MinOutBpsBalToUsdcValUpdated(uint256 oldValue, uint256 newValue);
-    event MinOutBpsAuraToUsdcValUpdated(uint256 oldValue, uint256 newValue);
-    event MinOutBpsBalToBptValUpdated(uint256 oldValue, uint256 newValue);
+    event MinOutBpsBalToUsdcValUpdated(uint256 newValue, uint256 oldValue);
+    event MinOutBpsAuraToUsdcValUpdated(uint256 newValue, uint256 oldValue);
+    event MinOutBpsBalToBptValUpdated(uint256 newValue, uint256 oldValue);
 
     event Deposit(address indexed token, uint256 amount, uint256 timestamp);
     event Withdraw(address indexed token, uint256 amount, uint256 timestamp);
@@ -147,8 +147,8 @@ contract AuraAvatarTwoToken is
 
         claimFrequency = 1 weeks;
 
-        sellBpsAuraToUsdc = 3000; // 30%
         sellBpsBalToUsdc = 7000; // 70%
+        sellBpsAuraToUsdc = 3000; // 30%
 
         minOutBpsBalToUsdc = BpsConfig({
             val: 9825, // 98.25%
@@ -216,21 +216,21 @@ contract AuraAvatarTwoToken is
         address oldManager = manager;
 
         manager = _manager;
-        emit ManagerUpdated(oldManager, _manager);
+        emit ManagerUpdated(_manager, oldManager);
     }
 
     function setKeeper(address _keeper) external onlyOwner {
         address oldKeeper = keeper;
 
         keeper = _keeper;
-        emit KeeperUpdated(oldKeeper, _keeper);
+        emit KeeperUpdated(_keeper, oldKeeper);
     }
 
     function setClaimFrequency(uint256 _claimFrequency) external onlyOwner {
         uint256 oldClaimFrequency = claimFrequency;
 
         claimFrequency = _claimFrequency;
-        emit ClaimFrequencyUpdated(oldClaimFrequency, _claimFrequency);
+        emit ClaimFrequencyUpdated(_claimFrequency, oldClaimFrequency);
     }
 
     function setSellBpsBalToUsdc(uint256 _sellBpsBalToUsdc) external onlyOwner {
@@ -241,7 +241,7 @@ contract AuraAvatarTwoToken is
         uint256 oldSellBpsBalToUsdc = sellBpsBalToUsdc;
         sellBpsBalToUsdc = _sellBpsBalToUsdc;
 
-        emit SellBpsBalToUsdcUpdated(oldSellBpsBalToUsdc, _sellBpsBalToUsdc);
+        emit SellBpsBalToUsdcUpdated(_sellBpsBalToUsdc, oldSellBpsBalToUsdc);
     }
 
     function setSellBpsAuraToUsdc(uint256 _sellBpsAuraToUsdc) external onlyOwner {
@@ -252,7 +252,7 @@ contract AuraAvatarTwoToken is
         uint256 oldSellBpsAuraToUsdc = sellBpsAuraToUsdc;
         sellBpsAuraToUsdc = _sellBpsAuraToUsdc;
 
-        emit SellBpsAuraToUsdcUpdated(oldSellBpsAuraToUsdc, _sellBpsAuraToUsdc);
+        emit SellBpsAuraToUsdcUpdated(_sellBpsAuraToUsdc, oldSellBpsAuraToUsdc);
     }
 
     function setMinOutBpsBalToUsdcMin(uint256 _minOutBpsBalToUsdcMin) external onlyOwner {
@@ -270,7 +270,7 @@ contract AuraAvatarTwoToken is
         uint256 oldMinOutBpsBalToUsdcMin = minOutBpsBalToUsdcPtr.min;
         minOutBpsBalToUsdcPtr.min = _minOutBpsBalToUsdcMin;
 
-        emit MinOutBpsBalToUsdcMinUpdated(oldMinOutBpsBalToUsdcMin, _minOutBpsBalToUsdcMin);
+        emit MinOutBpsBalToUsdcMinUpdated(_minOutBpsBalToUsdcMin, oldMinOutBpsBalToUsdcMin);
     }
 
     function setMinOutBpsAuraToUsdcMin(uint256 _minOutBpsAuraToUsdcMin) external onlyOwner {
@@ -288,7 +288,7 @@ contract AuraAvatarTwoToken is
         uint256 oldMinOutBpsAuraToUsdcMin = minOutBpsAuraToUsdc.min;
         minOutBpsAuraToUsdc.min = _minOutBpsAuraToUsdcMin;
 
-        emit MinOutBpsAuraToUsdcMinUpdated(oldMinOutBpsAuraToUsdcMin, _minOutBpsAuraToUsdcMin);
+        emit MinOutBpsAuraToUsdcMinUpdated(_minOutBpsAuraToUsdcMin, oldMinOutBpsAuraToUsdcMin);
     }
 
     function setMinOutBpsBalToBptMin(uint256 _minOutBpsBalToBptMin) external onlyOwner {
@@ -306,7 +306,7 @@ contract AuraAvatarTwoToken is
         uint256 oldMinOutBpsBalToBptMin = minOutBpsBalToBpt.min;
         minOutBpsBalToBpt.min = _minOutBpsBalToBptMin;
 
-        emit MinOutBpsBalToBptMinUpdated(oldMinOutBpsBalToBptMin, _minOutBpsBalToBptMin);
+        emit MinOutBpsBalToBptMinUpdated(_minOutBpsBalToBptMin, oldMinOutBpsBalToBptMin);
     }
 
     ////////////////////////////////////////////////////////////////////////////
@@ -328,7 +328,7 @@ contract AuraAvatarTwoToken is
         uint256 oldMinOutBpsBalToUsdcVal = minOutBpsBalToUsdcPtr.val;
         minOutBpsBalToUsdcPtr.val = _minOutBpsBalToUsdcVal;
 
-        emit MinOutBpsBalToUsdcValUpdated(oldMinOutBpsBalToUsdcVal, _minOutBpsBalToUsdcVal);
+        emit MinOutBpsBalToUsdcValUpdated(_minOutBpsBalToUsdcVal, oldMinOutBpsBalToUsdcVal);
     }
 
     function setMinOutBpsAuraToUsdcVal(uint256 _minOutBpsAuraToUsdcVal) external onlyOwnerOrManager {
@@ -346,7 +346,7 @@ contract AuraAvatarTwoToken is
         uint256 oldMinOutBpsAuraToUsdcVal = minOutBpsAuraToUsdcPtr.val;
         minOutBpsAuraToUsdcPtr.val = _minOutBpsAuraToUsdcVal;
 
-        emit MinOutBpsAuraToUsdcValUpdated(oldMinOutBpsAuraToUsdcVal, _minOutBpsAuraToUsdcVal);
+        emit MinOutBpsAuraToUsdcValUpdated(_minOutBpsAuraToUsdcVal, oldMinOutBpsAuraToUsdcVal);
     }
 
     function setMinOutBpsBalToBptVal(uint256 _minOutBpsBalToBptVal) external onlyOwnerOrManager {
@@ -364,7 +364,7 @@ contract AuraAvatarTwoToken is
         uint256 oldMinOutBpsBalToBptVal = minOutBpsBalToBptPtr.val;
         minOutBpsBalToBptPtr.val = _minOutBpsBalToBptVal;
 
-        emit MinOutBpsBalToBptValUpdated(oldMinOutBpsBalToBptVal, _minOutBpsBalToBptVal);
+        emit MinOutBpsBalToBptValUpdated(_minOutBpsBalToBptVal, oldMinOutBpsBalToBptVal);
     }
 
     ////////////////////////////////////////////////////////////////////////////
@@ -419,22 +419,12 @@ contract AuraAvatarTwoToken is
     // NOTE: Failsafe in case things go wrong, want to sell through different pools
     function claimRewardsAndSendToOwner() public onlyOwner {
         // 1. Claim BAL and AURA rewards
-        claimRewards();
-
-        uint256 totalBal = BAL.balanceOf(address(this));
-        uint256 totalAura = AURA.balanceOf(address(this));
-
-        if (totalBal == 0) {
-            revert NoRewards();
-        }
+        (uint256 totalBal, uint256 totalAura) = claimAndRegisterRewards();
 
         // 2. Send to owner
         address ownerCached = owner();
         BAL.transfer(ownerCached, totalBal);
         AURA.transfer(ownerCached, totalAura);
-
-        emit RewardClaimed(address(BAL), totalBal, block.timestamp);
-        emit RewardClaimed(address(AURA), totalAura, block.timestamp);
     }
 
     ////////////////////////////////////////////////////////////////////////////
@@ -489,11 +479,13 @@ contract AuraAvatarTwoToken is
         balEarned += baseRewardPool2.earned(address(this));
 
         uint256 totalBal = balEarned + BAL.balanceOf(address(this));
-        uint256 totalAura = getMintableAuraRewards(balEarned) + AURA.balanceOf(address(this));
+        uint256 totalAura = getMintableAuraForBalAmount(balEarned) + AURA.balanceOf(address(this));
 
         rewards_[0] = TokenAmount(address(BAL), totalBal);
         rewards_[1] = TokenAmount(address(AURA), totalAura);
     }
+
+    // TODO: Maybe move to internal?
 
     // NOTE: Assumes USDC is pegged. We should sell for other stableecoins if not
     function getBalAmountInUsdc(uint256 _balAmount) public view returns (uint256 usdcAmount_) {
@@ -529,20 +521,34 @@ contract AuraAvatarTwoToken is
         }
     }
 
+    /// @notice Returns the expected amount of AURA to be minted given an amount of BAL rewards
+    /// @dev ref: https://etherscan.io/address/0xc0c293ce456ff0ed870add98a0828dd4d2903dbf#code#F1#L86
+    function getMintableAuraForBalAmount(uint256 _balAmount) public view returns (uint256 amount) {
+        // NOTE: Only correct if AURA.minterMinted() == 0
+        //       minterMinted is a private var in the contract, so we can't access it directly
+        uint256 emissionsMinted = AURA.totalSupply() - IAuraToken(address(AURA)).INIT_MINT_AMOUNT();
+
+        uint256 cliff = emissionsMinted / IAuraToken(address(AURA)).reductionPerCliff();
+        uint256 totalCliffs = IAuraToken(address(AURA)).totalCliffs();
+
+        if (cliff < totalCliffs) {
+            uint256 reduction = (((totalCliffs - cliff) * 5) / 2) + 700;
+            amount = (_balAmount * reduction) / totalCliffs;
+
+            uint256 amtTillMax = IAuraToken(address(AURA)).EMISSIONS_MAX_SUPPLY() - emissionsMinted;
+            if (amount > amtTillMax) {
+                amount = amtTillMax;
+            }
+        }
+    }
+
     ////////////////////////////////////////////////////////////////////////////
     // INTERNAL
     ////////////////////////////////////////////////////////////////////////////
 
     function processRewardsInternal() internal returns (TokenAmount[] memory processed_) {
         // 1. Claim BAL and AURA rewards
-        claimRewards();
-
-        uint256 totalBal = BAL.balanceOf(address(this));
-        uint256 totalAura = AURA.balanceOf(address(this));
-
-        if (totalBal == 0) {
-            revert NoRewards();
-        }
+        (uint256 totalBal, uint256 totalAura) = claimAndRegisterRewards();
 
         // 2. Swap some for USDC and send to owner
         uint256 balForUsdc = (totalBal * sellBpsBalToUsdc) / MAX_BPS;
@@ -580,14 +586,11 @@ contract AuraAvatarTwoToken is
         processed_[2] = TokenAmount(address(AURABAL), auraBalToDeposit);
 
         // Emit events for analysis
-        emit RewardClaimed(address(BAL), totalBal, block.timestamp);
-        emit RewardClaimed(address(AURA), totalAura, block.timestamp);
-
         emit RewardsToStable(address(USDC), totalUsdcEarned, block.timestamp);
     }
 
     // NOTE: Shouldn't revert since others can claim for this contract
-    function claimRewards() internal {
+    function claimAndRegisterRewards() internal returns (uint256 totalBal_, uint256 totalAura_) {
         // Update last claimed time
         lastClaimTimestamp = block.timestamp;
 
@@ -598,6 +601,17 @@ contract AuraAvatarTwoToken is
         if (baseRewardPool2.earned(address(this)) > 0) {
             baseRewardPool2.getReward();
         }
+
+        totalBal_ = BAL.balanceOf(address(this));
+        totalAura_ = AURA.balanceOf(address(this));
+
+        if (totalBal_ == 0) {
+            revert NoRewards();
+        }
+
+        // Emit events for analysis
+        emit RewardClaimed(address(BAL), totalBal_, block.timestamp);
+        emit RewardClaimed(address(AURA), totalAura_, block.timestamp);
     }
 
     function swapBalForUsdc(uint256 _balAmount) internal returns (uint256 usdcEarned) {
@@ -737,30 +751,5 @@ contract AuraAvatarTwoToken is
                 fromInternalBalance: false
             })
         );
-    }
-
-    ////////////////////////////////////////////////////////////////////////////
-    // INTERNAL VIEW
-    ////////////////////////////////////////////////////////////////////////////
-
-    /// @notice Returns the expected amount of AURA to be minted given an amount of BAL rewards
-    /// @dev ref: https://etherscan.io/address/0xc0c293ce456ff0ed870add98a0828dd4d2903dbf#code#F1#L86
-    function getMintableAuraRewards(uint256 _balAmount) internal view returns (uint256 amount) {
-        // NOTE: Only correct if AURA.minterMinted() == 0
-        //       minterMinted is a private var in the contract, so we can't access it directly
-        uint256 emissionsMinted = AURA.totalSupply() - IAuraToken(address(AURA)).INIT_MINT_AMOUNT();
-
-        uint256 cliff = emissionsMinted / IAuraToken(address(AURA)).reductionPerCliff();
-        uint256 totalCliffs = IAuraToken(address(AURA)).totalCliffs();
-
-        if (cliff < totalCliffs) {
-            uint256 reduction = (((totalCliffs - cliff) * 5) / 2) + 700;
-            amount = (_balAmount * reduction) / totalCliffs;
-
-            uint256 amtTillMax = IAuraToken(address(AURA)).EMISSIONS_MAX_SUPPLY() - emissionsMinted;
-            if (amount > amtTillMax) {
-                amount = amtTillMax;
-            }
-        }
     }
 }
