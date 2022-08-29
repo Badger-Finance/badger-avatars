@@ -1,0 +1,22 @@
+name: slither
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  slither:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Run Slither
+        uses: crytic/slither-action@main
+        continue-on-error: true
+        id: slither
+        with:
+          target: '.'
+          slither-args: '--exclude solc-version,pragma,unused-state --exclude-dependencies'

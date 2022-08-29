@@ -1,4 +1,4 @@
-name: test
+name: forge
 
 on:
   push:
@@ -8,6 +8,7 @@ on:
 
 env:
   FOUNDRY_PROFILE: ci
+  ALCHEMY_API_KEY: ${{ secrets.ALCHEMY_API_KEY }}
 
 jobs:
   forge:
@@ -25,5 +26,12 @@ jobs:
 
       - name: Run tests
         run: forge test
-        env:
-          ALCHEMY_API_KEY: ${{ secrets.ALCHEMY_API_KEY }}
+
+      - name: Check contract sizes
+        run: forge build --sizes
+
+      - name: Check gas snapshots
+        run: forge snapshot --check
+
+      - name: Check formatting
+        run: forge fmt --check
