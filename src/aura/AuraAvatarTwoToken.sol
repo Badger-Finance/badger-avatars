@@ -260,15 +260,13 @@ contract AuraAvatarTwoToken is
             revert InvalidBps(_minOutBpsBalToUsdcMin);
         }
 
-        BpsConfig storage minOutBpsBalToUsdcPtr = minOutBpsBalToUsdc;
-
-        uint256 minOutBpsBalToUsdcVal = minOutBpsBalToUsdcPtr.val;
+        uint256 minOutBpsBalToUsdcVal = minOutBpsBalToUsdc.val;
         if (_minOutBpsBalToUsdcMin > minOutBpsBalToUsdcVal) {
             revert MoreThanBpsVal(_minOutBpsBalToUsdcMin, minOutBpsBalToUsdcVal);
         }
 
-        uint256 oldMinOutBpsBalToUsdcMin = minOutBpsBalToUsdcPtr.min;
-        minOutBpsBalToUsdcPtr.min = _minOutBpsBalToUsdcMin;
+        uint256 oldMinOutBpsBalToUsdcMin = minOutBpsBalToUsdc.min;
+        minOutBpsBalToUsdc.min = _minOutBpsBalToUsdcMin;
 
         emit MinOutBpsBalToUsdcMinUpdated(_minOutBpsBalToUsdcMin, oldMinOutBpsBalToUsdcMin);
     }
@@ -278,9 +276,7 @@ contract AuraAvatarTwoToken is
             revert InvalidBps(_minOutBpsAuraToUsdcMin);
         }
 
-        BpsConfig storage minOutBpsAuraToUsdcPtr = minOutBpsAuraToUsdc;
-
-        uint256 minOutBpsAuraToUsdcVal = minOutBpsAuraToUsdcPtr.val;
+        uint256 minOutBpsAuraToUsdcVal = minOutBpsAuraToUsdc.val;
         if (_minOutBpsAuraToUsdcMin > minOutBpsAuraToUsdcVal) {
             revert MoreThanBpsVal(_minOutBpsAuraToUsdcMin, minOutBpsAuraToUsdcVal);
         }
@@ -296,9 +292,7 @@ contract AuraAvatarTwoToken is
             revert InvalidBps(_minOutBpsBalToBptMin);
         }
 
-        BpsConfig storage minOutBpsBalToBptPtr = minOutBpsBalToBpt;
-
-        uint256 minOutBpsBalToBptVal = minOutBpsBalToBptPtr.val;
+        uint256 minOutBpsBalToBptVal = minOutBpsBalToBpt.val;
         if (_minOutBpsBalToBptMin > minOutBpsBalToBptVal) {
             revert MoreThanBpsVal(_minOutBpsBalToBptMin, minOutBpsBalToBptVal);
         }
@@ -318,15 +312,13 @@ contract AuraAvatarTwoToken is
             revert InvalidBps(_minOutBpsBalToUsdcVal);
         }
 
-        BpsConfig storage minOutBpsBalToUsdcPtr = minOutBpsBalToUsdc;
-
-        uint256 minOutBpsBalToUsdcMin = minOutBpsBalToUsdcPtr.min;
+        uint256 minOutBpsBalToUsdcMin = minOutBpsBalToUsdc.min;
         if (_minOutBpsBalToUsdcVal < minOutBpsBalToUsdcMin) {
             revert LessThanBpsMin(_minOutBpsBalToUsdcVal, minOutBpsBalToUsdcMin);
         }
 
-        uint256 oldMinOutBpsBalToUsdcVal = minOutBpsBalToUsdcPtr.val;
-        minOutBpsBalToUsdcPtr.val = _minOutBpsBalToUsdcVal;
+        uint256 oldMinOutBpsBalToUsdcVal = minOutBpsBalToUsdc.val;
+        minOutBpsBalToUsdc.val = _minOutBpsBalToUsdcVal;
 
         emit MinOutBpsBalToUsdcValUpdated(_minOutBpsBalToUsdcVal, oldMinOutBpsBalToUsdcVal);
     }
@@ -336,15 +328,13 @@ contract AuraAvatarTwoToken is
             revert InvalidBps(_minOutBpsAuraToUsdcVal);
         }
 
-        BpsConfig storage minOutBpsAuraToUsdcPtr = minOutBpsAuraToUsdc;
-
-        uint256 minOutBpsAuraToUsdcMin = minOutBpsAuraToUsdcPtr.min;
+        uint256 minOutBpsAuraToUsdcMin = minOutBpsAuraToUsdc.min;
         if (_minOutBpsAuraToUsdcVal < minOutBpsAuraToUsdcMin) {
             revert LessThanBpsMin(_minOutBpsAuraToUsdcVal, minOutBpsAuraToUsdcMin);
         }
 
-        uint256 oldMinOutBpsAuraToUsdcVal = minOutBpsAuraToUsdcPtr.val;
-        minOutBpsAuraToUsdcPtr.val = _minOutBpsAuraToUsdcVal;
+        uint256 oldMinOutBpsAuraToUsdcVal = minOutBpsAuraToUsdc.val;
+        minOutBpsAuraToUsdc.val = _minOutBpsAuraToUsdcVal;
 
         emit MinOutBpsAuraToUsdcValUpdated(_minOutBpsAuraToUsdcVal, oldMinOutBpsAuraToUsdcVal);
     }
@@ -354,15 +344,13 @@ contract AuraAvatarTwoToken is
             revert InvalidBps(_minOutBpsBalToBptVal);
         }
 
-        BpsConfig storage minOutBpsBalToBptPtr = minOutBpsBalToBpt;
-
-        uint256 minOutBpsBalToBptMin = minOutBpsBalToBptPtr.min;
+        uint256 minOutBpsBalToBptMin = minOutBpsBalToBpt.min;
         if (_minOutBpsBalToBptVal < minOutBpsBalToBptMin) {
             revert LessThanBpsMin(_minOutBpsBalToBptVal, minOutBpsBalToBptMin);
         }
 
-        uint256 oldMinOutBpsBalToBptVal = minOutBpsBalToBptPtr.val;
-        minOutBpsBalToBptPtr.val = _minOutBpsBalToBptVal;
+        uint256 oldMinOutBpsBalToBptVal = minOutBpsBalToBpt.val;
+        minOutBpsBalToBpt.val = _minOutBpsBalToBptVal;
 
         emit MinOutBpsBalToBptValUpdated(_minOutBpsBalToBptVal, oldMinOutBpsBalToBptVal);
     }
