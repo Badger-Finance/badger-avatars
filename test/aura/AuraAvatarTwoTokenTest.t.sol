@@ -151,6 +151,16 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
         assertEq(address(assets[1]), address(BPT_40WBTC_40DIGG_20GRAVIAURA));
     }
 
+    function test_pendingRewards() public {
+        TokenAmount[2] memory rewards = avatar.pendingRewards();
+
+        assertEq(rewards[0].token, address(BAL));
+        assertEq(rewards[1].token, address(AURA));
+
+        assertEq(rewards[0].amount, BASE_REWARD_POOL_80BADGER_20WBTC.earned(address(avatar)));
+        assertEq(rewards[1].amount, BASE_REWARD_POOL_40WBTC_40DIGG_20GRAVIAURA.earned(address(avatar)));
+    }
+
     ////////////////////////////////////////////////////////////////////////////
     // Ownership
     ////////////////////////////////////////////////////////////////////////////
@@ -624,9 +634,17 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
             vm.prank(actors[i]);
             vm.expectEmit(false, false, false, false);
             emit RewardsToStable(address(USDC), 0, block.timestamp);
-            avatar.processRewards();
+            TokenAmount[] memory processed = avatar.processRewards();
 
             (,, uint256 voterBalanceAfter,) = AURA_LOCKER.lockedBalances(BADGER_VOTER);
+
+            assertEq(processed[0].token, address(USDC));
+            assertEq(processed[1].token, address(AURA));
+            assertEq(processed[2].token, address(AURABAL));
+
+            assertGt(processed[0].amount, 0);
+            assertGt(processed[1].amount, 0);
+            assertGt(processed[2].amount, 0);
 
             assertEq(BASE_REWARD_POOL_80BADGER_20WBTC.earned(address(avatar)), 0);
             assertEq(BASE_REWARD_POOL_40WBTC_40DIGG_20GRAVIAURA.earned(address(avatar)), 0);

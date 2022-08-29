@@ -12,8 +12,7 @@ import {GlobalAccessControlManaged} from "./GlobalAccessControlManaged.sol";
  */
 contract BaseAvatar is OwnableUpgradeable, Executor {
     function __BaseAvatar_init(address _owner) public onlyInitializing {
-        // TODO: Why unchained?
-        __Ownable_init_unchained();
+        __Ownable_init();
 
         transferOwnership(_owner);
     }
@@ -33,7 +32,6 @@ contract BaseAvatar is OwnableUpgradeable, Executor {
         onlyOwner
         returns (bool success)
     {
-        // TODO: Check why delegatecall
         return execute(to, value, data, Enum.Operation.Call, gasleft());
     }
 }
