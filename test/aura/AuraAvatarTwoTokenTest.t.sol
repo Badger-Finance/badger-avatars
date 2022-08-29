@@ -106,16 +106,16 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
         uint256 bpsMin;
 
         (bpsVal, bpsMin) = avatar.minOutBpsBalToUsdc();
-        assertGt(bpsVal, 0);
-        assertGt(bpsMin, 0);
+        assertEq(bpsVal, 9825);
+        assertEq(bpsMin, 9000);
 
         (bpsVal, bpsMin) = avatar.minOutBpsAuraToUsdc();
-        assertGt(bpsVal, 0);
-        assertGt(bpsMin, 0);
+        assertEq(bpsVal, 9825);
+        assertEq(bpsMin, 9000);
 
         (bpsVal, bpsMin) = avatar.minOutBpsBalToBpt();
-        assertGt(bpsVal, 0);
-        assertGt(bpsMin, 0);
+        assertEq(bpsVal, 9950);
+        assertEq(bpsMin, 9000);
     }
 
     function test_proxy_immutables() public {
@@ -180,6 +180,12 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
             avatar.pause();
 
             assertTrue(avatar.paused());
+
+            // Test pausable action to ensure modifier works
+            vm.startPrank(keeper);
+            vm.expectRevert("Pausable: paused");
+            avatar.performUpkeep(new bytes(0));
+            vm.stopPrank();
 
             vm.revertTo(snapId);
         }
