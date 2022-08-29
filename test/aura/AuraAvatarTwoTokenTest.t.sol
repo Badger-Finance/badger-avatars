@@ -501,15 +501,27 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
     ////////////////////////////////////////////////////////////////////////////
 
     function test_deposit() public {
+        // Deposit both assets
         vm.prank(owner);
         vm.expectEmit(true, false, false, true);
         emit Deposit(address(BPT_80BADGER_20WBTC), 10e18, block.timestamp);
         vm.expectEmit(true, false, false, true);
-        emit Deposit(address(BPT_40WBTC_40DIGG_20GRAVIAURA), 20e18, block.timestamp);
-        avatar.deposit(10e18, 20e18);
+        emit Deposit(address(BPT_40WBTC_40DIGG_20GRAVIAURA), 10e18, block.timestamp);
+        avatar.deposit(10e18, 10e18);
 
         assertEq(BPT_80BADGER_20WBTC.balanceOf(owner), 0);
-        assertEq(BPT_40WBTC_40DIGG_20GRAVIAURA.balanceOf(address(avatar)), 0);
+        assertEq(BPT_40WBTC_40DIGG_20GRAVIAURA.balanceOf(owner), 10e18);
+
+        assertEq(BASE_REWARD_POOL_80BADGER_20WBTC.balanceOf(address(avatar)), 10e18);
+        assertEq(BASE_REWARD_POOL_40WBTC_40DIGG_20GRAVIAURA.balanceOf(address(avatar)), 10e18);
+
+        // Single asset deposit
+        vm.prank(owner);
+        vm.expectEmit(true, false, false, true);
+        emit Deposit(address(BPT_40WBTC_40DIGG_20GRAVIAURA), 10e18, block.timestamp);
+        avatar.deposit(0, 10e18);
+
+        assertEq(BPT_40WBTC_40DIGG_20GRAVIAURA.balanceOf(owner), 0);
 
         assertEq(BASE_REWARD_POOL_80BADGER_20WBTC.balanceOf(address(avatar)), 10e18);
         assertEq(BASE_REWARD_POOL_40WBTC_40DIGG_20GRAVIAURA.balanceOf(address(avatar)), 20e18);
