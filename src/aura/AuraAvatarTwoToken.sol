@@ -375,14 +375,13 @@ contract AuraAvatarTwoToken is
         if (_amountBpt1 > 0) {
             asset1.transferFrom(msg.sender, address(this), _amountBpt1);
             AURA_BOOSTER.deposit(pid1, _amountBpt1, true);
+            emit Deposit(address(asset1), _amountBpt1, block.timestamp);
         }
         if (_amountBpt2 > 0) {
             asset2.transferFrom(msg.sender, address(this), _amountBpt2);
             AURA_BOOSTER.deposit(pid2, _amountBpt2, true);
+            emit Deposit(address(asset2), _amountBpt2, block.timestamp);
         }
-
-        emit Deposit(address(asset1), _amountBpt1, block.timestamp);
-        emit Deposit(address(asset2), _amountBpt2, block.timestamp);
     }
 
     // NOTE: Doesn't claim rewards
