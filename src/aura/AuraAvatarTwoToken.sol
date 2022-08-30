@@ -403,6 +403,36 @@ contract AuraAvatarTwoToken is
         emit Withdraw(address(asset2), bptDeposited2, block.timestamp);
     }
 
+    /// @dev Withdraws a certain amount of asset1
+    /// NOTE Using separate functions per assets for gas efficiency
+    function withdrawSomeAsset1(uint256 amount) external onlyOwner {
+        uint256 bptDeposited = baseRewardPool1.balanceOf(address(this));
+        if (bptDeposited > 0) {
+            uint256 toWithdraw = amount;
+            if (toWithdraw > bptDeposited) {
+                toWithdraw = bptDeposited;
+            }
+            baseRewardPool1.withdrawAndUnwrap(toWithdraw, false);
+            asset1.transfer(owner(), toWithdraw);
+            emit Withdraw(address(asset1), toWithdraw, block.timestamp);
+        }
+    }
+
+    /// @dev Withdraws a certain amount of asset2
+    /// NOTE Using separate functions per assets for gas efficiency
+    function withdrawSomeAsset2(uint256 amount) external onlyOwner {
+        uint256 bptDeposited = baseRewardPool2.balanceOf(address(this));
+        if (bptDeposited > 0) {
+            uint256 toWithdraw = amount;
+            if (toWithdraw > bptDeposited) {
+                toWithdraw = bptDeposited;
+            }
+            baseRewardPool2.withdrawAndUnwrap(toWithdraw, false);
+            asset2.transfer(owner(), toWithdraw);
+            emit Withdraw(address(asset2), toWithdraw, block.timestamp);
+        }
+    }
+
     // NOTE: Failsafe in case things go wrong, want to sell through different pools
     function claimRewardsAndSendToOwner() public onlyOwner {
         // 1. Claim BAL and AURA rewards
