@@ -617,6 +617,9 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
         vm.prank(owner);
         avatar.deposit(10e18, 20e18);
 
+        uint256 initialOwnerBal = BAL.balanceOf(owner);
+        uint256 initialOwnerAura = AURA.balanceOf(owner);
+
         skip(1 hours);
 
         uint256 balReward1 = BASE_REWARD_POOL_80BADGER_20WBTC.earned(address(avatar));
@@ -640,8 +643,8 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
         assertEq(BAL.balanceOf(address(avatar)), 0);
         assertEq(AURA.balanceOf(address(avatar)), 0);
 
-        assertGt(BAL.balanceOf(owner), 0);
-        assertGt(AURA.balanceOf(owner), 0);
+        assertEq(BAL.balanceOf(owner) - initialOwnerBal, balReward1 + balReward2);
+        assertEq(AURA.balanceOf(owner) - initialOwnerAura, auraReward);
     }
 
     function test_claimRewardsAndSendToOwner_permissions() public {
