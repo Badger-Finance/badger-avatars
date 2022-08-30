@@ -515,6 +515,13 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
         assertEq(BASE_REWARD_POOL_80BADGER_20WBTC.balanceOf(address(avatar)), 10e18);
         assertEq(BASE_REWARD_POOL_40WBTC_40DIGG_20GRAVIAURA.balanceOf(address(avatar)), 10e18);
 
+        // lastClaimTimestamp matches current timestamp since it is the first deposit
+        uint256 intialTimestamp = block.timestamp;
+        assertEq(avatar.lastClaimTimestamp(), intialTimestamp);
+
+        // Advancing in time
+        skip(3600);
+
         // Single asset deposit
         vm.prank(owner);
         vm.expectEmit(true, false, false, true);
@@ -526,7 +533,9 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
         assertEq(BASE_REWARD_POOL_80BADGER_20WBTC.balanceOf(address(avatar)), 10e18);
         assertEq(BASE_REWARD_POOL_40WBTC_40DIGG_20GRAVIAURA.balanceOf(address(avatar)), 20e18);
 
-        assertEq(avatar.lastClaimTimestamp(), block.timestamp);
+        // lastClaimTimestamp is not set after further deposits
+        assertFalse(avatar.lastClaimTimestamp() == block.timestamp);
+        assertEq(avatar.lastClaimTimestamp(), intialTimestamp);
     }
 
     function test_deposit_permissions() public {
@@ -570,6 +579,38 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
     function test_withdrawAll_permissions() public {
         vm.expectRevert("Ownable: caller is not the owner");
         avatar.withdrawAll();
+    }
+
+    function test_withdrawSome() public {
+        vm.startPrank(owner);
+        avatar.deposit(10e18, 20e18);
+
+        // Attempts to withdraw more than deposited for asset1 - withdraws total deposited amount
+        vm.expectEmit(true, false, false, true);
+        emit Withdraw(address(BPT_80BADGER_20WBTC), 10e18, block.timestamp);
+        avatar.withdrawSomeAsset1(20e18);
+        assertEq(BPT_80BADGER_20WBTC.balanceOf(owner), 10e18);
+        assertEq(BASE_REWARD_POOL_80BADGER_20WBTC.balanceOf(address(avatar)), 0);
+
+        // Attempts to withdraw again when there's nothing deposited for one asset - nothing happens
+        avatar.withdrawSomeAsset1(10e18);
+        assertEq(BPT_80BADGER_20WBTC.balanceOf(owner), 10e18);
+        assertEq(BASE_REWARD_POOL_80BADGER_20WBTC.balanceOf(address(avatar)), 0);
+
+        // Withdraw partial amount of asset2
+        vm.expectEmit(true, false, false, true);
+        emit Withdraw(address(BPT_40WBTC_40DIGG_20GRAVIAURA), 10e18, block.timestamp);
+        avatar.withdrawSomeAsset2(10e18);
+        assertEq(BASE_REWARD_POOL_40WBTC_40DIGG_20GRAVIAURA.balanceOf(address(avatar)), 10e18);
+        assertEq(BPT_40WBTC_40DIGG_20GRAVIAURA.balanceOf(owner), 10e18);
+    }
+
+    function test_withdrawSome_permissions() public {
+        vm.expectRevert("Ownable: caller is not the owner");
+        avatar.withdrawSomeAsset1(10e18);
+
+        vm.expectRevert("Ownable: caller is not the owner");
+        avatar.withdrawSomeAsset2(20e18);
     }
 
     function test_claimRewardsAndSendToOwner() public {
