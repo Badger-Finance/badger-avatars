@@ -10,4 +10,5 @@ remappings = [
 ]
 verbosity = 3
 
-# See more config options https://github.com/gakonst/foundry/tree/master/config
+[rpc_endpoints]
+mainnet = "https://eth-mainnet.alchemyapi.io/v2/${ALCHEMY_API_KEY}"

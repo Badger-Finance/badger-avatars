@@ -3,7 +3,7 @@ pragma solidity 0.8.16;
 
 import {Test} from "forge-std/Test.sol";
 
-import {Avatar} from "src/avatars/template/Avatar.sol";
+import {Avatar} from "src/template/Avatar.sol";
 
 contract BaseFixture is Test {
     // ==================
@@ -16,8 +16,6 @@ contract BaseFixture is Test {
     // === Contracts ====
     // ==================
 
-    address immutable gac = 0x9c58B0D88578cd75154Bdb7C8B013f7157bae35a;
-
     // ==================
     // == Deployments ===
     // ==================
@@ -29,6 +27,6 @@ contract BaseFixture is Test {
         vm.label(address(this), "this");
 
         // Initialize template
-        avatar_template.initialize(gac, owner);
+        avatar_template.initialize(owner);
     }
 }

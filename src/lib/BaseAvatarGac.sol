@@ -1,20 +1,18 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.16;
 
-import {OwnableUpgradeable} from "openzeppelin-contracts-upgradeable/access/OwnableUpgradeable.sol";
-import {Enum, Executor} from "safe-contracts/base/Executor.sol";
-
+import {BaseAvatar} from "./BaseAvatar.sol";
 import {GlobalAccessControlManaged} from "./GlobalAccessControlManaged.sol";
 
 /**
  * Avatar
  * Forwards calls from the owner
  */
-contract BaseAvatar is OwnableUpgradeable, Executor {
-    function __BaseAvatar_init(address _owner) public onlyInitializing {
-        __Ownable_init();
-
-        transferOwnership(_owner);
+// TODO: See if we need GAC
+contract BaseAvatarGac is BaseAvatar, GlobalAccessControlManaged {
+    function __BaseAvatarGac_init(address _owner, address _globalAccessControl) public onlyInitializing {
+        __BaseAvatar_init(_owner);
+        __GlobalAccessControlManaged_init(_globalAccessControl);
     }
 
     /// ===== Permissioned Actions: Owner =====
@@ -29,9 +27,10 @@ contract BaseAvatar is OwnableUpgradeable, Executor {
         public
         payable
         virtual
-        onlyOwner
+        override
+        gacPausable
         returns (bool success)
     {
-        return execute(to, value, data, Enum.Operation.Call, gasleft());
+        return BaseAvatar.call(to, value, data);
     }
 }

@@ -8,6 +8,6 @@
     },
     "scripts": {
         "solhint": "solhint -f table 'src/**/*.sol'",
-        "prettier:solidity": "prettier --write 'src/**/*.sol'",,
+        "prettier:solidity": "prettier --write 'src/**/*.sol'"
     }
 }
