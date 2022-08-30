@@ -19,4 +19,4 @@ jobs:
         id: slither
         with:
           target: '.'
-          slither-args: '--exclude solc-version,pragma,unused-state --exclude-dependencies'
+          slither-args: '--exclude solc-version,pragma,unused-state --exclude-dependencies --filter-paths "lib|script|test"'

@@ -700,6 +700,56 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
         assertFalse(upkeepNeeded);
     }
 
+    function test_performUpkeep() public {
+        vm.prank(owner);
+        avatar.deposit(10e18, 20e18);
+
+        skip(1 weeks);
+
+        bool upkeepNeeded;
+        (upkeepNeeded,) = avatar.checkUpkeep(new bytes(0));
+        assertTrue(upkeepNeeded);
+
+        forwardClFeed(BAL_USD_FEED, 1 weeks);
+        forwardClFeed(ETH_USD_FEED, 1 weeks);
+
+        vm.prank(keeper);
+        avatar.performUpkeep(new bytes(0));
+
+        (upkeepNeeded,) = avatar.checkUpkeep(new bytes(0));
+        assertFalse(upkeepNeeded);
+    }
+
+    function test_performUpkeep_permissions() public {
+        vm.prank(owner);
+        avatar.deposit(10e18, 20e18);
+
+        address[3] memory actors = [address(this), owner, manager];
+        for (uint256 i; i < actors.length; ++i) {
+            uint256 snapId = vm.snapshot();
+
+            vm.expectRevert(abi.encodeWithSelector(AuraAvatarTwoToken.NotKeeper.selector, actors[i]));
+            vm.prank(actors[i]);
+            avatar.performUpkeep(new bytes(0));
+
+            vm.revertTo(snapId);
+        }
+    }
+
+    function test_performUpkeep_premature() public {
+        vm.prank(owner);
+        avatar.deposit(10e18, 20e18);
+
+        skip(1 weeks - 1);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                AuraAvatarTwoToken.TooSoon.selector, block.timestamp, avatar.lastClaimTimestamp(), avatar.claimFrequency()
+            )
+        );
+        vm.prank(keeper);
+        avatar.performUpkeep(new bytes(0));
+    }
+
     ////////////////////////////////////////////////////////////////////////////
     // MISC
     ////////////////////////////////////////////////////////////////////////////
