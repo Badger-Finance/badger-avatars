@@ -373,11 +373,11 @@ contract AuraAvatarTwoToken is
         }
 
         if (_amountBpt1 > 0) {
-            asset1.transferFrom(msg.sender, address(this), _amountBpt1);
+            asset1.safeTransferFrom(msg.sender, address(this), _amountBpt1);
             AURA_BOOSTER.deposit(pid1, _amountBpt1, true);
         }
         if (_amountBpt2 > 0) {
-            asset2.transferFrom(msg.sender, address(this), _amountBpt2);
+            asset2.safeTransferFrom(msg.sender, address(this), _amountBpt2);
             AURA_BOOSTER.deposit(pid2, _amountBpt2, true);
         }
 
@@ -397,8 +397,8 @@ contract AuraAvatarTwoToken is
         }
 
         address ownerCached = owner();
-        asset1.transfer(ownerCached, bptDeposited1);
-        asset2.transfer(ownerCached, bptDeposited2);
+        asset1.safeTransfer(ownerCached, bptDeposited1);
+        asset2.safeTransfer(ownerCached, bptDeposited2);
 
         emit Withdraw(address(asset1), bptDeposited1, block.timestamp);
         emit Withdraw(address(asset2), bptDeposited2, block.timestamp);
@@ -411,8 +411,8 @@ contract AuraAvatarTwoToken is
 
         // 2. Send to owner
         address ownerCached = owner();
-        BAL.transfer(ownerCached, totalBal);
-        AURA.transfer(ownerCached, totalAura);
+        BAL.safeTransfer(ownerCached, totalBal);
+        AURA.safeTransfer(ownerCached, totalAura);
     }
 
     ////////////////////////////////////////////////////////////////////////////
@@ -548,7 +548,7 @@ contract AuraAvatarTwoToken is
         uint256 totalUsdcEarned = usdcEarnedFromBal + usdcEarnedFromAura;
 
         address ownerCached = owner();
-        USDC.transfer(ownerCached, totalUsdcEarned);
+        USDC.safeTransfer(ownerCached, totalUsdcEarned);
 
         // 3. Deposit remaining BAL to 80BAL-20ETH BPT
         uint256 balToDeposit = totalBal - balForUsdc;
