@@ -89,6 +89,7 @@ contract AuraAvatarTwoToken is
     error MoreThanBpsVal(uint256 bpsMin, uint256 bpsVal);
 
     error NothingToDeposit();
+    error NothingToWithdraw();
     error NoRewards();
 
     // TODO: Name?
@@ -375,11 +376,13 @@ contract AuraAvatarTwoToken is
         if (_amountBpt1 > 0) {
             asset1.safeTransferFrom(msg.sender, address(this), _amountBpt1);
             AURA_BOOSTER.deposit(pid1, _amountBpt1, true);
+
             emit Deposit(address(asset1), _amountBpt1, block.timestamp);
         }
         if (_amountBpt2 > 0) {
             asset2.safeTransferFrom(msg.sender, address(this), _amountBpt2);
             AURA_BOOSTER.deposit(pid2, _amountBpt2, true);
+
             emit Deposit(address(asset2), _amountBpt2, block.timestamp);
         }
     }
@@ -387,50 +390,39 @@ contract AuraAvatarTwoToken is
     // NOTE: Doesn't claim rewards
     function withdrawAll() external onlyOwner {
         uint256 bptDeposited1 = baseRewardPool1.balanceOf(address(this));
-        if (bptDeposited1 > 0) {
-            baseRewardPool1.withdrawAndUnwrap(bptDeposited1, false);
-        }
         uint256 bptDeposited2 = baseRewardPool2.balanceOf(address(this));
-        if (bptDeposited2 > 0) {
-            baseRewardPool2.withdrawAndUnwrap(bptDeposited2, false);
-        }
 
-        address ownerCached = owner();
-        asset1.safeTransfer(ownerCached, bptDeposited1);
-        asset2.safeTransfer(ownerCached, bptDeposited2);
-
-        emit Withdraw(address(asset1), bptDeposited1, block.timestamp);
-        emit Withdraw(address(asset2), bptDeposited2, block.timestamp);
+        withdraw(bptDeposited1, bptDeposited2);
     }
 
-    /// @dev Withdraws a certain amount of asset1
-    /// NOTE Using separate functions per assets for gas efficiency
-    function withdrawSomeAsset1(uint256 amount) external onlyOwner {
-        uint256 bptDeposited = baseRewardPool1.balanceOf(address(this));
-        if (bptDeposited > 0) {
-            uint256 toWithdraw = amount;
-            if (toWithdraw > bptDeposited) {
-                toWithdraw = bptDeposited;
-            }
-            baseRewardPool1.withdrawAndUnwrap(toWithdraw, false);
-            asset1.transfer(owner(), toWithdraw);
-            emit Withdraw(address(asset1), toWithdraw, block.timestamp);
+    function withdraw(uint256 _amountBpt1, uint256 _amountBpt2) public onlyOwner {
+        if (_amountBpt1 == 0 && _amountBpt2 == 0) {
+            revert NothingToWithdraw();
         }
+
+        if (_amountBpt1 > 0) {
+            withdrawAsset1(_amountBpt1);
+        }
+        if (_amountBpt2 > 0) {
+            withdrawAsset2(_amountBpt2);
+        }
+    }
+
+    // TODO: Maybe revert on 0?
+    /// @dev Withdraws a certain amount of asset1
+    function withdrawAsset1(uint256 _amountBpt1) public onlyOwner {
+        baseRewardPool1.withdrawAndUnwrap(_amountBpt1, false);
+        asset1.safeTransfer(owner(), _amountBpt1);
+
+        emit Withdraw(address(asset1), _amountBpt1, block.timestamp);
     }
 
     /// @dev Withdraws a certain amount of asset2
-    /// NOTE Using separate functions per assets for gas efficiency
-    function withdrawSomeAsset2(uint256 amount) external onlyOwner {
-        uint256 bptDeposited = baseRewardPool2.balanceOf(address(this));
-        if (bptDeposited > 0) {
-            uint256 toWithdraw = amount;
-            if (toWithdraw > bptDeposited) {
-                toWithdraw = bptDeposited;
-            }
-            baseRewardPool2.withdrawAndUnwrap(toWithdraw, false);
-            asset2.transfer(owner(), toWithdraw);
-            emit Withdraw(address(asset2), toWithdraw, block.timestamp);
-        }
+    function withdrawAsset2(uint256 _amountBpt2) public onlyOwner {
+        baseRewardPool2.withdrawAndUnwrap(_amountBpt2, false);
+        asset2.safeTransfer(owner(), _amountBpt2);
+
+        emit Withdraw(address(asset2), _amountBpt2, block.timestamp);
     }
 
     // NOTE: Failsafe in case things go wrong, want to sell through different pools

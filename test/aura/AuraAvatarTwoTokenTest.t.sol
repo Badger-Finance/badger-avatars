@@ -576,41 +576,88 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
         assertEq(BPT_40WBTC_40DIGG_20GRAVIAURA.balanceOf(owner), 20e18);
     }
 
+    function test_withdrawAll_nothing() public {
+        vm.expectRevert(AuraAvatarTwoToken.NothingToWithdraw.selector);
+        vm.prank(owner);
+        avatar.withdrawAll();
+    }
+
     function test_withdrawAll_permissions() public {
         vm.expectRevert("Ownable: caller is not the owner");
         avatar.withdrawAll();
     }
 
-    function test_withdrawSome() public {
+    function test_withdraw() public {
         vm.startPrank(owner);
         avatar.deposit(10e18, 20e18);
 
-        // Attempts to withdraw more than deposited for asset1 - withdraws total deposited amount
         vm.expectEmit(true, false, false, true);
         emit Withdraw(address(BPT_80BADGER_20WBTC), 10e18, block.timestamp);
-        avatar.withdrawSomeAsset1(20e18);
-        assertEq(BPT_80BADGER_20WBTC.balanceOf(owner), 10e18);
-        assertEq(BASE_REWARD_POOL_80BADGER_20WBTC.balanceOf(address(avatar)), 0);
-
-        // Attempts to withdraw again when there's nothing deposited for one asset - nothing happens
-        avatar.withdrawSomeAsset1(10e18);
-        assertEq(BPT_80BADGER_20WBTC.balanceOf(owner), 10e18);
-        assertEq(BASE_REWARD_POOL_80BADGER_20WBTC.balanceOf(address(avatar)), 0);
-
-        // Withdraw partial amount of asset2
         vm.expectEmit(true, false, false, true);
-        emit Withdraw(address(BPT_40WBTC_40DIGG_20GRAVIAURA), 10e18, block.timestamp);
-        avatar.withdrawSomeAsset2(10e18);
-        assertEq(BASE_REWARD_POOL_40WBTC_40DIGG_20GRAVIAURA.balanceOf(address(avatar)), 10e18);
-        assertEq(BPT_40WBTC_40DIGG_20GRAVIAURA.balanceOf(owner), 10e18);
+        emit Withdraw(address(BPT_40WBTC_40DIGG_20GRAVIAURA), 20e18, block.timestamp);
+        avatar.withdraw(10e18, 20e18);
+
+        assertEq(BPT_80BADGER_20WBTC.balanceOf(owner), 10e18);
+        assertEq(BPT_40WBTC_40DIGG_20GRAVIAURA.balanceOf(owner), 20e18);
     }
 
-    function test_withdrawSome_permissions() public {
-        vm.expectRevert("Ownable: caller is not the owner");
-        avatar.withdrawSomeAsset1(10e18);
+    function test_withdraw_nothing() public {
+        vm.expectRevert(AuraAvatarTwoToken.NothingToWithdraw.selector);
+        vm.prank(owner);
+        avatar.withdraw(0, 0);
+    }
 
+    function test_withdraw_permissions() public {
         vm.expectRevert("Ownable: caller is not the owner");
-        avatar.withdrawSomeAsset2(20e18);
+        avatar.withdraw(10e18, 20e18);
+    }
+
+    function test_withdrawAsset1() public {
+        vm.startPrank(owner);
+        avatar.deposit(10e18, 20e18);
+
+        vm.expectEmit(true, false, false, true);
+        emit Withdraw(address(BPT_80BADGER_20WBTC), 10e18, block.timestamp);
+        avatar.withdrawAsset1(10e18);
+        assertEq(BPT_80BADGER_20WBTC.balanceOf(owner), 10e18);
+        assertEq(BASE_REWARD_POOL_80BADGER_20WBTC.balanceOf(address(avatar)), 0);
+    }
+
+    function test_withdrawAsset1_permissions() public {
+        vm.expectRevert("Ownable: caller is not the owner");
+        avatar.withdrawAsset1(10e18);
+    }
+
+    function test_withdrawAsset1_moreThanBalance() public {
+        vm.startPrank(owner);
+        avatar.deposit(10e18, 20e18);
+
+        vm.expectRevert("SafeMath: subtraction overflow");
+        avatar.withdrawAsset1(20e18);
+    }
+
+    function test_withdrawAsset2() public {
+        vm.startPrank(owner);
+        avatar.deposit(10e18, 20e18);
+
+        vm.expectEmit(true, false, false, true);
+        emit Withdraw(address(BPT_40WBTC_40DIGG_20GRAVIAURA), 20e18, block.timestamp);
+        avatar.withdrawAsset2(20e18);
+        assertEq(BPT_40WBTC_40DIGG_20GRAVIAURA.balanceOf(owner), 20e18);
+        assertEq(BASE_REWARD_POOL_40WBTC_40DIGG_20GRAVIAURA.balanceOf(address(avatar)), 0);
+    }
+
+    function test_withdrawAsset2_permissions() public {
+        vm.expectRevert("Ownable: caller is not the owner");
+        avatar.withdrawAsset2(20e18);
+    }
+
+    function test_withdrawAsset2_moreThanBalance() public {
+        vm.startPrank(owner);
+        avatar.deposit(10e18, 20e18);
+
+        vm.expectRevert("SafeMath: subtraction overflow");
+        avatar.withdrawAsset2(30e18);
     }
 
     function test_claimRewardsAndSendToOwner() public {
