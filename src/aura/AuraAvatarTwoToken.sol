@@ -533,7 +533,8 @@ contract AuraAvatarTwoToken is
     /// @notice Claim and process BAL and AURA rewards, selling some of it to USDC and depositing the rest to bauraBAL
     ///         and vlAURA. Can be called by the owner or manager.
     /// @dev This can be called by the owner or manager to opportunistically harvest in good market conditions.
-    /// @return processed_
+    /// @return processed_ An array containing addresses and amounts of harvested tokens (i.e. tokens that have finally
+    ///                    been swapped into).
     function processRewards() external onlyOwnerOrManager returns (TokenAmount[] memory processed_) {
         processed_ = processRewardsInternal();
     }
@@ -665,6 +666,10 @@ contract AuraAvatarTwoToken is
     // INTERNAL
     ////////////////////////////////////////////////////////////////////////////
 
+    /// @notice Claim and process BAL and AURA rewards, selling some of it to USDC and depositing the rest to bauraBAL
+    ///         and vlAURA.
+    /// @return processed_ An array containing addresses and amounts of harvested tokens (i.e. tokens that have finally
+    ///                    been swapped into).
     function processRewardsInternal() internal returns (TokenAmount[] memory processed_) {
         // 1. Claim BAL and AURA rewards
         (uint256 totalBal, uint256 totalAura) = claimAndRegisterRewards();
@@ -708,6 +713,9 @@ contract AuraAvatarTwoToken is
         emit RewardsToStable(address(USDC), totalUsdcEarned, block.timestamp);
     }
 
+    /// @notice Claims pending BAL and AURA rewards from both staking contracts and sets the lastClaimTimestamp value.
+    /// @return totalBal_ The total BAL in contract after claiming.
+    /// @return totalAura_ The total AURA in contract after claiming.
     function claimAndRegisterRewards() internal returns (uint256 totalBal_, uint256 totalAura_) {
         // Update last claimed time
         lastClaimTimestamp = block.timestamp;
@@ -732,7 +740,13 @@ contract AuraAvatarTwoToken is
         emit RewardClaimed(address(AURA), totalAura_, block.timestamp);
     }
 
-    function swapBalForUsdc(uint256 _balAmount) internal returns (uint256 usdcEarned) {
+    /// @notice Swaps the given amount of BAL for USDC.
+    /// @dev The swap is only carried out if the execution price is within a predefined threshold (given by
+    ///      minOutBpsBalToUsdc.val) of the oracle price.
+    ///      A BAL-USD Chainlink price feed is used as the oracle.
+    /// @param _balAmount The amount of BAL to sell.
+    /// @return usdcEarned_ The amount of USDC earned.
+    function swapBalForUsdc(uint256 _balAmount) internal returns (uint256 usdcEarned_) {
         IAsset[] memory assetArray = new IAsset[](3);
         assetArray[0] = IAsset(address(BAL));
         assetArray[1] = IAsset(address(WETH));
@@ -770,10 +784,17 @@ contract AuraAvatarTwoToken is
             IBalancerVault.SwapKind.GIVEN_IN, swaps, assetArray, fundManagement, limits, type(uint256).max
         );
 
-        usdcEarned = uint256(-assetBalances[assetBalances.length - 1]);
+        usdcEarned_ = uint256(-assetBalances[assetBalances.length - 1]);
     }
 
-    function swapAuraForUsdc(uint256 _auraAmount) internal returns (uint256 usdcEarned) {
+    /// @notice Swaps the given amount of AURA for USDC.
+    /// @dev The swap is only carried out if the execution price is within a predefined threshold (given by
+    ///      minOutBpsAuraToUsdc.val) of the oracle price.
+    ///      A combination of the Balancer TWAP for the 80AURA-20WETH pool and a ETH-USD Chainlink price feed is used
+    ///      as the oracle.
+    /// @param _auraAmount The amount of AURA to sell.
+    /// @return usdcEarned_ The amount of USDC earned.
+    function swapAuraForUsdc(uint256 _auraAmount) internal returns (uint256 usdcEarned_) {
         IAsset[] memory assetArray = new IAsset[](3);
         assetArray[0] = IAsset(address(AURA));
         assetArray[1] = IAsset(address(WETH));
@@ -813,9 +834,42 @@ contract AuraAvatarTwoToken is
             IBalancerVault.SwapKind.GIVEN_IN, swaps, assetArray, fundManagement, limits, type(uint256).max
         );
 
-        usdcEarned = uint256(-assetBalances[assetBalances.length - 1]);
+        usdcEarned_ = uint256(-assetBalances[assetBalances.length - 1]);
     }
 
+    /// @notice Deposits the given amount of BAL into the 80BAL-20WETH pool.
+    /// @dev The deposit is only carried out if the exchange rate is within a predefined threshold (given by
+    ///      minOutBpsBalToBpt.val) of the Balancer TWAP.
+    /// @param _balAmount The amount of BAL to deposit.
+    function depositBalToBpt(uint256 _balAmount) internal {
+        IAsset[] memory assetArray = new IAsset[](2);
+        assetArray[0] = IAsset(address(BAL));
+        assetArray[1] = IAsset(address(WETH));
+
+        uint256[] memory maxAmountsIn = new uint256[](2);
+        maxAmountsIn[0] = _balAmount;
+        maxAmountsIn[1] = 0;
+
+        BALANCER_VAULT.joinPool(
+            BAL_WETH_POOL_ID,
+            address(this),
+            address(this),
+            IBalancerVault.JoinPoolRequest({
+                assets: assetArray,
+                maxAmountsIn: maxAmountsIn,
+                userData: abi.encode(
+                    JoinKind.EXACT_TOKENS_IN_FOR_BPT_OUT,
+                    maxAmountsIn,
+                    (getBalAmountInBpt(_balAmount) * minOutBpsBalToBpt.val) / MAX_BPS
+                    ),
+                fromInternalBalance: false
+            })
+        );
+    }
+
+    /// @notice Either swaps or deposits the given amount of 80BAL-20WETH BPT for auraBAL.
+    /// @dev A swap is carried out if the execution price is better than 1:1, otherwise falls back to a deposit.
+    /// @param _bptAmount The amount of 80BAL-20WETH BPT to swap or deposit.
     function swapBptForAuraBal(uint256 _bptAmount) internal {
         IBalancerVault.SingleSwap memory swapParam = IBalancerVault.SingleSwap({
             poolId: AURABAL_BAL_WETH_POOL_ID,
@@ -843,31 +897,5 @@ contract AuraAvatarTwoToken is
             // Otherwise deposit
             AURABAL_DEPOSITOR.deposit(_bptAmount, true, address(0));
         }
-    }
-
-    function depositBalToBpt(uint256 _balAmount) internal {
-        IAsset[] memory assetArray = new IAsset[](2);
-        assetArray[0] = IAsset(address(BAL));
-        assetArray[1] = IAsset(address(WETH));
-
-        uint256[] memory maxAmountsIn = new uint256[](2);
-        maxAmountsIn[0] = _balAmount;
-        maxAmountsIn[1] = 0;
-
-        BALANCER_VAULT.joinPool(
-            BAL_WETH_POOL_ID,
-            address(this),
-            address(this),
-            IBalancerVault.JoinPoolRequest({
-                assets: assetArray,
-                maxAmountsIn: maxAmountsIn,
-                userData: abi.encode(
-                    JoinKind.EXACT_TOKENS_IN_FOR_BPT_OUT,
-                    maxAmountsIn,
-                    (getBalAmountInBpt(_balAmount) * minOutBpsBalToBpt.val) / MAX_BPS
-                    ),
-                fromInternalBalance: false
-            })
-        );
     }
 }
