@@ -68,14 +68,16 @@ contract AuraAvatarTwoToken is
     // STORAGE
     ////////////////////////////////////////////////////////////////////////////
 
-    /// @notice Address of the manager of the avatar. Manager has limited permissions and can harvest rewards or fine-tune operational settings.
+    /// @notice Address of the manager of the avatar. Manager has limited permissions and can harvest rewards or
+    ///         fine-tune operational settings.
     address public manager;
     /// @notice Address of the keeper of the avatar. Keeper can only harvest rewards at a predefined frequency.
     address public keeper;
 
     /// @notice The frequency (in seconds) at which the keeper should harvest rewards.
     uint256 public claimFrequency;
-    /// @notice The duration for which AURA and BAL/ETH BPT TWAPs should be calculated. The TWAPs are used to set slippage constraints during swaps.
+    /// @notice The duration for which AURA and BAL/ETH BPT TWAPs should be calculated. The TWAPs are used to set
+    ///         slippage constraints during swaps.
     uint256 public twapPeriod;
 
     /// @notice The proportion of BAL that is sold for USDC.
@@ -83,12 +85,15 @@ contract AuraAvatarTwoToken is
     /// @notice The proportion of AURA that is sold for USDC.
     uint256 public sellBpsAuraToUsdc;
 
-    /// @notice The current and minimum value (in bps) controlling the minimum executable price (as proprtion of oracle price) for a BAL to USDC swap.
+    /// @notice The current and minimum value (in bps) controlling the minimum executable price (as proprtion of oracle
+    ///         price) for a BAL to USDC swap.
     BpsConfig public minOutBpsBalToUsdc;
-    /// @notice The current and minimum value (in bps) controlling the minimum executable price (as proprtion of oracle price) for an AURA to USDC swap.
+    /// @notice The current and minimum value (in bps) controlling the minimum executable price (as proprtion of oracle
+    ///         price) for an AURA to USDC swap.
     BpsConfig public minOutBpsAuraToUsdc;
 
-    /// @notice The current and minimum value (in bps) controlling the minimum executable price (as proprtion of oracle price) for a BAL to BAL/ETH BPT swap.
+    /// @notice The current and minimum value (in bps) controlling the minimum executable price (as proprtion of oracle
+    ///         price) for a BAL to BAL/ETH BPT swap.
     BpsConfig public minOutBpsBalToBpt;
 
     /// @notice The timestamp at which rewards were last claimed and harvested.
@@ -160,7 +165,8 @@ contract AuraAvatarTwoToken is
         baseRewardPool2 = IBaseRewardPool(crvRewards2);
     }
 
-    /// @notice Initializes the avatar. Calls parent intializers, sets default variable values and does token approvals. Can only be called once.
+    /// @notice Initializes the avatar. Calls parent intializers, sets default variable values and does token approvals.
+    ///         Can only be called once.
     /// @param _owner Address of the initial owner.
     /// @param _manager Address of the initial manager.
     /// @param _keeper Address of the initial keeper.
@@ -309,7 +315,7 @@ contract AuraAvatarTwoToken is
         emit SellBpsAuraToUsdcUpdated(_sellBpsAuraToUsdc, oldSellBpsAuraToUsdc);
     }
 
-    /// @notice Updates the minimum possible value for the minimum executable price (in bps as proportion of an oracle 
+    /// @notice Updates the minimum possible value for the minimum executable price (in bps as proportion of an oracle
     ///         price) for a BAL to USDC swap. Can only be called by owner.
     /// @param _minOutBpsBalToUsdcMin The new minimum value in bps.
     function setMinOutBpsBalToUsdcMin(uint256 _minOutBpsBalToUsdcMin) external onlyOwner {
@@ -328,7 +334,7 @@ contract AuraAvatarTwoToken is
         emit MinOutBpsBalToUsdcMinUpdated(_minOutBpsBalToUsdcMin, oldMinOutBpsBalToUsdcMin);
     }
 
-    /// @notice Updates the minimum possible value for the minimum executable price (in bps as proportion of an oracle 
+    /// @notice Updates the minimum possible value for the minimum executable price (in bps as proportion of an oracle
     ///         price) for an AURA to USDC swap. Can only be called by owner.
     /// @param _minOutBpsAuraToUsdcMin The new minimum value in bps.
     function setMinOutBpsAuraToUsdcMin(uint256 _minOutBpsAuraToUsdcMin) external onlyOwner {
@@ -347,8 +353,8 @@ contract AuraAvatarTwoToken is
         emit MinOutBpsAuraToUsdcMinUpdated(_minOutBpsAuraToUsdcMin, oldMinOutBpsAuraToUsdcMin);
     }
 
-    /// @notice Updates the minimum possible value for the minimum executable price (in bps as proportion of an oracle 
-    ///         price) for a BAL to 80BAL-20WETH swap. Can only be called by owner.
+    /// @notice Updates the minimum possible value for the minimum executable price (in bps as proportion of an oracle
+    ///         price) for a BAL to 80BAL-20WETH BPT swap. Can only be called by owner.
     /// @param _minOutBpsBalToBptMin The new minimum value in bps.
     function setMinOutBpsBalToBptMin(uint256 _minOutBpsBalToBptMin) external onlyOwner {
         if (_minOutBpsBalToBptMin > MAX_BPS) {
@@ -370,6 +376,10 @@ contract AuraAvatarTwoToken is
     // PUBLIC: Manager - Config
     ////////////////////////////////////////////////////////////////////////////
 
+    /// @notice Updates the current value for the minimum executable price (in bps as proportion of an oracle price)
+    ///         for a BAL to USDC swap. The value should be more than the minimum value. Can be called by the owner or
+    ///         the manager.
+    /// @param _minOutBpsBalToUsdcVal The new value in bps.
     function setMinOutBpsBalToUsdcVal(uint256 _minOutBpsBalToUsdcVal) external onlyOwnerOrManager {
         if (_minOutBpsBalToUsdcVal > MAX_BPS) {
             revert InvalidBps(_minOutBpsBalToUsdcVal);
@@ -386,6 +396,10 @@ contract AuraAvatarTwoToken is
         emit MinOutBpsBalToUsdcValUpdated(_minOutBpsBalToUsdcVal, oldMinOutBpsBalToUsdcVal);
     }
 
+    /// @notice Updates the current value for the minimum executable price (in bps as proportion of an oracle price)
+    ///         for an AURA to USDC swap. The value should be more than the minimum value. Can be called by the owner or
+    ///         the manager.
+    /// @param _minOutBpsAuraToUsdcVal The new value in bps.
     function setMinOutBpsAuraToUsdcVal(uint256 _minOutBpsAuraToUsdcVal) external onlyOwnerOrManager {
         if (_minOutBpsAuraToUsdcVal > MAX_BPS) {
             revert InvalidBps(_minOutBpsAuraToUsdcVal);
@@ -402,6 +416,10 @@ contract AuraAvatarTwoToken is
         emit MinOutBpsAuraToUsdcValUpdated(_minOutBpsAuraToUsdcVal, oldMinOutBpsAuraToUsdcVal);
     }
 
+    /// @notice Updates the current value for the minimum executable price (in bps as proportion of an oracle price)
+    ///         for a BAL to 80BAL-20WETH BPT swap. The value should be more than the minimum value. Can be called by
+    ///         the owner or the manager.
+    /// @param _minOutBpsBalToBptVal The new value in bps.
     function setMinOutBpsBalToBptVal(uint256 _minOutBpsBalToBptVal) external onlyOwnerOrManager {
         if (_minOutBpsBalToBptVal > MAX_BPS) {
             revert InvalidBps(_minOutBpsBalToBptVal);
@@ -422,8 +440,12 @@ contract AuraAvatarTwoToken is
     // PUBLIC: Owner
     ////////////////////////////////////////////////////////////////////////////
 
-    function deposit(uint256 _amountBpt1, uint256 _amountBpt2) external onlyOwner {
-        if (_amountBpt1 == 0 && _amountBpt2 == 0) {
+    /// @notice Takes a given amount of assets from the owner and stakes them on the AURA Booster. Can only be called by owner.
+    /// @dev This also initializes the lastClaimTimestamp variable if there are no other deposits.
+    /// @param _amountAsset1 Amount of asset1 to be staked.
+    /// @param _amountAsset2 Amount of asset2 to be staked.
+    function deposit(uint256 _amountAsset1, uint256 _amountAsset2) external onlyOwner {
+        if (_amountAsset1 == 0 && _amountAsset2 == 0) {
             revert NothingToDeposit();
         }
 
@@ -435,21 +457,22 @@ contract AuraAvatarTwoToken is
             lastClaimTimestamp = block.timestamp;
         }
 
-        if (_amountBpt1 > 0) {
-            asset1.safeTransferFrom(msg.sender, address(this), _amountBpt1);
-            AURA_BOOSTER.deposit(pid1, _amountBpt1, true);
+        if (_amountAsset1 > 0) {
+            asset1.safeTransferFrom(msg.sender, address(this), _amountAsset1);
+            AURA_BOOSTER.deposit(pid1, _amountAsset1, true);
 
-            emit Deposit(address(asset1), _amountBpt1, block.timestamp);
+            emit Deposit(address(asset1), _amountAsset1, block.timestamp);
         }
-        if (_amountBpt2 > 0) {
-            asset2.safeTransferFrom(msg.sender, address(this), _amountBpt2);
-            AURA_BOOSTER.deposit(pid2, _amountBpt2, true);
+        if (_amountAsset2 > 0) {
+            asset2.safeTransferFrom(msg.sender, address(this), _amountAsset2);
+            AURA_BOOSTER.deposit(pid2, _amountAsset2, true);
 
-            emit Deposit(address(asset2), _amountBpt2, block.timestamp);
+            emit Deposit(address(asset2), _amountAsset2, block.timestamp);
         }
     }
 
-    // NOTE: Doesn't claim rewards
+    /// @notice Unstakes all staked assets and transfers them back to owner. Can only be called by owner.
+    /// @dev This function doesn't claim any rewards.
     function withdrawAll() external onlyOwner {
         uint256 bptDeposited1 = baseRewardPool1.balanceOf(address(this));
         uint256 bptDeposited2 = baseRewardPool2.balanceOf(address(this));
@@ -457,37 +480,47 @@ contract AuraAvatarTwoToken is
         withdraw(bptDeposited1, bptDeposited2);
     }
 
-    function withdraw(uint256 _amountBpt1, uint256 _amountBpt2) public onlyOwner {
-        if (_amountBpt1 == 0 && _amountBpt2 == 0) {
+    /// @notice Unstakes the given amount of assets and transfers them back to owner. Can only be called by owner.
+    /// @dev This function doesn't claim any rewards.
+    /// @param _amountAsset1 Amount of asset1 to be unstaked.
+    /// @param _amountAsset2 Amount of asset2 to be unstaked.
+    function withdraw(uint256 _amountAsset1, uint256 _amountAsset2) public onlyOwner {
+        if (_amountAsset1 == 0 && _amountAsset2 == 0) {
             revert NothingToWithdraw();
         }
 
-        if (_amountBpt1 > 0) {
-            withdrawAsset1(_amountBpt1);
+        if (_amountAsset1 > 0) {
+            withdrawAsset1(_amountAsset1);
         }
-        if (_amountBpt2 > 0) {
-            withdrawAsset2(_amountBpt2);
+        if (_amountAsset2 > 0) {
+            withdrawAsset2(_amountAsset2);
         }
     }
 
+    /// @notice Unstakes a given amount of asset1 and transfers it back to owner. Can only be called by owner.
+    /// @dev This function doesn't claim any rewards.
+    /// @param _amountAsset1 Amount of asset1 to be unstaked.
     // TODO: Maybe revert on 0?
-    /// @dev Withdraws a certain amount of asset1
-    function withdrawAsset1(uint256 _amountBpt1) public onlyOwner {
-        baseRewardPool1.withdrawAndUnwrap(_amountBpt1, false);
-        asset1.safeTransfer(owner(), _amountBpt1);
+    function withdrawAsset1(uint256 _amountAsset1) public onlyOwner {
+        baseRewardPool1.withdrawAndUnwrap(_amountAsset1, false);
+        asset1.safeTransfer(owner(), _amountAsset1);
 
-        emit Withdraw(address(asset1), _amountBpt1, block.timestamp);
+        emit Withdraw(address(asset1), _amountAsset1, block.timestamp);
     }
 
-    /// @dev Withdraws a certain amount of asset2
-    function withdrawAsset2(uint256 _amountBpt2) public onlyOwner {
-        baseRewardPool2.withdrawAndUnwrap(_amountBpt2, false);
-        asset2.safeTransfer(owner(), _amountBpt2);
+    /// @notice Unstakes a given amount of asset2 and transfers it back to owner. Can only be called by owner.
+    /// @dev This function doesn't claim any rewards.
+    /// @param _amountAsset2 Amount of asset2 to be unstaked.
+    function withdrawAsset2(uint256 _amountAsset2) public onlyOwner {
+        baseRewardPool2.withdrawAndUnwrap(_amountAsset2, false);
+        asset2.safeTransfer(owner(), _amountAsset2);
 
-        emit Withdraw(address(asset2), _amountBpt2, block.timestamp);
+        emit Withdraw(address(asset2), _amountAsset2, block.timestamp);
     }
 
-    // NOTE: Failsafe in case things go wrong, want to sell through different pools
+    /// @notice Claims any pending BAL and AURA rewards and sends them to owner. Can only be called by owner.
+    /// @dev This is a failsafe to handle rewards manually in case anything goes wrong (eg. rewards need to be sold
+    ///      through other pools)
     function claimRewardsAndSendToOwner() public onlyOwner {
         // 1. Claim BAL and AURA rewards
         (uint256 totalBal, uint256 totalAura) = claimAndRegisterRewards();
@@ -502,7 +535,10 @@ contract AuraAvatarTwoToken is
     // PUBLIC: Owner/Manager
     ////////////////////////////////////////////////////////////////////////////
 
-    // NOTE: Can be called by techops to opportunistically harvest
+    /// @notice Claim and process BAL and AURA rewards, selling some of it to USDC and depositing the rest to bauraBAL
+    ///         and vlAURA. Can be called by the owner or manager.
+    /// @dev This can be called by the owner or manager to opportunistically harvest in good market conditions.
+    /// @return processed_
     function processRewards() external onlyOwnerOrManager returns (TokenAmount[] memory processed_) {
         processed_ = processRewardsInternal();
     }
@@ -511,6 +547,8 @@ contract AuraAvatarTwoToken is
     // PUBLIC: Keeper
     ////////////////////////////////////////////////////////////////////////////
 
+    /// @notice A function to process pending BAL and AURA rewards at regular intervals. Can only be called by the
+    ///         keeper when the contract is not paused.
     function performUpkeep(bytes calldata) external override onlyKeeper whenNotPaused {
         uint256 lastClaimTimestampCached = lastClaimTimestamp;
         uint256 claimFrequencyCached = claimFrequency;
@@ -525,7 +563,7 @@ contract AuraAvatarTwoToken is
     // PUBLIC VIEW
     ////////////////////////////////////////////////////////////////////////////
 
-    /// @notice The name of the avatar contract.
+    /// @notice The name of the avatar.
     function name() external view returns (string memory name_) {
         name_ = string.concat("Avatar_AuraTwoToken", "_", asset1.symbol(), "_", asset2.symbol());
     }
@@ -561,7 +599,7 @@ contract AuraAvatarTwoToken is
     }
 
     /// @notice Converts a given BAL amount into USDC using a Chainlink price feed.
-    /// @dev Assumes USDC is pegged 1:1 to USD. 
+    /// @dev Assumes USDC is pegged 1:1 to USD.
     /// @param _balAmount The input BAL amount.
     /// @return usdcAmount_ The equivalent amount in USDC.
     function getBalAmountInUsdc(uint256 _balAmount) public view returns (uint256 usdcAmount_) {
@@ -571,7 +609,7 @@ contract AuraAvatarTwoToken is
     }
 
     /// @notice Converts a given AURA amount into USDC using a Balancer TWAP and a Chainlink price feed.
-    /// @dev Assumes USDC is pegged 1:1 to USD. 
+    /// @dev Assumes USDC is pegged 1:1 to USD.
     /// @param _auraAmount The input AURA amount.
     /// @return usdcAmount_ The equivalent amount in USDC.
     function getAuraAmountInUsdc(uint256 _auraAmount) public view returns (uint256 usdcAmount_) {
@@ -590,7 +628,8 @@ contract AuraAvatarTwoToken is
         bptAmount_ = (_balAmount * PRECISION) / bptPriceInBal;
     }
 
-    /// @inheritdoc KeeperCompatibleInterface
+    /// @notice Checks whether an upkeep is to be performed.
+    /// @return upkeepNeeded_ A boolean indicating whether an upkeep is to be performed.
     function checkUpkeep(bytes calldata) external view override returns (bool upkeepNeeded_, bytes memory) {
         uint256 balPending1 = baseRewardPool1.earned(address(this));
         uint256 balPending2 = baseRewardPool2.earned(address(this));
