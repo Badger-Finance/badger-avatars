@@ -10,6 +10,7 @@ import {BaseAvatar} from "../lib/BaseAvatar.sol";
 import {AuraConstants} from "./AuraConstants.sol";
 import {AuraAvatarOracleUtils} from "./AuraAvatarOracleUtils.sol";
 import {MAX_BPS, PRECISION} from "../BaseConstants.sol";
+import {BpsConfig, TokenAmount} from "../BaseStructs.sol";
 
 import {IAuraToken} from "../interfaces/aura/IAuraToken.sol";
 import {IBaseRewardPool} from "../interfaces/aura/IBaseRewardPool.sol";
@@ -18,19 +19,13 @@ import {IBalancerVault, JoinKind} from "../interfaces/balancer/IBalancerVault.so
 import {IPriceOracle} from "../interfaces/balancer/IPriceOracle.sol";
 import {KeeperCompatibleInterface} from "../interfaces/chainlink/KeeperCompatibleInterface.sol";
 
-struct TokenAmount {
-    address token;
-    uint256 amount;
-}
-
-// TODO: Storage packing? Check if that works with proxy upgrades?
-struct BpsConfig {
-    uint256 val;
-    uint256 min;
-}
-
 /// @title AuraAvatarTwoToken
-/// @notice This contract handles two Balancer Pool Token (BPT) positions on behalf of an owner. It stakes the BPTs on Aura and contains logic for harvesting BAL and AURA rewards. A keeper periodically harvests the positions. Owner has admin rights and can make arbitrary calls using the contract address. Contract never holds funds.
+/// @notice This contract handles two Balancer Pool Token (BPT) positions on behalf of an owner. It stakes the BPTs on
+///         Aura and has the resulting BAL and AURA rewards periodically harvested by a keeper. Only the owner can
+///         deposit and withdraw funds through this contract.
+///         The owner also has admin rights and can make arbitrary calls through this contract.
+/// @dev The avatar is never supposed to hold funds and only acts as an intermediary to facilitate staking and ease
+///      accounting.
 contract AuraAvatarTwoToken is
     BaseAvatar,
     PausableUpgradeable, // TODO: See if move pausable to base
