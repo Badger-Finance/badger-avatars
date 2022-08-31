@@ -44,6 +44,7 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
     event ManagerUpdated(address indexed oldManager, address indexed newManager);
     event KeeperUpdated(address indexed oldKeeper, address indexed newKeeper);
 
+    event TwapPeriodUpdated(uint256 newTwapPeriod, uint256 oldTwapPeriod);
     event ClaimFrequencyUpdated(uint256 oldClaimFrequency, uint256 newClaimFrequency);
 
     event SellBpsBalToUsdcUpdated(uint256 oldValue, uint256 newValue);
@@ -264,6 +265,20 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
     function test_setKeeper_permissions() public {
         vm.expectRevert("Ownable: caller is not the owner");
         avatar.setKeeper(address(0));
+    }
+
+    function test_setTwapPeriod() public {
+        vm.prank(owner);
+        vm.expectEmit(false, false, false, true);
+        emit TwapPeriodUpdated(4 hours, 1 hours);
+        avatar.setTwapPeriod(4 hours);
+
+        assertEq(avatar.twapPeriod(), 4 hours);
+    }
+
+    function test_setTwapPeriod_permissions() public {
+        vm.expectRevert("Ownable: caller is not the owner");
+        avatar.setTwapPeriod(2 weeks);
     }
 
     function test_setClaimFrequency() public {

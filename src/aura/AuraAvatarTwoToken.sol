@@ -45,6 +45,12 @@ contract AuraAvatarTwoToken is
     using SafeERC20Upgradeable for IERC20MetadataUpgradeable;
 
     ////////////////////////////////////////////////////////////////////////////
+    // CONSTANTS
+    ////////////////////////////////////////////////////////////////////////////
+
+    uint256 private constant CL_FEED_STALE_PERIOD = 24 hours;
+
+    ////////////////////////////////////////////////////////////////////////////
     // IMMUTABLES
     ////////////////////////////////////////////////////////////////////////////
 
@@ -66,6 +72,7 @@ contract AuraAvatarTwoToken is
     address public keeper;
 
     uint256 public claimFrequency;
+    uint256 public twapPeriod;
 
     uint256 public sellBpsBalToUsdc;
     uint256 public sellBpsAuraToUsdc;
@@ -102,6 +109,7 @@ contract AuraAvatarTwoToken is
     event ManagerUpdated(address indexed newManager, address indexed oldManager);
     event KeeperUpdated(address indexed newKeeper, address indexed oldKeeper);
 
+    event TwapPeriodUpdated(uint256 newTwapPeriod, uint256 oldTwapPeriod);
     event ClaimFrequencyUpdated(uint256 newClaimFrequency, uint256 oldClaimFrequency);
 
     event SellBpsBalToUsdcUpdated(uint256 newValue, uint256 oldValue);
@@ -146,6 +154,7 @@ contract AuraAvatarTwoToken is
         manager = _manager;
         keeper = _keeper;
 
+        twapPeriod = 1 hours;
         claimFrequency = 1 weeks;
 
         sellBpsBalToUsdc = 7000; // 70%
@@ -227,13 +236,6 @@ contract AuraAvatarTwoToken is
         emit KeeperUpdated(_keeper, oldKeeper);
     }
 
-    function setClaimFrequency(uint256 _claimFrequency) external onlyOwner {
-        uint256 oldClaimFrequency = claimFrequency;
-
-        claimFrequency = _claimFrequency;
-        emit ClaimFrequencyUpdated(_claimFrequency, oldClaimFrequency);
-    }
-
     function setSellBpsBalToUsdc(uint256 _sellBpsBalToUsdc) external onlyOwner {
         if (_sellBpsBalToUsdc > MAX_BPS) {
             revert InvalidBps(_sellBpsBalToUsdc);
@@ -302,6 +304,20 @@ contract AuraAvatarTwoToken is
         minOutBpsBalToBpt.min = _minOutBpsBalToBptMin;
 
         emit MinOutBpsBalToBptMinUpdated(_minOutBpsBalToBptMin, oldMinOutBpsBalToBptMin);
+    }
+
+    function setTwapPeriod(uint256 _twapPeriod) external onlyOwner {
+        uint256 oldTwapPeriod = twapPeriod;
+
+        twapPeriod = _twapPeriod;
+        emit TwapPeriodUpdated(_twapPeriod, oldTwapPeriod);
+    }
+
+    function setClaimFrequency(uint256 _claimFrequency) external onlyOwner {
+        uint256 oldClaimFrequency = claimFrequency;
+
+        claimFrequency = _claimFrequency;
+        emit ClaimFrequencyUpdated(_claimFrequency, oldClaimFrequency);
     }
 
     ////////////////////////////////////////////////////////////////////////////
@@ -498,22 +514,22 @@ contract AuraAvatarTwoToken is
 
     // NOTE: Assumes USDC is pegged. We should sell for other stableecoins if not
     function getBalAmountInUsdc(uint256 _balAmount) public view returns (uint256 usdcAmount_) {
-        uint256 balInUsd = fetchPriceFromClFeed(BAL_USD_FEED);
+        uint256 balInUsd = fetchPriceFromClFeed(BAL_USD_FEED, CL_FEED_STALE_PERIOD);
         // Divisor is 10^20 and uint256 max ~ 10^77 so this shouldn't overflow for normal amounts
         usdcAmount_ = (_balAmount * balInUsd) / BAL_USD_FEED_DIVISOR;
     }
 
     // NOTE: Assumes USDC is pegged. We should sell for other stableecoins if not
     function getAuraAmountInUsdc(uint256 _auraAmount) public view returns (uint256 usdcAmount_) {
-        uint256 auraInEth = fetchPriceFromBalancerTwap(BPT_80AURA_20WETH);
-        uint256 ethInUsd = fetchPriceFromClFeed(ETH_USD_FEED);
+        uint256 auraInEth = fetchPriceFromBalancerTwap(BPT_80AURA_20WETH, twapPeriod);
+        uint256 ethInUsd = fetchPriceFromClFeed(ETH_USD_FEED, CL_FEED_STALE_PERIOD);
         // Divisor is 10^38 and uint256 max ~ 10^77 so this shouldn't overflow for normal amounts
         usdcAmount_ = (_auraAmount * auraInEth * ethInUsd) / AURA_USD_FEED_DIVISOR;
     }
 
     // TODO: Maybe use invariant, totalSupply and BAL/ETH feed for this instead of twap?
     function getBalAmountInBpt(uint256 _balAmount) public view returns (uint256 bptAmount_) {
-        uint256 bptPriceInBal = fetchBptPriceFromBalancerTwap(IPriceOracle(address(BPT_80BAL_20WETH)));
+        uint256 bptPriceInBal = fetchBptPriceFromBalancerTwap(IPriceOracle(address(BPT_80BAL_20WETH)), twapPeriod);
         bptAmount_ = (_balAmount * PRECISION) / bptPriceInBal;
     }
 

@@ -26,7 +26,7 @@ abstract contract AuraConstants {
     IBaseRewardPool internal constant AURABAL_REWARDS = IBaseRewardPool(0x5e5ea2048475854a5702F5B8468A51Ba1296EFcC);
 
     IVault internal constant BAURABAL = IVault(0x37d9D2C6035b744849C15F1BFEE8F268a20fCBd8);
-    address internal constant BADGER_VOTER = address(0xA9ed98B5Fb8428d68664f3C5027c62A10d45826b);
+    address internal constant BADGER_VOTER = 0xA9ed98B5Fb8428d68664f3C5027c62A10d45826b;
 
     IERC20MetadataUpgradeable internal constant AURA =
         IERC20MetadataUpgradeable(0xC0c293ce456fF0ED870ADd98a0828Dd4d2903DBF);
