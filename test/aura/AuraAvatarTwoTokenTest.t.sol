@@ -8,14 +8,16 @@ import {ProxyAdmin} from "openzeppelin-contracts/proxy/transparent/ProxyAdmin.so
 import {IERC20MetadataUpgradeable} from
     "openzeppelin-contracts-upgradeable/token/ERC20/extensions/IERC20MetadataUpgradeable.sol";
 
-import {MockV3Aggregator} from "../mocks/MockV3Aggregator.sol";
-import {MAX_BPS, PID_80BADGER_20WBTC, PID_40WBTC_40DIGG_20GRAVIAURA} from "../../src/BaseConstants.sol";
 import {AuraAvatarTwoToken, TokenAmount} from "../../src/aura/AuraAvatarTwoToken.sol";
+import {AuraAvatarOracleUtils} from "../../src/aura/AuraAvatarOracleUtils.sol";
+import {MAX_BPS, PID_80BADGER_20WBTC, PID_40WBTC_40DIGG_20GRAVIAURA} from "../../src/BaseConstants.sol";
 import {AuraConstants} from "../../src/aura/AuraConstants.sol";
 import {IAsset} from "../../src/interfaces/balancer/IAsset.sol";
 import {IBalancerVault, JoinKind} from "../../src/interfaces/balancer/IBalancerVault.sol";
 import {IBaseRewardPool} from "../../src/interfaces/aura/IBaseRewardPool.sol";
 import {IAggregatorV3} from "../../src/interfaces/chainlink/IAggregatorV3.sol";
+
+import {MockV3Aggregator} from "../mocks/MockV3Aggregator.sol";
 
 // TODO: Add event tests
 contract AuraAvatarTwoTokenTest is Test, AuraConstants {
@@ -847,6 +849,20 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
         vm.expectRevert(
             abi.encodeWithSelector(
                 AuraAvatarTwoToken.TooSoon.selector, block.timestamp, avatar.lastClaimTimestamp(), avatar.claimFrequency()
+            )
+        );
+        vm.prank(keeper);
+        avatar.performUpkeep(new bytes(0));
+    }
+
+    function test_performUpkeep_staleFeed() public {
+        vm.prank(owner);
+        avatar.deposit(10e18, 20e18);
+
+        skip(1 weeks);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                AuraAvatarOracleUtils.StalePriceFeed.selector, block.timestamp, BAL_USD_FEED.latestTimestamp(), 24 hours
             )
         );
         vm.prank(keeper);
