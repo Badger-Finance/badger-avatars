@@ -26,7 +26,7 @@ abstract contract AuraAvatarOracleUtils {
         answerUint256_ = uint256(answer);
     }
 
-    function fetchPriceFromBalancerTwap(IPriceOracle _pool, uint256 twapDuration)
+    function fetchPriceFromBalancerTwap(IPriceOracle _pool, uint256 twapPeriod)
         internal
         view
         returns (uint256 price_)
@@ -34,14 +34,14 @@ abstract contract AuraAvatarOracleUtils {
         IPriceOracle.OracleAverageQuery[] memory queries = new IPriceOracle.OracleAverageQuery[](1);
 
         queries[0].variable = IPriceOracle.Variable.PAIR_PRICE;
-        queries[0].secs = twapDuration;
+        queries[0].secs = twapPeriod;
         queries[0].ago = 0; // now
 
         // Gets the balancer time weighted average price denominated in BAL
         price_ = _pool.getTimeWeightedAverage(queries)[0];
     }
 
-    function fetchBptPriceFromBalancerTwap(IPriceOracle _pool, uint256 twapDuration)
+    function fetchBptPriceFromBalancerTwap(IPriceOracle _pool, uint256 twapPeriod)
         internal
         view
         returns (uint256 price_)
@@ -49,7 +49,7 @@ abstract contract AuraAvatarOracleUtils {
         IPriceOracle.OracleAverageQuery[] memory queries = new IPriceOracle.OracleAverageQuery[](1);
 
         queries[0].variable = IPriceOracle.Variable.BPT_PRICE;
-        queries[0].secs = twapDuration;
+        queries[0].secs = twapPeriod;
         queries[0].ago = 0; // now
 
         // Gets the balancer time weighted average price denominated in BAL
