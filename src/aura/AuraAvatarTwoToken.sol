@@ -30,7 +30,7 @@ struct BpsConfig {
 }
 
 /// @title AuraAvatarTwoToken
-/// @notice This contract handles two Balancer Pool Token (BPT) positions on behalf of an owner. It stakes the BPTs on Aura and contains logic for harvesting BAL and AURA rewards. A keeper periodically harvests the positions. Owner has admin rights and can make arbitrary calls using the contract address.
+/// @notice This contract handles two Balancer Pool Token (BPT) positions on behalf of an owner. It stakes the BPTs on Aura and contains logic for harvesting BAL and AURA rewards. A keeper periodically harvests the positions. Owner has admin rights and can make arbitrary calls using the contract address. Contract never holds funds.
 contract AuraAvatarTwoToken is
     BaseAvatar,
     PausableUpgradeable, // TODO: See if move pausable to base
@@ -83,12 +83,12 @@ contract AuraAvatarTwoToken is
     /// @notice The proportion of AURA that is sold for USDC.
     uint256 public sellBpsAuraToUsdc;
 
-    /// @notice The current and minimum value (in bps) controlling the maximum allowed loss in BAL to USDC swap.
+    /// @notice The current and minimum value (in bps) controlling the minimum executable price (as proprtion of oracle price) for a BAL to USDC swap.
     BpsConfig public minOutBpsBalToUsdc;
-    /// @notice The current and minimum value (in bps) controlling the maximum allowed loss in AURA to USDC swap.
+    /// @notice The current and minimum value (in bps) controlling the minimum executable price (as proprtion of oracle price) for an AURA to USDC swap.
     BpsConfig public minOutBpsAuraToUsdc;
 
-    /// @notice The current and minimum value (in bps) controlling the maximum allowed loss in BAL to BAL/ETH swap.
+    /// @notice The current and minimum value (in bps) controlling the minimum executable price (as proprtion of oracle price) for a BAL to BAL/ETH BPT swap.
     BpsConfig public minOutBpsBalToBpt;
 
     /// @notice The timestamp at which rewards were last claimed and harvested.
@@ -261,6 +261,28 @@ contract AuraAvatarTwoToken is
         emit KeeperUpdated(_keeper, oldKeeper);
     }
 
+    /// @notice Updates the duration for which Balancer TWAPs are calculated. Can only be called by owner.
+    /// @param _twapPeriod The new TWAP period in seconds.
+    function setTwapPeriod(uint256 _twapPeriod) external onlyOwner {
+        if (_twapPeriod == 0) {
+            revert ZeroTwapPeriod();
+        }
+
+        uint256 oldTwapPeriod = twapPeriod;
+
+        twapPeriod = _twapPeriod;
+        emit TwapPeriodUpdated(_twapPeriod, oldTwapPeriod);
+    }
+
+    /// @notice Updates the frequency at which rewards are processed by the keeper. Can only be called by owner.
+    /// @param _claimFrequency The new claim frequency in seconds.
+    function setClaimFrequency(uint256 _claimFrequency) external onlyOwner {
+        uint256 oldClaimFrequency = claimFrequency;
+
+        claimFrequency = _claimFrequency;
+        emit ClaimFrequencyUpdated(_claimFrequency, oldClaimFrequency);
+    }
+
     /// @notice Updates the proportion of BAL that is sold for USDC. Can only be called by owner.
     /// @param _sellBpsBalToUsdc The new proportion in bps.
     function setSellBpsBalToUsdc(uint256 _sellBpsBalToUsdc) external onlyOwner {
@@ -287,6 +309,9 @@ contract AuraAvatarTwoToken is
         emit SellBpsAuraToUsdcUpdated(_sellBpsAuraToUsdc, oldSellBpsAuraToUsdc);
     }
 
+    /// @notice Updates the minimum possible value for the minimum executable price (in bps as proportion of an oracle 
+    ///         price) for a BAL to USDC swap. Can only be called by owner.
+    /// @param _minOutBpsBalToUsdcMin The new minimum value in bps.
     function setMinOutBpsBalToUsdcMin(uint256 _minOutBpsBalToUsdcMin) external onlyOwner {
         if (_minOutBpsBalToUsdcMin > MAX_BPS) {
             revert InvalidBps(_minOutBpsBalToUsdcMin);
@@ -303,6 +328,9 @@ contract AuraAvatarTwoToken is
         emit MinOutBpsBalToUsdcMinUpdated(_minOutBpsBalToUsdcMin, oldMinOutBpsBalToUsdcMin);
     }
 
+    /// @notice Updates the minimum possible value for the minimum executable price (in bps as proportion of an oracle 
+    ///         price) for an AURA to USDC swap. Can only be called by owner.
+    /// @param _minOutBpsAuraToUsdcMin The new minimum value in bps.
     function setMinOutBpsAuraToUsdcMin(uint256 _minOutBpsAuraToUsdcMin) external onlyOwner {
         if (_minOutBpsAuraToUsdcMin > MAX_BPS) {
             revert InvalidBps(_minOutBpsAuraToUsdcMin);
@@ -319,6 +347,9 @@ contract AuraAvatarTwoToken is
         emit MinOutBpsAuraToUsdcMinUpdated(_minOutBpsAuraToUsdcMin, oldMinOutBpsAuraToUsdcMin);
     }
 
+    /// @notice Updates the minimum possible value for the minimum executable price (in bps as proportion of an oracle 
+    ///         price) for a BAL to 80BAL-20WETH swap. Can only be called by owner.
+    /// @param _minOutBpsBalToBptMin The new minimum value in bps.
     function setMinOutBpsBalToBptMin(uint256 _minOutBpsBalToBptMin) external onlyOwner {
         if (_minOutBpsBalToBptMin > MAX_BPS) {
             revert InvalidBps(_minOutBpsBalToBptMin);
@@ -333,23 +364,6 @@ contract AuraAvatarTwoToken is
         minOutBpsBalToBpt.min = _minOutBpsBalToBptMin;
 
         emit MinOutBpsBalToBptMinUpdated(_minOutBpsBalToBptMin, oldMinOutBpsBalToBptMin);
-    }
-
-    function setTwapPeriod(uint256 _twapPeriod) external onlyOwner {
-        if (_twapPeriod == 0) {
-            revert ZeroTwapPeriod();
-        }
-        uint256 oldTwapPeriod = twapPeriod;
-
-        twapPeriod = _twapPeriod;
-        emit TwapPeriodUpdated(_twapPeriod, oldTwapPeriod);
-    }
-
-    function setClaimFrequency(uint256 _claimFrequency) external onlyOwner {
-        uint256 oldClaimFrequency = claimFrequency;
-
-        claimFrequency = _claimFrequency;
-        emit ClaimFrequencyUpdated(_claimFrequency, oldClaimFrequency);
     }
 
     ////////////////////////////////////////////////////////////////////////////
@@ -511,26 +525,30 @@ contract AuraAvatarTwoToken is
     // PUBLIC VIEW
     ////////////////////////////////////////////////////////////////////////////
 
-    /// @dev Returns the name of the strategy
+    /// @notice The name of the avatar contract.
     function name() external view returns (string memory name_) {
         name_ = string.concat("Avatar_AuraTwoToken", "_", asset1.symbol(), "_", asset2.symbol());
     }
 
+    /// @notice The version of the contract.
     function version() external pure returns (string memory version_) {
         version_ = "0.0.1";
     }
 
+    /// @notice The two BPT tokens that the avatar is handling.
     function assets() external view returns (IERC20MetadataUpgradeable[2] memory assets_) {
         assets_[0] = asset1;
         assets_[1] = asset2;
     }
 
+    /// @notice The total amounts of both BPT tokens that the avatar is handling.
     function totalAssets() external view returns (uint256[2] memory assetAmounts_) {
         assetAmounts_[0] = baseRewardPool1.balanceOf(address(this));
         assetAmounts_[1] = baseRewardPool2.balanceOf(address(this));
     }
 
-    // NOTE: Includes BAL/AURA in the contract
+    /// @notice The pending BAL and AURA rewards that are yet to be processed.
+    /// @dev Includes any BAL and AURA tokens in the contract.
     function pendingRewards() external view returns (TokenAmount[2] memory rewards_) {
         uint256 balEarned = baseRewardPool1.earned(address(this));
         balEarned += baseRewardPool2.earned(address(this));
@@ -542,16 +560,20 @@ contract AuraAvatarTwoToken is
         rewards_[1] = TokenAmount(address(AURA), totalAura);
     }
 
-    // TODO: Maybe move to internal?
-
-    // NOTE: Assumes USDC is pegged. We should sell for other stableecoins if not
+    /// @notice Converts a given BAL amount into USDC using a Chainlink price feed.
+    /// @dev Assumes USDC is pegged 1:1 to USD. 
+    /// @param _balAmount The input BAL amount.
+    /// @return usdcAmount_ The equivalent amount in USDC.
     function getBalAmountInUsdc(uint256 _balAmount) public view returns (uint256 usdcAmount_) {
         uint256 balInUsd = fetchPriceFromClFeed(BAL_USD_FEED, CL_FEED_HEARTBEAT_BAL_USD);
         // Divisor is 10^20 and uint256 max ~ 10^77 so this shouldn't overflow for normal amounts
         usdcAmount_ = (_balAmount * balInUsd) / BAL_USD_FEED_DIVISOR;
     }
 
-    // NOTE: Assumes USDC is pegged. We should sell for other stableecoins if not
+    /// @notice Converts a given AURA amount into USDC using a Balancer TWAP and a Chainlink price feed.
+    /// @dev Assumes USDC is pegged 1:1 to USD. 
+    /// @param _auraAmount The input AURA amount.
+    /// @return usdcAmount_ The equivalent amount in USDC.
     function getAuraAmountInUsdc(uint256 _auraAmount) public view returns (uint256 usdcAmount_) {
         uint256 auraInEth = fetchPriceFromBalancerTwap(BPT_80AURA_20WETH, twapPeriod);
         uint256 ethInUsd = fetchPriceFromClFeed(ETH_USD_FEED, CL_FEED_HEARTBEAT_ETH_USD);
@@ -559,12 +581,16 @@ contract AuraAvatarTwoToken is
         usdcAmount_ = (_auraAmount * auraInEth * ethInUsd) / AURA_USD_FEED_DIVISOR;
     }
 
+    /// @notice Converts a given BAL amount into 80BAL-20WETH BPT using a Balancer TWAP.
+    /// @param _balAmount The input BAL amount.
+    /// @return bptAmount_ The equivalent amount in 80BAL-20WETH BPT.
     // TODO: Maybe use invariant, totalSupply and BAL/ETH feed for this instead of twap?
     function getBalAmountInBpt(uint256 _balAmount) public view returns (uint256 bptAmount_) {
         uint256 bptPriceInBal = fetchBptPriceFromBalancerTwap(IPriceOracle(address(BPT_80BAL_20WETH)), twapPeriod);
         bptAmount_ = (_balAmount * PRECISION) / bptPriceInBal;
     }
 
+    /// @inheritdoc KeeperCompatibleInterface
     function checkUpkeep(bytes calldata) external view override returns (bool upkeepNeeded_, bytes memory) {
         uint256 balPending1 = baseRewardPool1.earned(address(this));
         uint256 balPending2 = baseRewardPool2.earned(address(this));
@@ -578,11 +604,13 @@ contract AuraAvatarTwoToken is
         }
     }
 
-    /// @notice Returns the expected amount of AURA to be minted given an amount of BAL rewards
+    /// @notice Calculates the expected amount of AURA minted given some BAL rewards.
     /// @dev ref: https://etherscan.io/address/0xc0c293ce456ff0ed870add98a0828dd4d2903dbf#code#F1#L86
-    function getMintableAuraForBalAmount(uint256 _balAmount) public view returns (uint256 amount) {
+    /// @param _balAmount The input BAL reward amount.
+    /// @return auraAmount_ The expected amount of AURA minted.
+    function getMintableAuraForBalAmount(uint256 _balAmount) public view returns (uint256 auraAmount_) {
         // NOTE: Only correct if AURA.minterMinted() == 0
-        //       minterMinted is a private var in the contract, so we can't access it directly
+        // minterMinted is a private var in the contract, so no way to access it on-chain
         uint256 emissionsMinted = AURA.totalSupply() - IAuraToken(address(AURA)).INIT_MINT_AMOUNT();
 
         uint256 cliff = emissionsMinted / IAuraToken(address(AURA)).reductionPerCliff();
@@ -590,11 +618,11 @@ contract AuraAvatarTwoToken is
 
         if (cliff < totalCliffs) {
             uint256 reduction = (((totalCliffs - cliff) * 5) / 2) + 700;
-            amount = (_balAmount * reduction) / totalCliffs;
+            auraAmount_ = (_balAmount * reduction) / totalCliffs;
 
             uint256 amtTillMax = IAuraToken(address(AURA)).EMISSIONS_MAX_SUPPLY() - emissionsMinted;
-            if (amount > amtTillMax) {
-                amount = amtTillMax;
+            if (auraAmount_ > amtTillMax) {
+                auraAmount_ = amtTillMax;
             }
         }
     }
