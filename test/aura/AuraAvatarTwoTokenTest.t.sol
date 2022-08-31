@@ -280,7 +280,7 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
 
     function test_setTwapPeriod_zero() public {
         vm.prank(owner);
-        vm.expectRevert(abi.encodeWithSelector(AuraAvatarTwoToken.InvalidTwapPeriod.selector, 0));
+        vm.expectRevert(abi.encodeWithSelector(AuraAvatarTwoToken.ZeroTwapPeriod.selector));
         avatar.setTwapPeriod(0);
     }
 
