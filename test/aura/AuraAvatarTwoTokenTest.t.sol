@@ -64,6 +64,8 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
     event RewardClaimed(address indexed token, uint256 amount, uint256 timestamp);
     event RewardsToStable(address indexed token, uint256 amount, uint256 timestamp);
 
+    event Transfer(address indexed from, address indexed to, uint256 value);
+
     function setUp() public {
         // TODO: Remove hardcoded block
         vm.createSelectFork("mainnet", 15397859);
@@ -826,6 +828,10 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
         vm.prank(owner);
         avatar.deposit(10e18, 20e18);
 
+        (,, uint256 voterBalanceBefore,) = AURA_LOCKER.lockedBalances(BADGER_VOTER);
+        uint256 bauraBalBalanceBefore = BAURABAL.balanceOf(owner);
+        uint256 usdcBalanceBefore = USDC.balanceOf(owner);
+
         skip(1 weeks);
         forwardClFeed(BAL_USD_FEED, 1 weeks);
         forwardClFeed(ETH_USD_FEED, 1 weeks);
@@ -835,8 +841,23 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
         assertTrue(upkeepNeeded);
 
         vm.prank(keeper);
+        vm.expectEmit(false, false, false, false);
+        emit RewardsToStable(address(USDC), 0, block.timestamp);
         avatar.performUpkeep(new bytes(0));
 
+        // Ensure that rewards were processed properly
+        assertEq(BASE_REWARD_POOL_80BADGER_20WBTC.earned(address(avatar)), 0);
+        assertEq(BASE_REWARD_POOL_40WBTC_40DIGG_20GRAVIAURA.earned(address(avatar)), 0);
+
+        assertEq(BAL.balanceOf(address(avatar)), 0);
+        assertEq(AURA.balanceOf(address(avatar)), 0);
+
+        (,, uint256 voterBalanceAfter,) = AURA_LOCKER.lockedBalances(BADGER_VOTER);
+        assertGt(voterBalanceAfter, voterBalanceBefore);
+        assertGt(BAURABAL.balanceOf(owner), bauraBalBalanceBefore);
+        assertGt(USDC.balanceOf(owner), usdcBalanceBefore);
+
+        // Upkeep is not needed anymore
         (upkeepNeeded,) = avatar.checkUpkeep(new bytes(0));
         assertFalse(upkeepNeeded);
     }
@@ -924,6 +945,8 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
     function test_processRewards_aurabalDeposit() public {
         (, uint256[] memory balances,) = BALANCER_VAULT.getPoolTokens(AURABAL_BAL_WETH_POOL_ID);
 
+        uint256 totalSupplyBefore = AURABAL.totalSupply();
+
         if (balances[1] > balances[0]) {
             uint256 bptAmount = 2 * (balances[1] - balances[0]);
 
@@ -958,7 +981,13 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
         forwardClFeed(BAL_USD_FEED, 1 hours);
         forwardClFeed(ETH_USD_FEED, 1 hours);
 
+        // auraBAL is minted since trading for it is not efficient
+        vm.expectEmit(true, true, false, false);
+        emit Transfer(address(0), address(avatar), 0);
         avatar.processRewards();
+
+        // Confirm minting of auraBAL by checking increase in totalSupply
+        assertGt(AURABAL.totalSupply(), totalSupplyBefore);
     }
 
     ////////////////////////////////////////////////////////////////////////////
