@@ -99,7 +99,6 @@ contract AuraAvatarTwoToken is
     error NothingToWithdraw();
     error NoRewards();
 
-    // TODO: Name?
     error TooSoon(uint256 currentTime, uint256 updateTime, uint256 minDuration);
 
     ////////////////////////////////////////////////////////////////////////////
@@ -614,7 +613,6 @@ contract AuraAvatarTwoToken is
         emit RewardsToStable(address(USDC), totalUsdcEarned, block.timestamp);
     }
 
-    // NOTE: Shouldn't revert since others can claim for this contract
     function claimAndRegisterRewards() internal returns (uint256 totalBal_, uint256 totalAura_) {
         // Update last claimed time
         lastClaimTimestamp = block.timestamp;
