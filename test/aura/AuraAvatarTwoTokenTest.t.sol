@@ -743,6 +743,8 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
         uint256 usdcBalanceBefore = USDC.balanceOf(owner);
 
         skip(1 hours);
+        forwardClFeed(BAL_USD_FEED, 1 hours);
+        forwardClFeed(ETH_USD_FEED, 1 hours);
 
         assertGt(BASE_REWARD_POOL_80BADGER_20WBTC.earned(address(avatar)), 0);
         assertGt(BASE_REWARD_POOL_40WBTC_40DIGG_20GRAVIAURA.earned(address(avatar)), 0);
@@ -825,13 +827,12 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
         avatar.deposit(10e18, 20e18);
 
         skip(1 weeks);
+        forwardClFeed(BAL_USD_FEED, 1 weeks);
+        forwardClFeed(ETH_USD_FEED, 1 weeks);
 
         bool upkeepNeeded;
         (upkeepNeeded,) = avatar.checkUpkeep(new bytes(0));
         assertTrue(upkeepNeeded);
-
-        forwardClFeed(BAL_USD_FEED, 1 weeks);
-        forwardClFeed(ETH_USD_FEED, 1 weeks);
 
         vm.prank(keeper);
         avatar.performUpkeep(new bytes(0));
@@ -911,6 +912,8 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
         avatar.deposit(10e18, 20e18);
 
         skip(1 hours);
+        forwardClFeed(BAL_USD_FEED, 1 hours);
+        forwardClFeed(ETH_USD_FEED, 1 hours);
 
         avatar.setMinOutBpsAuraToUsdcVal(MAX_BPS);
 
@@ -952,6 +955,9 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
         avatar.deposit(10e18, 20e18);
 
         skip(1 hours);
+        forwardClFeed(BAL_USD_FEED, 1 hours);
+        forwardClFeed(ETH_USD_FEED, 1 hours);
+
         avatar.processRewards();
     }
 

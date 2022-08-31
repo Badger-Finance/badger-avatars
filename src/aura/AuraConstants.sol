@@ -50,6 +50,9 @@ abstract contract AuraConstants {
     IAggregatorV3 internal constant BAL_USD_FEED = IAggregatorV3(0xdF2917806E30300537aEB49A7663062F4d1F2b5F);
     IAggregatorV3 internal constant ETH_USD_FEED = IAggregatorV3(0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419);
 
+    uint256 internal constant CL_FEED_HEARTBEAT_ETH_USD = 1 hours;
+    uint256 internal constant CL_FEED_HEARTBEAT_BAL_USD = 24 hours;
+
     IPriceOracle internal constant BPT_80AURA_20WETH = IPriceOracle(0xc29562b045D80fD77c69Bec09541F5c16fe20d9d); // POL from AURA
 
     uint256 internal constant BAL_USD_FEED_DIVISOR = 1e20;
