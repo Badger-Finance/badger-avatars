@@ -39,7 +39,7 @@ jobs:
       - name: Check coverage
         run: forge coverage --report lcov
 
-      - uses: codecov/codecov-action@v3
+      - uses: codecov/codecov-action@v2
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: true
