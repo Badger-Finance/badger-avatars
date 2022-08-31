@@ -8,14 +8,16 @@ import {ProxyAdmin} from "openzeppelin-contracts/proxy/transparent/ProxyAdmin.so
 import {IERC20MetadataUpgradeable} from
     "openzeppelin-contracts-upgradeable/token/ERC20/extensions/IERC20MetadataUpgradeable.sol";
 
-import {MockV3Aggregator} from "../mocks/MockV3Aggregator.sol";
-import {MAX_BPS, PID_80BADGER_20WBTC, PID_40WBTC_40DIGG_20GRAVIAURA} from "../../src/BaseConstants.sol";
 import {AuraAvatarTwoToken, TokenAmount} from "../../src/aura/AuraAvatarTwoToken.sol";
+import {AuraAvatarOracleUtils} from "../../src/aura/AuraAvatarOracleUtils.sol";
+import {MAX_BPS, PID_80BADGER_20WBTC, PID_40WBTC_40DIGG_20GRAVIAURA} from "../../src/BaseConstants.sol";
 import {AuraConstants} from "../../src/aura/AuraConstants.sol";
 import {IAsset} from "../../src/interfaces/balancer/IAsset.sol";
 import {IBalancerVault, JoinKind} from "../../src/interfaces/balancer/IBalancerVault.sol";
 import {IBaseRewardPool} from "../../src/interfaces/aura/IBaseRewardPool.sol";
 import {IAggregatorV3} from "../../src/interfaces/chainlink/IAggregatorV3.sol";
+
+import {MockV3Aggregator} from "../mocks/MockV3Aggregator.sol";
 
 // TODO: Add event tests
 contract AuraAvatarTwoTokenTest is Test, AuraConstants {
@@ -42,6 +44,7 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
     event ManagerUpdated(address indexed oldManager, address indexed newManager);
     event KeeperUpdated(address indexed oldKeeper, address indexed newKeeper);
 
+    event TwapPeriodUpdated(uint256 newTwapPeriod, uint256 oldTwapPeriod);
     event ClaimFrequencyUpdated(uint256 oldClaimFrequency, uint256 newClaimFrequency);
 
     event SellBpsBalToUsdcUpdated(uint256 oldValue, uint256 newValue);
@@ -262,6 +265,20 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
     function test_setKeeper_permissions() public {
         vm.expectRevert("Ownable: caller is not the owner");
         avatar.setKeeper(address(0));
+    }
+
+    function test_setTwapPeriod() public {
+        vm.prank(owner);
+        vm.expectEmit(false, false, false, true);
+        emit TwapPeriodUpdated(4 hours, 1 hours);
+        avatar.setTwapPeriod(4 hours);
+
+        assertEq(avatar.twapPeriod(), 4 hours);
+    }
+
+    function test_setTwapPeriod_permissions() public {
+        vm.expectRevert("Ownable: caller is not the owner");
+        avatar.setTwapPeriod(2 weeks);
     }
 
     function test_setClaimFrequency() public {
@@ -726,6 +743,8 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
         uint256 usdcBalanceBefore = USDC.balanceOf(owner);
 
         skip(1 hours);
+        forwardClFeed(BAL_USD_FEED, 1 hours);
+        forwardClFeed(ETH_USD_FEED, 1 hours);
 
         assertGt(BASE_REWARD_POOL_80BADGER_20WBTC.earned(address(avatar)), 0);
         assertGt(BASE_REWARD_POOL_40WBTC_40DIGG_20GRAVIAURA.earned(address(avatar)), 0);
@@ -808,13 +827,12 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
         avatar.deposit(10e18, 20e18);
 
         skip(1 weeks);
+        forwardClFeed(BAL_USD_FEED, 1 weeks);
+        forwardClFeed(ETH_USD_FEED, 1 weeks);
 
         bool upkeepNeeded;
         (upkeepNeeded,) = avatar.checkUpkeep(new bytes(0));
         assertTrue(upkeepNeeded);
-
-        forwardClFeed(BAL_USD_FEED, 1 weeks);
-        forwardClFeed(ETH_USD_FEED, 1 weeks);
 
         vm.prank(keeper);
         avatar.performUpkeep(new bytes(0));
@@ -853,6 +871,20 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
         avatar.performUpkeep(new bytes(0));
     }
 
+    function test_performUpkeep_staleFeed() public {
+        vm.prank(owner);
+        avatar.deposit(10e18, 20e18);
+
+        skip(1 weeks);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                AuraAvatarOracleUtils.StalePriceFeed.selector, block.timestamp, BAL_USD_FEED.latestTimestamp(), 24 hours
+            )
+        );
+        vm.prank(keeper);
+        avatar.performUpkeep(new bytes(0));
+    }
+
     ////////////////////////////////////////////////////////////////////////////
     // MISC
     ////////////////////////////////////////////////////////////////////////////
@@ -880,6 +912,8 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
         avatar.deposit(10e18, 20e18);
 
         skip(1 hours);
+        forwardClFeed(BAL_USD_FEED, 1 hours);
+        forwardClFeed(ETH_USD_FEED, 1 hours);
 
         avatar.setMinOutBpsAuraToUsdcVal(MAX_BPS);
 
@@ -921,6 +955,9 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
         avatar.deposit(10e18, 20e18);
 
         skip(1 hours);
+        forwardClFeed(BAL_USD_FEED, 1 hours);
+        forwardClFeed(ETH_USD_FEED, 1 hours);
+
         avatar.processRewards();
     }
 

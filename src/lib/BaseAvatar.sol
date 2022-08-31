@@ -11,13 +11,19 @@ import {GlobalAccessControlManaged} from "./GlobalAccessControlManaged.sol";
  * Forwards calls from the owner
  */
 contract BaseAvatar is OwnableUpgradeable, Executor {
+    ////////////////////////////////////////////////////////////////////////////
+    // INITIALIZATION
+    ////////////////////////////////////////////////////////////////////////////
+
     function __BaseAvatar_init(address _owner) public onlyInitializing {
         __Ownable_init();
 
         transferOwnership(_owner);
     }
 
-    /// ===== Permissioned Actions: Owner =====
+    ////////////////////////////////////////////////////////////////////////////
+    // PUBLIC: Owner
+    ////////////////////////////////////////////////////////////////////////////
 
     /**
      * @dev Make arbitrary Ethereum call

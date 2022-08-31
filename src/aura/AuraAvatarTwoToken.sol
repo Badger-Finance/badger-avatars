@@ -29,8 +29,8 @@ struct BpsConfig {
     uint256 min;
 }
 
-// TODO: Natspec
-// NOTE: Ideally, contract should never hold funds
+/// @title AuraAvatarTwoToken
+/// @notice This contract handles two Balancer Pool Token (BPT) positions on behalf of an owner. It stakes the BPTs on Aura and contains logic for harvesting BAL and AURA rewards. A keeper periodically harvests the positions. Owner has admin rights and can make arbitrary calls using the contract address.
 contract AuraAvatarTwoToken is
     BaseAvatar,
     PausableUpgradeable, // TODO: See if move pausable to base
@@ -49,32 +49,49 @@ contract AuraAvatarTwoToken is
     ////////////////////////////////////////////////////////////////////////////
 
     // TODO: Check if this can cause issues
+    /// @notice Pool ID (in AURA Booster) of the first token.
     uint256 public immutable pid1;
+    /// @notice Pool ID (in AURA Booster) of the second token.
     uint256 public immutable pid2;
 
+    /// @notice Address of the first BPT.
     IERC20MetadataUpgradeable public immutable asset1;
+    /// @notice Address of the second BPT.
     IERC20MetadataUpgradeable public immutable asset2;
 
+    /// @notice Address of the staking rewards contract for the first token.
     IBaseRewardPool public immutable baseRewardPool1;
+    /// @notice Address of the staking rewards contract for the second token.
     IBaseRewardPool public immutable baseRewardPool2;
 
     ////////////////////////////////////////////////////////////////////////////
     // STORAGE
     ////////////////////////////////////////////////////////////////////////////
 
+    /// @notice Address of the manager of the avatar. Manager has limited permissions and can harvest rewards or fine-tune operational settings.
     address public manager;
+    /// @notice Address of the keeper of the avatar. Keeper can only harvest rewards at a predefined frequency.
     address public keeper;
 
+    /// @notice The frequency (in seconds) at which the keeper should harvest rewards.
     uint256 public claimFrequency;
+    /// @notice The duration for which AURA and BAL/ETH BPT TWAPs should be calculated. The TWAPs are used to set slippage constraints during swaps.
+    uint256 public twapPeriod;
 
+    /// @notice The proportion of BAL that is sold for USDC.
     uint256 public sellBpsBalToUsdc;
+    /// @notice The proportion of AURA that is sold for USDC.
     uint256 public sellBpsAuraToUsdc;
 
+    /// @notice The current and minimum value (in bps) controlling the maximum allowed loss in BAL to USDC swap.
     BpsConfig public minOutBpsBalToUsdc;
+    /// @notice The current and minimum value (in bps) controlling the maximum allowed loss in AURA to USDC swap.
     BpsConfig public minOutBpsAuraToUsdc;
 
+    /// @notice The current and minimum value (in bps) controlling the maximum allowed loss in BAL to BAL/ETH swap.
     BpsConfig public minOutBpsBalToBpt;
 
+    /// @notice The timestamp at which rewards were last claimed and harvested.
     uint256 public lastClaimTimestamp;
 
     ////////////////////////////////////////////////////////////////////////////
@@ -92,7 +109,6 @@ contract AuraAvatarTwoToken is
     error NothingToWithdraw();
     error NoRewards();
 
-    // TODO: Name?
     error TooSoon(uint256 currentTime, uint256 updateTime, uint256 minDuration);
 
     ////////////////////////////////////////////////////////////////////////////
@@ -102,6 +118,7 @@ contract AuraAvatarTwoToken is
     event ManagerUpdated(address indexed newManager, address indexed oldManager);
     event KeeperUpdated(address indexed newKeeper, address indexed oldKeeper);
 
+    event TwapPeriodUpdated(uint256 newTwapPeriod, uint256 oldTwapPeriod);
     event ClaimFrequencyUpdated(uint256 newClaimFrequency, uint256 oldClaimFrequency);
 
     event SellBpsBalToUsdcUpdated(uint256 newValue, uint256 oldValue);
@@ -125,6 +142,9 @@ contract AuraAvatarTwoToken is
     // INITIALIZATION
     ////////////////////////////////////////////////////////////////////////////
 
+    /// @notice Derives the assets to be handled and corresponding reward pools based on the Aura Pool IDs supplied.
+    /// @param _pid1 Pool ID of the first token.
+    /// @param _pid2 Pool ID of the second token.
     constructor(uint256 _pid1, uint256 _pid2) {
         pid1 = _pid1;
         pid2 = _pid2;
@@ -139,6 +159,10 @@ contract AuraAvatarTwoToken is
         baseRewardPool2 = IBaseRewardPool(crvRewards2);
     }
 
+    /// @notice Initializes the avatar. Calls parent intializers, sets default variable values and does token approvals. Can only be called once.
+    /// @param _owner Address of the initial owner.
+    /// @param _manager Address of the initial manager.
+    /// @param _keeper Address of the initial keeper.
     function initialize(address _owner, address _manager, address _keeper) public initializer {
         __BaseAvatar_init(_owner);
         __Pausable_init();
@@ -147,6 +171,7 @@ contract AuraAvatarTwoToken is
         keeper = _keeper;
 
         claimFrequency = 1 weeks;
+        twapPeriod = 1 hours;
 
         sellBpsBalToUsdc = 7000; // 70%
         sellBpsAuraToUsdc = 3000; // 30%
@@ -183,6 +208,7 @@ contract AuraAvatarTwoToken is
     // MODIFIERS
     ////////////////////////////////////////////////////////////////////////////
 
+    /// @notice Checks whether a call is from the owner or manager.
     modifier onlyOwnerOrManager() {
         if (msg.sender != owner() && msg.sender != manager) {
             revert NotOwnerOrManager(msg.sender);
@@ -190,6 +216,7 @@ contract AuraAvatarTwoToken is
         _;
     }
 
+    /// @notice Checks whether a call is from the keeper.
     modifier onlyKeeper() {
         if (msg.sender != keeper) {
             revert NotKeeper(msg.sender);
@@ -201,10 +228,12 @@ contract AuraAvatarTwoToken is
     // PUBLIC: Owner - Pausing
     ////////////////////////////////////////////////////////////////////////////
 
+    /// @notice Pauses harvests. Can only be called by the owner or the manager.
     function pause() external onlyOwnerOrManager {
         _pause();
     }
 
+    /// @notice Unpauses harvests. Can only be called by the owner.
     function unpause() external onlyOwner {
         _unpause();
     }
@@ -213,6 +242,8 @@ contract AuraAvatarTwoToken is
     // PUBLIC: Owner - Config
     ////////////////////////////////////////////////////////////////////////////
 
+    /// @notice Updates the manager address. Can only be called by owner.
+    /// @param _manager Address of the new manager.
     function setManager(address _manager) external onlyOwner {
         address oldManager = manager;
 
@@ -220,6 +251,8 @@ contract AuraAvatarTwoToken is
         emit ManagerUpdated(_manager, oldManager);
     }
 
+    /// @notice Updates the keeper address. Can only be called by owner.
+    /// @param _keeper Address of the new keeper.
     function setKeeper(address _keeper) external onlyOwner {
         address oldKeeper = keeper;
 
@@ -227,13 +260,8 @@ contract AuraAvatarTwoToken is
         emit KeeperUpdated(_keeper, oldKeeper);
     }
 
-    function setClaimFrequency(uint256 _claimFrequency) external onlyOwner {
-        uint256 oldClaimFrequency = claimFrequency;
-
-        claimFrequency = _claimFrequency;
-        emit ClaimFrequencyUpdated(_claimFrequency, oldClaimFrequency);
-    }
-
+    /// @notice Updates the proportion of BAL that is sold for USDC. Can only be called by owner.
+    /// @param _sellBpsBalToUsdc The new proportion in bps.
     function setSellBpsBalToUsdc(uint256 _sellBpsBalToUsdc) external onlyOwner {
         if (_sellBpsBalToUsdc > MAX_BPS) {
             revert InvalidBps(_sellBpsBalToUsdc);
@@ -245,6 +273,8 @@ contract AuraAvatarTwoToken is
         emit SellBpsBalToUsdcUpdated(_sellBpsBalToUsdc, oldSellBpsBalToUsdc);
     }
 
+    /// @notice Updates the proportion of AURA that is sold for USDC. Can only be called by owner.
+    /// @param _sellBpsAuraToUsdc The new proportion in bps.
     function setSellBpsAuraToUsdc(uint256 _sellBpsAuraToUsdc) external onlyOwner {
         if (_sellBpsAuraToUsdc > MAX_BPS) {
             revert InvalidBps(_sellBpsAuraToUsdc);
@@ -302,6 +332,20 @@ contract AuraAvatarTwoToken is
         minOutBpsBalToBpt.min = _minOutBpsBalToBptMin;
 
         emit MinOutBpsBalToBptMinUpdated(_minOutBpsBalToBptMin, oldMinOutBpsBalToBptMin);
+    }
+
+    function setTwapPeriod(uint256 _twapPeriod) external onlyOwner {
+        uint256 oldTwapPeriod = twapPeriod;
+
+        twapPeriod = _twapPeriod;
+        emit TwapPeriodUpdated(_twapPeriod, oldTwapPeriod);
+    }
+
+    function setClaimFrequency(uint256 _claimFrequency) external onlyOwner {
+        uint256 oldClaimFrequency = claimFrequency;
+
+        claimFrequency = _claimFrequency;
+        emit ClaimFrequencyUpdated(_claimFrequency, oldClaimFrequency);
     }
 
     ////////////////////////////////////////////////////////////////////////////
@@ -498,22 +542,22 @@ contract AuraAvatarTwoToken is
 
     // NOTE: Assumes USDC is pegged. We should sell for other stableecoins if not
     function getBalAmountInUsdc(uint256 _balAmount) public view returns (uint256 usdcAmount_) {
-        uint256 balInUsd = fetchPriceFromClFeed(BAL_USD_FEED);
+        uint256 balInUsd = fetchPriceFromClFeed(BAL_USD_FEED, CL_FEED_HEARTBEAT_BAL_USD);
         // Divisor is 10^20 and uint256 max ~ 10^77 so this shouldn't overflow for normal amounts
         usdcAmount_ = (_balAmount * balInUsd) / BAL_USD_FEED_DIVISOR;
     }
 
     // NOTE: Assumes USDC is pegged. We should sell for other stableecoins if not
     function getAuraAmountInUsdc(uint256 _auraAmount) public view returns (uint256 usdcAmount_) {
-        uint256 auraInEth = fetchPriceFromBalancerTwap(BPT_80AURA_20WETH);
-        uint256 ethInUsd = fetchPriceFromClFeed(ETH_USD_FEED);
+        uint256 auraInEth = fetchPriceFromBalancerTwap(BPT_80AURA_20WETH, twapPeriod);
+        uint256 ethInUsd = fetchPriceFromClFeed(ETH_USD_FEED, CL_FEED_HEARTBEAT_ETH_USD);
         // Divisor is 10^38 and uint256 max ~ 10^77 so this shouldn't overflow for normal amounts
         usdcAmount_ = (_auraAmount * auraInEth * ethInUsd) / AURA_USD_FEED_DIVISOR;
     }
 
     // TODO: Maybe use invariant, totalSupply and BAL/ETH feed for this instead of twap?
     function getBalAmountInBpt(uint256 _balAmount) public view returns (uint256 bptAmount_) {
-        uint256 bptPriceInBal = fetchBptPriceFromBalancerTwap(IPriceOracle(address(BPT_80BAL_20WETH)));
+        uint256 bptPriceInBal = fetchBptPriceFromBalancerTwap(IPriceOracle(address(BPT_80BAL_20WETH)), twapPeriod);
         bptAmount_ = (_balAmount * PRECISION) / bptPriceInBal;
     }
 
@@ -598,7 +642,6 @@ contract AuraAvatarTwoToken is
         emit RewardsToStable(address(USDC), totalUsdcEarned, block.timestamp);
     }
 
-    // NOTE: Shouldn't revert since others can claim for this contract
     function claimAndRegisterRewards() internal returns (uint256 totalBal_, uint256 totalAura_) {
         // Update last claimed time
         lastClaimTimestamp = block.timestamp;
