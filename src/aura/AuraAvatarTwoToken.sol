@@ -104,6 +104,7 @@ contract AuraAvatarTwoToken is
     error InvalidBps(uint256 bps);
     error LessThanBpsMin(uint256 bpsVal, uint256 bpsMin);
     error MoreThanBpsVal(uint256 bpsMin, uint256 bpsVal);
+    error ZeroTwapPeriod();
 
     error NothingToDeposit();
     error NothingToWithdraw();
@@ -335,6 +336,9 @@ contract AuraAvatarTwoToken is
     }
 
     function setTwapPeriod(uint256 _twapPeriod) external onlyOwner {
+        if (_twapPeriod == 0) {
+            revert ZeroTwapPeriod();
+        }
         uint256 oldTwapPeriod = twapPeriod;
 
         twapPeriod = _twapPeriod;
