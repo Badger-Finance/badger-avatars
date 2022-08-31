@@ -13,6 +13,7 @@ import {IVault} from "../interfaces/badger/IVault.sol";
 import {IBalancerVault} from "../interfaces/balancer/IBalancerVault.sol";
 import {IPriceOracle} from "../interfaces/balancer/IPriceOracle.sol";
 import {IAggregatorV3} from "../interfaces/chainlink/IAggregatorV3.sol";
+import {IGelatoOps} from "../interfaces/gelato/IGelatoOps.sol";
 
 abstract contract AuraConstants {
     IBalancerVault internal constant BALANCER_VAULT = IBalancerVault(0xBA12222222228d8Ba445958a75a0704d566BF2C8);
@@ -54,4 +55,6 @@ abstract contract AuraConstants {
 
     uint256 internal constant BAL_USD_FEED_DIVISOR = 1e20;
     uint256 internal constant AURA_USD_FEED_DIVISOR = 1e38;
+
+    IGelatoOps internal constant GELATO_OPS = IGelatoOps(0xB3f5503f93d5Ef84b06993a1975B9D21B962892F);
 }

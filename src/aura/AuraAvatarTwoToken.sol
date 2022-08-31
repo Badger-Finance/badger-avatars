@@ -16,7 +16,6 @@ import {IBaseRewardPool} from "../interfaces/aura/IBaseRewardPool.sol";
 import {IAsset} from "../interfaces/balancer/IAsset.sol";
 import {IBalancerVault, JoinKind} from "../interfaces/balancer/IBalancerVault.sol";
 import {IPriceOracle} from "../interfaces/balancer/IPriceOracle.sol";
-import {KeeperCompatibleInterface} from "../interfaces/chainlink/KeeperCompatibleInterface.sol";
 
 struct TokenAmount {
     address token;
@@ -35,8 +34,7 @@ contract AuraAvatarTwoToken is
     BaseAvatar,
     PausableUpgradeable, // TODO: See if move pausable to base
     AuraConstants,
-    AuraAvatarOracleUtils,
-    KeeperCompatibleInterface
+    AuraAvatarOracleUtils
 {
     ////////////////////////////////////////////////////////////////////////////
     // LIBRARIES
@@ -64,6 +62,7 @@ contract AuraAvatarTwoToken is
 
     address public manager;
     address public keeper;
+    bytes32 public taskId;
 
     uint256 public claimFrequency;
 
@@ -94,6 +93,8 @@ contract AuraAvatarTwoToken is
 
     // TODO: Name?
     error TooSoon(uint256 currentTime, uint256 updateTime, uint256 minDuration);
+
+    error UnregisterTask();
 
     ////////////////////////////////////////////////////////////////////////////
     // EVENTS
@@ -437,6 +438,28 @@ contract AuraAvatarTwoToken is
     }
 
     ////////////////////////////////////////////////////////////////////////////
+    // PUBLIC: Owner - Keeper task register/unregister
+    ////////////////////////////////////////////////////////////////////////////
+
+    function registerTaskInGelato() public onlyOwner {
+        if(taskId == bytes32(0)) {
+            taskId = GELATO_OPS.createTask(
+                address(this),
+                this.performTask.selector, 
+                address(this), 
+                abi.encodeWithSelector(this.checkTask.selector)
+            );
+        }
+    }
+
+    function unregisterTaskInGelato() public onlyOwner {
+        if(taskId == bytes32(0)) {
+            revert UnregisterTask();
+        }
+        GELATO_OPS.cancelTask(taskId);
+    }
+
+    ////////////////////////////////////////////////////////////////////////////
     // PUBLIC: Owner/Manager
     ////////////////////////////////////////////////////////////////////////////
 
@@ -449,7 +472,7 @@ contract AuraAvatarTwoToken is
     // PUBLIC: Keeper
     ////////////////////////////////////////////////////////////////////////////
 
-    function performUpkeep(bytes calldata) external override onlyKeeper whenNotPaused {
+    function performTask() external onlyKeeper whenNotPaused {
         uint256 lastClaimTimestampCached = lastClaimTimestamp;
         uint256 claimFrequencyCached = claimFrequency;
         if ((block.timestamp - lastClaimTimestampCached) < claimFrequencyCached) {
@@ -517,7 +540,7 @@ contract AuraAvatarTwoToken is
         bptAmount_ = (_balAmount * PRECISION) / bptPriceInBal;
     }
 
-    function checkUpkeep(bytes calldata) external view override returns (bool upkeepNeeded_, bytes memory) {
+    function checkTask() external view returns (bool canExec, bytes memory) {
         uint256 balPending1 = baseRewardPool1.earned(address(this));
         uint256 balPending2 = baseRewardPool2.earned(address(this));
 
@@ -525,7 +548,7 @@ contract AuraAvatarTwoToken is
 
         if ((block.timestamp - lastClaimTimestamp) >= claimFrequency) {
             if (balPending1 > 0 || balPending2 > 0 || balBalance > 0) {
-                upkeepNeeded_ = true;
+                canExec = true;
             }
         }
     }

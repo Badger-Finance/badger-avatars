@@ -74,6 +74,7 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
         vm.startPrank(owner);
         BPT_80BADGER_20WBTC.approve(address(avatar), 10e18);
         BPT_40WBTC_40DIGG_20GRAVIAURA.approve(address(avatar), 20e18);
+        avatar.registerTaskInGelato();
         vm.stopPrank();
     }
 
@@ -161,6 +162,10 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
         assertEq(rewards[1].amount, BASE_REWARD_POOL_40WBTC_40DIGG_20GRAVIAURA.earned(address(avatar)));
     }
 
+    function test_jobId() public {
+        assertTrue(avatar.taskId() != bytes32(0));
+    }
+
     ////////////////////////////////////////////////////////////////////////////
     // Ownership
     ////////////////////////////////////////////////////////////////////////////
@@ -194,7 +199,7 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
             // Test pausable action to ensure modifier works
             vm.startPrank(keeper);
             vm.expectRevert("Pausable: paused");
-            avatar.performUpkeep(new bytes(0));
+            avatar.performTask();
             vm.stopPrank();
 
             vm.revertTo(snapId);
@@ -784,23 +789,23 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
 
         skip(1 weeks);
 
-        (bool upkeepNeeded,) = avatar.checkUpkeep(new bytes(0));
-        assertTrue(upkeepNeeded);
+        (bool canExec,) = avatar.checkTask();
+        assertTrue(canExec);
     }
 
     function test_checkUpkeep_premature() public {
         vm.prank(owner);
         avatar.deposit(10e18, 20e18);
 
-        bool upkeepNeeded;
+        bool canExec;
 
-        (upkeepNeeded,) = avatar.checkUpkeep(new bytes(0));
-        assertFalse(upkeepNeeded);
+        (canExec,) = avatar.checkTask();
+        assertFalse(canExec);
 
         skip(1 weeks - 1);
 
-        (upkeepNeeded,) = avatar.checkUpkeep(new bytes(0));
-        assertFalse(upkeepNeeded);
+        (canExec,) = avatar.checkTask();
+        assertFalse(canExec);
     }
 
     function test_performUpkeep() public {
@@ -809,18 +814,18 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
 
         skip(1 weeks);
 
-        bool upkeepNeeded;
-        (upkeepNeeded,) = avatar.checkUpkeep(new bytes(0));
-        assertTrue(upkeepNeeded);
+        bool canExec;
+        (canExec,) = avatar.checkTask();
+        assertTrue(canExec);
 
         forwardClFeed(BAL_USD_FEED, 1 weeks);
         forwardClFeed(ETH_USD_FEED, 1 weeks);
 
         vm.prank(keeper);
-        avatar.performUpkeep(new bytes(0));
+        avatar.performTask();
 
-        (upkeepNeeded,) = avatar.checkUpkeep(new bytes(0));
-        assertFalse(upkeepNeeded);
+        (canExec,) = avatar.checkTask();
+        assertFalse(canExec);
     }
 
     function test_performUpkeep_permissions() public {
@@ -833,7 +838,7 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
 
             vm.expectRevert(abi.encodeWithSelector(AuraAvatarTwoToken.NotKeeper.selector, actors[i]));
             vm.prank(actors[i]);
-            avatar.performUpkeep(new bytes(0));
+            avatar.performTask();
 
             vm.revertTo(snapId);
         }
@@ -850,7 +855,7 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
             )
         );
         vm.prank(keeper);
-        avatar.performUpkeep(new bytes(0));
+        avatar.performTask();
     }
 
     ////////////////////////////////////////////////////////////////////////////
