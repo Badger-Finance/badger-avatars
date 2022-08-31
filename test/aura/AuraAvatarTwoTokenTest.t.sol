@@ -278,6 +278,12 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
         assertEq(avatar.twapPeriod(), 4 hours);
     }
 
+    function test_setTwapPeriod_zero() public {
+        vm.prank(owner);
+        vm.expectRevert(abi.encodeWithSelector(AuraAvatarTwoToken.InvalidTwapPeriod.selector, 0));
+        avatar.setTwapPeriod(0);
+    }
+
     function test_setTwapPeriod_permissions() public {
         vm.expectRevert("Ownable: caller is not the owner");
         avatar.setTwapPeriod(2 weeks);
