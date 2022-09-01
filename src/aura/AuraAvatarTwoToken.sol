@@ -692,8 +692,6 @@ contract AuraAvatarTwoToken is
         swapBptForAuraBal(balEthBptAmount);
 
         // 5. Dogfood auraBAL in Badger vault on behalf of owner
-        uint256 auraBalToDeposit = AURABAL.balanceOf(address(this));
-
         uint256 bauraBalBefore = BAURABAL.balanceOf(ownerCached);
         BAURABAL.depositFor(ownerCached, AURABAL.balanceOf(address(this)));
         uint256 bauraBalAfter = BAURABAL.balanceOf(ownerCached);
