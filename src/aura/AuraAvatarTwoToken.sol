@@ -28,7 +28,7 @@ import {KeeperCompatibleInterface} from "../interfaces/chainlink/KeeperCompatibl
 ///      accounting.
 contract AuraAvatarTwoToken is
     BaseAvatar,
-    PausableUpgradeable, // TODO: See if move pausable to base
+    PausableUpgradeable,
     AuraConstants,
     AuraAvatarOracleUtils,
     KeeperCompatibleInterface
@@ -43,7 +43,6 @@ contract AuraAvatarTwoToken is
     // IMMUTABLES
     ////////////////////////////////////////////////////////////////////////////
 
-    // TODO: Check if this can cause issues
     /// @notice Pool ID (in AURA Booster) of the first token.
     uint256 public immutable pid1;
     /// @notice Pool ID (in AURA Booster) of the second token.
@@ -444,7 +443,6 @@ contract AuraAvatarTwoToken is
             revert NothingToDeposit();
         }
 
-        // TODO: See if can be moved elsewhere
         uint256 bptDeposited1 = baseRewardPool1.balanceOf(address(this));
         uint256 bptDeposited2 = baseRewardPool2.balanceOf(address(this));
         if (bptDeposited1 == 0 && bptDeposited2 == 0) {
@@ -493,9 +491,8 @@ contract AuraAvatarTwoToken is
     }
 
     /// @notice Unstakes a given amount of asset1 and transfers it back to owner. Can only be called by owner.
-    /// @dev This function doesn't claim any rewards.
+    /// @dev This function doesn't claim any rewards. This doesn't revert if 0 is passed.
     /// @param _amountAsset1 Amount of asset1 to be unstaked.
-    // TODO: Maybe revert on 0?
     function withdrawAsset1(uint256 _amountAsset1) public onlyOwner {
         baseRewardPool1.withdrawAndUnwrap(_amountAsset1, false);
         asset1.safeTransfer(owner(), _amountAsset1);
@@ -504,7 +501,7 @@ contract AuraAvatarTwoToken is
     }
 
     /// @notice Unstakes a given amount of asset2 and transfers it back to owner. Can only be called by owner.
-    /// @dev This function doesn't claim any rewards.
+    /// @dev This function doesn't claim any rewards. This doesn't revert if 0 is passed.
     /// @param _amountAsset2 Amount of asset2 to be unstaked.
     function withdrawAsset2(uint256 _amountAsset2) public onlyOwner {
         baseRewardPool2.withdrawAndUnwrap(_amountAsset2, false);
@@ -687,27 +684,25 @@ contract AuraAvatarTwoToken is
         USDC.safeTransfer(ownerCached, totalUsdcEarned);
 
         // 3. Deposit remaining BAL to 80BAL-20ETH BPT
-        uint256 balToDeposit = totalBal - balForUsdc;
-        depositBalToBpt(balToDeposit);
+        depositBalToBpt(totalBal - balForUsdc);
 
         // 4. Swap BPT for auraBAL or lock
-        uint256 balEthBptAmount = BPT_80BAL_20WETH.balanceOf(address(this));
-        swapBptForAuraBal(balEthBptAmount);
+        swapBptForAuraBal(BPT_80BAL_20WETH.balanceOf(address(this)));
 
         // 5. Dogfood auraBAL in Badger vault on behalf of owner
-        uint256 auraBalToDeposit = AURABAL.balanceOf(address(this));
+        uint256 bauraBalBefore = BAURABAL.balanceOf(ownerCached);
         BAURABAL.depositFor(ownerCached, AURABAL.balanceOf(address(this)));
+        uint256 bauraBalAfter = BAURABAL.balanceOf(ownerCached);
 
         // 6. Lock remaining AURA on behalf of Badger voter msig
         uint256 auraToLock = totalAura - auraForUsdc;
         AURA_LOCKER.lock(BADGER_VOTER, auraToLock);
 
         // Return processed amounts
-        // TODO: Return vlAura and bauraBal?
         processed_ = new TokenAmount[](3);
         processed_[0] = TokenAmount(address(USDC), totalUsdcEarned);
         processed_[1] = TokenAmount(address(AURA), auraToLock);
-        processed_[2] = TokenAmount(address(AURABAL), auraBalToDeposit);
+        processed_[2] = TokenAmount(address(BAURABAL), bauraBalAfter - bauraBalBefore);
 
         // Emit events for analysis
         emit RewardsToStable(address(USDC), totalUsdcEarned, block.timestamp);
