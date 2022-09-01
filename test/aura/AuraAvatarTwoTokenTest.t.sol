@@ -19,7 +19,6 @@ import {IAggregatorV3} from "../../src/interfaces/chainlink/IAggregatorV3.sol";
 
 import {MockV3Aggregator} from "../mocks/MockV3Aggregator.sol";
 
-// TODO: Add event tests
 contract AuraAvatarTwoTokenTest is Test, AuraConstants {
     AuraAvatarTwoToken avatar;
 
@@ -770,7 +769,7 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
 
             assertEq(processed[0].token, address(USDC));
             assertEq(processed[1].token, address(AURA));
-            assertEq(processed[2].token, address(AURABAL));
+            assertEq(processed[2].token, address(BAURABAL));
 
             assertGt(processed[0].amount, 0);
             assertGt(processed[1].amount, 0);

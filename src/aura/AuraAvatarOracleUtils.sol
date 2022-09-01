@@ -11,7 +11,6 @@ abstract contract AuraAvatarOracleUtils {
 
     error StalePriceFeed(uint256 currentTime, uint256 updateTime, uint256 maxPeriod);
 
-    // TODO: More checks?
     function fetchPriceFromClFeed(IAggregatorV3 _feed, uint256 _maxStalePeriod)
         internal
         view
