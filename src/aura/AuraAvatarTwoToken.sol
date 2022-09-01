@@ -684,12 +684,10 @@ contract AuraAvatarTwoToken is
         USDC.safeTransfer(ownerCached, totalUsdcEarned);
 
         // 3. Deposit remaining BAL to 80BAL-20ETH BPT
-        uint256 balToDeposit = totalBal - balForUsdc;
-        depositBalToBpt(balToDeposit);
+        depositBalToBpt(totalBal - balForUsdc);
 
         // 4. Swap BPT for auraBAL or lock
-        uint256 balEthBptAmount = BPT_80BAL_20WETH.balanceOf(address(this));
-        swapBptForAuraBal(balEthBptAmount);
+        swapBptForAuraBal(BPT_80BAL_20WETH.balanceOf(address(this)));
 
         // 5. Dogfood auraBAL in Badger vault on behalf of owner
         uint256 bauraBalBefore = BAURABAL.balanceOf(ownerCached);
