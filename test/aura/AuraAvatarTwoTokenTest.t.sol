@@ -540,11 +540,13 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
         assertEq(BASE_REWARD_POOL_40WBTC_40DIGG_20GRAVIAURA.balanceOf(address(avatar)), 10e18);
 
         // lastClaimTimestamp matches current timestamp since it is the first deposit
-        uint256 intialTimestamp = block.timestamp;
-        assertEq(avatar.lastClaimTimestamp(), intialTimestamp);
+        // NOTE: Trick solidity compiler into not optimizing this
+        uint256 initialTimestamp = block.timestamp * 1;
+
+        assertEq(avatar.lastClaimTimestamp(), initialTimestamp);
 
         // Advancing in time
-        skip(3600);
+        skip(1 hours);
 
         // Single asset deposit
         vm.prank(owner);
@@ -559,7 +561,7 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
 
         // lastClaimTimestamp is not set after further deposits
         assertFalse(avatar.lastClaimTimestamp() == block.timestamp);
-        assertEq(avatar.lastClaimTimestamp(), intialTimestamp);
+        assertEq(avatar.lastClaimTimestamp(), initialTimestamp);
     }
 
     function test_deposit_permissions() public {
