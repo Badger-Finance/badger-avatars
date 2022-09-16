@@ -9,6 +9,7 @@ remappings = [
     'safe-contracts/=lib/safe-contracts/contracts/',
 ]
 verbosity = 3
+# via-ir = true
 
 [rpc_endpoints]
 mainnet = "https://eth-mainnet.alchemyapi.io/v2/${ALCHEMY_API_KEY}"

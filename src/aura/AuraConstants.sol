@@ -56,5 +56,7 @@ abstract contract AuraConstants {
     IPriceOracle internal constant BPT_80AURA_20WETH = IPriceOracle(0xc29562b045D80fD77c69Bec09541F5c16fe20d9d); // POL from AURA
 
     uint256 internal constant BAL_USD_FEED_DIVISOR = 1e20;
-    uint256 internal constant AURA_USD_FEED_DIVISOR = 1e38;
+    uint256 internal constant AURA_USD_TWAP_DIVISOR = 1e38;
+
+    uint256 internal constant AURA_USD_SPOT_FACTOR = 1e20;
 }
