@@ -9,7 +9,7 @@ remappings = [
     'safe-contracts/=lib/safe-contracts/contracts/',
 ]
 verbosity = 3
-# via-ir = true
+via-ir = true
 
 solc_version = "0.8.17"
 

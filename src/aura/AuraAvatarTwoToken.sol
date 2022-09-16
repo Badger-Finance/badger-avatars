@@ -666,7 +666,7 @@ contract AuraAvatarTwoToken is BaseAvatar, PausableUpgradeable, AuraAvatarUtils,
 
         int256[] memory limits = new int256[](3);
         limits[0] = int256(_balAmount);
-        limits[2] = -int256((getBalAmountInUsdc(_balAmount) * minOutBpsBalToUsdc.val) / MAX_BPS); //
+        limits[2] = -int256((getBalAmountInUsdc(_balAmount) * minOutBpsBalToUsdc.val) / MAX_BPS);
         IBalancerVault.BatchSwapStep[] memory swaps = new IBalancerVault.BatchSwapStep[](2);
         // BAL --> WETH
         swaps[0] = IBalancerVault.BatchSwapStep({
