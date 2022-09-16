@@ -102,11 +102,11 @@ contract AuraAvatarUtils is AuraConstants {
         //  \ w1 /     \ w2 /
         // -------------------
         //          p1
-        uint256 pricePerShare = LogExpMath.pow(
+        uint256 priceMultiplier = LogExpMath.pow(
             ethPriceInBal * W1_BPT_80BAL_20WETH / W2_BPT_80BAL_20WETH, W2_BPT_80BAL_20WETH
         ) * PRECISION / W1_BPT_80BAL_20WETH;
 
-        bptPriceInBal_ = invariant * pricePerShare / totalSupply;
+        bptPriceInBal_ = invariant * priceMultiplier / totalSupply;
     }
 
     /// @notice Calculates the expected amount of AURA minted given some BAL rewards.
