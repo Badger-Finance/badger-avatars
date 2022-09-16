@@ -30,10 +30,12 @@ jobs:
       - name: Check contract sizes
         run: forge build --force --sizes
         env:
-          FOUNDRY_PROFILE: deployment
+          FOUNDRY_PROFILE: optimized
 
       - name: Check gas snapshots
         run: forge snapshot --check
+        env:
+          FOUNDRY_PROFILE: optimized
 
       - name: Check formatting
         run: forge fmt --check
