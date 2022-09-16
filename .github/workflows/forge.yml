@@ -28,7 +28,7 @@ jobs:
         run: forge test
 
       - name: Check contract sizes
-        run: forge build --sizes
+        run: forge build --force --sizes
 
       - name: Check gas snapshots
         run: forge snapshot --check
