@@ -895,11 +895,10 @@ contract AuraAvatarTwoTokenTest is Test, AuraAvatarUtils {
 
     function test_getBptPriceInBal() public {
         uint256 clPrice = getBptPriceInBal();
-        // Get price from TWAP
-        uint256 twapPrice = fetchBptPriceFromBalancerTwap(IPriceOracle(address(BPT_80BAL_20WETH)), 1 hours);
+        uint256 spotPrice = IPriceOracle(address(BPT_80BAL_20WETH)).getLatest(IPriceOracle.Variable.BPT_PRICE);
 
-        // CL price is within 1% of TWAP
-        assertApproxEqRel(clPrice, twapPrice, 0.01e18);
+        // CL price is within 1% of spot price
+        assertApproxEqRel(clPrice, spotPrice, 0.01e18);
     }
 
     function test_getAuraPriceInUsdSpot() public {
@@ -1040,20 +1039,5 @@ contract AuraAvatarTwoTokenTest is Test, AuraAvatarUtils {
         uint256 lastTimestamp = _feed.latestTimestamp();
         vm.etch(address(_feed), type(MockV3Aggregator).runtimeCode);
         MockV3Aggregator(address(_feed)).updateAnswerAndTimestamp(lastAnswer, lastTimestamp + _duration);
-    }
-
-    function fetchBptPriceFromBalancerTwap(IPriceOracle _pool, uint256 _twapPeriod)
-        internal
-        view
-        returns (uint256 price_)
-    {
-        IPriceOracle.OracleAverageQuery[] memory queries = new IPriceOracle.OracleAverageQuery[](1);
-
-        queries[0].variable = IPriceOracle.Variable.BPT_PRICE;
-        queries[0].secs = _twapPeriod;
-        queries[0].ago = 0; // now
-
-        // Gets the balancer time weighted average price denominated in BAL
-        price_ = _pool.getTimeWeightedAverage(queries)[0];
     }
 }
