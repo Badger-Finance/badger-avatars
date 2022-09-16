@@ -557,12 +557,8 @@ contract AuraAvatarTwoToken is
             revert TooSoon(block.timestamp, lastClaimTimestampCached, claimFrequencyCached);
         }
 
-        uint256 auraPriceInUsdc;
-        if (_performData.length > 0) {
-            auraPriceInUsdc = abi.decode(_performData, (uint256));
-        }
-
-        processRewardsInternal(auraPriceInUsdc);
+        uint256 auraPriceInUsd = abi.decode(_performData, (uint256));
+        processRewardsInternal(auraPriceInUsd);
     }
 
     ////////////////////////////////////////////////////////////////////////////
@@ -626,7 +622,8 @@ contract AuraAvatarTwoToken is
     }
 
     /// @notice Gets the spot price of AURA in USD based on average market price for pending AURA rewards.
-    /// @dev Assumes USDC is pegged 1:1 to USD.
+    /// @dev Reverts if there are no pending AURA rewards.
+    ///      Assumes USDC is pegged 1:1 to USD.
     /// @return usdPrice_ The price of 1 AURA in USD (8 decimal precision).
     function getAuraPriceInUsdSpot() public returns (uint256 usdPrice_) {
         (, uint256 totalAura) = estimateRewards();
@@ -847,7 +844,7 @@ contract AuraAvatarTwoToken is
         limits[0] = int256(_auraAmount);
         // Use max(TWAP price, reference price) as oracle price for AURA.
         // If reference price is the spot price then swap will only process if:
-        //  1. TWAP price is less than spot price o
+        //  1. TWAP price is less than spot price.
         //  2. TWAP price is within the slippage threshold of spot price.
         uint256 expectedUsdcOut =
             MathUpgradeable.max(_auraAmount * _auraPriceInUsd / AURA_USD_SPOT_FACTOR, getAuraAmountInUsdc(_auraAmount));

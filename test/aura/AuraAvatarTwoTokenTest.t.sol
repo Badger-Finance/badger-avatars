@@ -834,8 +834,11 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
 
         skip(1 weeks);
 
-        (bool upkeepNeeded,) = avatar.checkUpkeep(new bytes(0));
+        (bool upkeepNeeded, bytes memory performData) = avatar.checkUpkeep(new bytes(0));
         assertTrue(upkeepNeeded);
+
+        uint256 auraPriceInUsd = abi.decode(performData, (uint256));
+        assertGt(auraPriceInUsd, 0);
     }
 
     function test_checkUpkeep_premature() public {
@@ -853,7 +856,7 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
         assertFalse(upkeepNeeded);
     }
 
-    function test_performUpkeep_noPerformData() public {
+    function test_performUpkeep() public {
         vm.prank(owner);
         avatar.deposit(10e18, 20e18);
 
@@ -870,7 +873,7 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
         vm.prank(keeper);
         vm.expectEmit(false, false, false, false);
         emit RewardsToStable(address(USDC), 0, block.timestamp);
-        avatar.performUpkeep(new bytes(0));
+        avatar.performUpkeep(abi.encode(uint256(0)));
 
         // Ensure that rewards were processed properly
         assertEq(BASE_REWARD_POOL_80BADGER_20WBTC.earned(address(avatar)), 0);
@@ -933,7 +936,7 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
             )
         );
         vm.prank(keeper);
-        avatar.performUpkeep(new bytes(0));
+        avatar.performUpkeep(abi.encode(uint256(0)));
     }
 
     ////////////////////////////////////////////////////////////////////////////
