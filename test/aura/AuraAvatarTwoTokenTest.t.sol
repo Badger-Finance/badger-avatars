@@ -827,9 +827,10 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
 
         skipAndForwardFeeds(1 hours);
 
-        // TODO
+        uint256 auraPriceInUsd = avatar.getAuraPriceInUsdSpot();
+
         vm.expectRevert("BAL#507");
-        avatar.processRewards(100e18);
+        avatar.processRewards(2 * auraPriceInUsd);
     }
 
     ////////////////////////////////////////////////////////////////////////////
@@ -1033,6 +1034,22 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
 
         // Confirm minting of auraBAL by checking increase in totalSupply
         assertGt(AURABAL.totalSupply(), totalSupplyBefore);
+    }
+
+    function test_upkeep() public {
+        vm.prank(owner);
+        avatar.deposit(10e18, 20e18);
+
+        skipAndForwardFeeds(1 weeks);
+
+        (bool upkeepNeeded, bytes memory performData) = avatar.checkUpkeep(new bytes(0));
+        uint256 auraPriceInUsd = abi.decode(performData, (uint256));
+
+        assertTrue(upkeepNeeded);
+        assertGt(auraPriceInUsd, 0);
+
+        vm.prank(keeper);
+        avatar.performUpkeep(performData);
     }
 
     ////////////////////////////////////////////////////////////////////////////
