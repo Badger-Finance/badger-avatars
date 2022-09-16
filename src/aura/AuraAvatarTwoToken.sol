@@ -181,11 +181,11 @@ contract AuraAvatarTwoToken is
         sellBpsAuraToUsdc = 3000; // 30%
 
         minOutBpsBalToUsdc = BpsConfig({
-            val: 9825, // 98.25%
+            val: 9750, // 97.5%
             min: 9000 // 90%
         });
         minOutBpsAuraToUsdc = BpsConfig({
-            val: 9825, // 98.25%
+            val: 9750, // 97.5%
             min: 9000 // 90%
         });
         minOutBpsBalToBpt = BpsConfig({
