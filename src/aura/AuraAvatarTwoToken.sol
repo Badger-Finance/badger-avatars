@@ -642,18 +642,18 @@ contract AuraAvatarTwoToken is
         uint256 invariant = IWeightedPool(address(BPT_80BAL_20WETH)).getInvariant();
         uint256 totalSupply = BPT_80BAL_20WETH.totalSupply();
 
-        uint256 w1 = 0.8e18;
-        uint256 w2 = 0.2e18;
         // p1: Price of BAL
         // p2: Price of ETH
         //        w1         w2
-        //  / p1 \     / p2 \  
-        // |  --  | . |  --  |        
-        //  \ w1 /     \ w2 /             
-        // -------------------                                                                    
+        //  / p1 \     / p2 \
+        // |  --  | . |  --  |
+        //  \ w1 /     \ w2 /
+        // -------------------
         //          p1
         //
-        uint256 pricePerShare = LogExpMath.pow(w1 * ethPriceInBal / w2, w2) * PRECISION / w1;
+        uint256 pricePerShare = LogExpMath.pow(
+            ethPriceInBal * W1_BPT_80BAL_20WETH / W2_BPT_80BAL_20WETH, W2_BPT_80BAL_20WETH
+        ) * PRECISION / W1_BPT_80BAL_20WETH;
 
         bptPriceInBal_ = invariant * pricePerShare / totalSupply;
     }

@@ -42,7 +42,7 @@ library LogExpMath {
     int256 constant LN_36_LOWER_BOUND = ONE_18 - 1e17;
     int256 constant LN_36_UPPER_BOUND = ONE_18 + 1e17;
 
-    uint256 constant MILD_EXPONENT_BOUND = 2**254 / uint256(ONE_20);
+    uint256 constant MILD_EXPONENT_BOUND = 2 ** 254 / uint256(ONE_20);
 
     // 18 decimal constants
     int256 constant x0 = 128000000000000000000; // 2ˆ7
@@ -118,8 +118,7 @@ library LogExpMath {
 
         // Finally, we compute exp(y * ln(x)) to arrive at x^y
         _require(
-            MIN_NATURAL_EXPONENT <= logx_times_y && logx_times_y <= MAX_NATURAL_EXPONENT,
-            Errors.PRODUCT_OUT_OF_BOUNDS
+            MIN_NATURAL_EXPONENT <= logx_times_y && logx_times_y <= MAX_NATURAL_EXPONENT, Errors.PRODUCT_OUT_OF_BOUNDS
         );
 
         return uint256(exp(logx_times_y));

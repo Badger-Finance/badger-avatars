@@ -60,4 +60,7 @@ abstract contract AuraConstants {
     uint256 internal constant AURA_USD_TWAP_DIVISOR = 1e38;
 
     uint256 internal constant AURA_USD_SPOT_FACTOR = 1e20;
+
+    uint256 internal constant W1_BPT_80BAL_20WETH = 0.8e18;
+    uint256 internal constant W2_BPT_80BAL_20WETH = 0.2e18;
 }

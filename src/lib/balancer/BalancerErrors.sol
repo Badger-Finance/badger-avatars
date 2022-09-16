@@ -22,7 +22,9 @@ pragma solidity ^0.8.0;
  * Uses the default 'BAL' prefix for the error code
  */
 function _require(bool condition, uint256 errorCode) pure {
-    if (!condition) _revert(errorCode);
+    if (!condition) {
+        _revert(errorCode);
+    }
 }
 
 /**
@@ -30,7 +32,9 @@ function _require(bool condition, uint256 errorCode) pure {
  * supported.
  */
 function _require(bool condition, uint256 errorCode, bytes3 prefix) pure {
-    if (!condition) _revert(errorCode, prefix);
+    if (!condition) {
+        _revert(errorCode, prefix);
+    }
 }
 
 /**

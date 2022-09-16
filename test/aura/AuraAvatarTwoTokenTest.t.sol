@@ -912,7 +912,10 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
         skip(1 weeks - 1);
         vm.expectRevert(
             abi.encodeWithSelector(
-                AuraAvatarTwoToken.TooSoon.selector, block.timestamp, avatar.lastClaimTimestamp(), avatar.claimFrequency()
+                AuraAvatarTwoToken.TooSoon.selector,
+                block.timestamp,
+                avatar.lastClaimTimestamp(),
+                avatar.claimFrequency()
             )
         );
         vm.prank(keeper);
