@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.16;
+pragma solidity ^0.8.0;
 
 import {IPriceOracle} from "../interfaces/balancer/IPriceOracle.sol";
 import {IAggregatorV3} from "../interfaces/chainlink/IAggregatorV3.sol";

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.16;
+pragma solidity ^0.8.0;
 
 import {MathUpgradeable} from "openzeppelin-contracts-upgradeable/utils/math/MathUpgradeable.sol";
 import {PausableUpgradeable} from "openzeppelin-contracts-upgradeable/security/PausableUpgradeable.sol";
@@ -540,15 +540,6 @@ contract AuraAvatarTwoToken is
         returns (TokenAmount[] memory processed_)
     {
         processed_ = processRewardsInternal(_auraPriceInUsdc);
-    }
-
-    /// @notice Claim and process BAL and AURA rewards, selling some of it to USDC and depositing the rest to bauraBAL
-    ///         and vlAURA. Can be called by the owner or manager.
-    /// @dev This can be called by the owner or manager to opportunistically harvest in good market conditions.
-    /// @return processed_ An array containing addresses and amounts of harvested tokens (i.e. tokens that have finally
-    ///                    been swapped into).
-    function processRewards() external onlyOwnerOrManager returns (TokenAmount[] memory processed_) {
-        processed_ = processRewardsInternal(0);
     }
 
     ////////////////////////////////////////////////////////////////////////////

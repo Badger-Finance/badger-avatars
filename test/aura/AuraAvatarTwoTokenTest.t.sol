@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.16;
+pragma solidity ^0.8.0;
 
 import {console2 as console} from "forge-std/console2.sol";
 import {Test} from "forge-std/Test.sol";
@@ -743,7 +743,7 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
     // Actions: Owner/Manager
     ////////////////////////////////////////////////////////////////////////////
 
-    function test_processRewards() public {
+    function test_processRewards_noAuraPrice() public {
         vm.prank(owner);
         avatar.deposit(10e18, 20e18);
 
@@ -765,7 +765,7 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
             vm.prank(actors[i]);
             vm.expectEmit(false, false, false, false);
             emit RewardsToStable(address(USDC), 0, block.timestamp);
-            TokenAmount[] memory processed = avatar.processRewards();
+            TokenAmount[] memory processed = avatar.processRewards(0);
 
             (,, uint256 voterBalanceAfter,) = AURA_LOCKER.lockedBalances(BADGER_VOTER);
 
@@ -793,13 +793,13 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
 
     function test_processRewards_permissions() public {
         vm.expectRevert(abi.encodeWithSelector(AuraAvatarTwoToken.NotOwnerOrManager.selector, address(this)));
-        avatar.processRewards();
+        avatar.processRewards(0);
     }
 
     function test_processRewards_noRewards() public {
         vm.expectRevert(AuraAvatarTwoToken.NoRewards.selector);
         vm.prank(owner);
-        avatar.processRewards();
+        avatar.processRewards(0);
     }
 
     ////////////////////////////////////////////////////////////////////////////
@@ -831,7 +831,7 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
         assertFalse(upkeepNeeded);
     }
 
-    function test_performUpkeep() public {
+    function test_performUpkeep_noPerformData() public {
         vm.prank(owner);
         avatar.deposit(10e18, 20e18);
 
@@ -920,6 +920,12 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
     function test_debug() public {
         console.log(avatar.getBalAmountInUsdc(1e18));
         console.log(avatar.getAuraAmountInUsdc(1e18));
+
+        vm.startPrank(owner);
+        avatar.deposit(10e18, 20e18);
+
+        skip(1 hours);
+        console.log(avatar.getAuraPriceInUsdSpot());
     }
 
     function test_processRewards_highBalMinBps() public {
@@ -931,7 +937,7 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
         avatar.setMinOutBpsBalToUsdcVal(MAX_BPS);
 
         vm.expectRevert("BAL#507");
-        avatar.processRewards();
+        avatar.processRewards(0);
     }
 
     // TODO: This might not revert, maybe remove?
@@ -946,7 +952,7 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
         avatar.setMinOutBpsAuraToUsdcVal(MAX_BPS);
 
         vm.expectRevert("BAL#507");
-        avatar.processRewards();
+        avatar.processRewards(0);
     }
 
     function test_processRewards_aurabalDeposit() public {
@@ -991,7 +997,7 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
         // auraBAL is minted since trading for it is not efficient
         vm.expectEmit(true, true, false, false);
         emit Transfer(address(0), address(avatar), 0);
-        avatar.processRewards();
+        avatar.processRewards(0);
 
         // Confirm minting of auraBAL by checking increase in totalSupply
         assertGt(AURABAL.totalSupply(), totalSupplyBefore);
