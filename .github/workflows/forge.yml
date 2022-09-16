@@ -29,6 +29,8 @@ jobs:
 
       - name: Check contract sizes
         run: forge build --force --sizes
+        env:
+          FOUNDRY_PROFILE: deployment
 
       - name: Check gas snapshots
         run: forge snapshot --check
@@ -38,7 +40,5 @@ jobs:
 
       - name: Check coverage
         run: forge coverage --report lcov
-        env:
-          FOUNDRY_PROFILE: coverage
 
       - uses: codecov/codecov-action@v3
