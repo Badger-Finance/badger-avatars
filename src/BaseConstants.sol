@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.16;
+pragma solidity ^0.8.0;
 
 uint256 constant MAX_BPS = 10000;
 uint256 constant PRECISION = 1e18;

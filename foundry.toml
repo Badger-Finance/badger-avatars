@@ -11,5 +11,7 @@ remappings = [
 verbosity = 3
 # via-ir = true
 
+solc_version = "0.8.17"
+
 [rpc_endpoints]
 mainnet = "https://eth-mainnet.alchemyapi.io/v2/${ALCHEMY_API_KEY}"

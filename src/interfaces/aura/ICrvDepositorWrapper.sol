@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.16;
+pragma solidity ^0.8.0;
 
 interface ICrvDepositorWrapper {
     function getMinOut(uint256, uint256) external view returns (uint256);
