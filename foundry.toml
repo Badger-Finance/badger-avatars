@@ -13,5 +13,8 @@ via-ir = true
 
 solc_version = "0.8.17"
 
+[profile.coverage]
+via-ir = false
+
 [rpc_endpoints]
 mainnet = "https://eth-mainnet.alchemyapi.io/v2/${ALCHEMY_API_KEY}"
