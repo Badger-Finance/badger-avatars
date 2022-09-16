@@ -10,13 +10,15 @@ import {IERC20MetadataUpgradeable} from
 import {BaseAvatar} from "../lib/BaseAvatar.sol";
 import {AuraConstants} from "./AuraConstants.sol";
 import {AuraAvatarOracleUtils} from "./AuraAvatarOracleUtils.sol";
-import {MAX_BPS, PRECISION} from "../BaseConstants.sol";
+import {MAX_BPS, PRECISION, PRECISION_DOUBLE} from "../BaseConstants.sol";
 import {BpsConfig, TokenAmount} from "../BaseStructs.sol";
+import {LogExpMath} from "../lib/balancer/LogExpMath.sol";
 
 import {IAuraToken} from "../interfaces/aura/IAuraToken.sol";
 import {IBaseRewardPool} from "../interfaces/aura/IBaseRewardPool.sol";
 import {IAsset} from "../interfaces/balancer/IAsset.sol";
 import {IBalancerVault, JoinKind} from "../interfaces/balancer/IBalancerVault.sol";
+import {IWeightedPool} from "../interfaces/balancer/IWeightedPool.sol";
 import {IPriceOracle} from "../interfaces/balancer/IPriceOracle.sol";
 import {KeeperCompatibleInterface} from "../interfaces/chainlink/KeeperCompatibleInterface.sol";
 
@@ -607,7 +609,7 @@ contract AuraAvatarTwoToken is
     /// @param _balAmount The input BAL amount.
     /// @return usdcAmount_ The equivalent amount in USDC.
     function getBalAmountInUsdc(uint256 _balAmount) public view returns (uint256 usdcAmount_) {
-        uint256 balInUsd = fetchPriceFromClFeed(BAL_USD_FEED, CL_FEED_HEARTBEAT_BAL_USD);
+        uint256 balInUsd = fetchPriceFromClFeed(BAL_USD_FEED, CL_FEED_HEARTBEAT_BAL);
         // Divisor is 10^20 and uint256 max ~ 10^77 so this shouldn't overflow for normal amounts
         usdcAmount_ = (_balAmount * balInUsd) / BAL_USD_FEED_DIVISOR;
     }
@@ -623,7 +625,7 @@ contract AuraAvatarTwoToken is
         usdcAmount_ = (_auraAmount * auraInEth * ethInUsd) / AURA_USD_TWAP_DIVISOR;
     }
 
-    /// @notice Gets the spot price of AURA in USD.
+    /// @notice Gets the spot price of AURA in USD based on average market price for pending AURA rewards.
     /// @dev Assumes USDC is pegged 1:1 to USD.
     /// @return usdPrice_ The price of 1 AURA in USD (8 decimal precision).
     function getAuraPriceInUsdSpot() public returns (uint256 usdPrice_) {
@@ -632,26 +634,37 @@ contract AuraAvatarTwoToken is
         usdPrice_ = querySwapAuraForUsdc(totalAura) * AURA_USD_SPOT_FACTOR / totalAura;
     }
 
+    /// @notice Calculates the price of 80BAL-20WETH BPT in BAL using the BAL-ETH CL feed.
+    /// @return bptPriceInBal_ The price of 80BAL-20WETH BPT in BAL.
+    function getBptPriceInBal() public view returns (uint256 bptPriceInBal_) {
+        uint256 ethPriceInBal = PRECISION_DOUBLE / fetchPriceFromClFeed(BAL_ETH_FEED, CL_FEED_HEARTBEAT_BAL);
+
+        uint256 invariant = IWeightedPool(address(BPT_80BAL_20WETH)).getInvariant();
+        uint256 totalSupply = BPT_80BAL_20WETH.totalSupply();
+
+        uint256 w1 = 0.8e18;
+        uint256 w2 = 0.2e18;
+        // p1: Price of BAL
+        // p2: Price of ETH
+        //        w1         w2
+        //  / p1 \     / p2 \  
+        // |  --  | . |  --  |        
+        //  \ w1 /     \ w2 /             
+        // -------------------                                                                    
+        //          p1
+        //
+        uint256 pricePerShare = LogExpMath.pow(w1 * ethPriceInBal / w2, w2) * PRECISION / w1;
+
+        bptPriceInBal_ = invariant * pricePerShare / totalSupply;
+    }
+
     /// @notice Converts a given BAL amount into 80BAL-20WETH BPT using a Balancer TWAP.
     /// @param _balAmount The input BAL amount.
     /// @return bptAmount_ The equivalent amount in 80BAL-20WETH BPT.
-    // TODO: Maybe use invariant, totalSupply and BAL/ETH feed for this instead of twap?
     function getBalAmountInBpt(uint256 _balAmount) public view returns (uint256 bptAmount_) {
-        uint256 bptPriceInBal = fetchBptPriceFromBalancerTwap(IPriceOracle(address(BPT_80BAL_20WETH)), twapPeriod);
+        uint256 bptPriceInBal = getBptPriceInBal();
         bptAmount_ = (_balAmount * PRECISION) / bptPriceInBal;
     }
-
-    // /// @notice Converts a given BAL amount into 80BAL-20WETH BPT using a Balancer TWAP.
-    // /// @param _balAmount The input BAL amount.
-    // /// @return bptAmount_ The equivalent amount in 80BAL-20WETH BPT.
-    // function getBalAmountInBpt2(uint256 _balAmount) public view returns (uint256 bptAmount_) {
-    //     uint256 invariant = BPT_80BAL_20WETH.getInvariant();
-    //     uint256 totalSupply = BPT_80BAL_20WETH.totalSupply();
-
-    //     uint256 balPriceInEth = fetchPriceFromClFeed(BAL_ETH_FEED);
-    //     // Divisor is 10^20 and uint256 max ~ 10^77 so this shouldn't overflow for normal amounts
-    //     bptAmount_ = (_balAmount * invariant) / totalSupply;
-    // }
 
     /// @notice Checks whether an upkeep is to be performed.
     /// @return upkeepNeeded_ A boolean indicating whether an upkeep is to be performed.

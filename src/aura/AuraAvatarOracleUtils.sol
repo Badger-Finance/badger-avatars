@@ -39,19 +39,4 @@ abstract contract AuraAvatarOracleUtils {
         // Gets the balancer time weighted average price denominated in BAL
         price_ = _pool.getTimeWeightedAverage(queries)[0];
     }
-
-    function fetchBptPriceFromBalancerTwap(IPriceOracle _pool, uint256 _twapPeriod)
-        internal
-        view
-        returns (uint256 price_)
-    {
-        IPriceOracle.OracleAverageQuery[] memory queries = new IPriceOracle.OracleAverageQuery[](1);
-
-        queries[0].variable = IPriceOracle.Variable.BPT_PRICE;
-        queries[0].secs = _twapPeriod;
-        queries[0].ago = 0; // now
-
-        // Gets the balancer time weighted average price denominated in BAL
-        price_ = _pool.getTimeWeightedAverage(queries)[0];
-    }
 }

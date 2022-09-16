@@ -743,17 +743,10 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
     // Actions: Owner/Manager
     ////////////////////////////////////////////////////////////////////////////
 
-    function test_processRewards_noAuraPrice() public {
-        vm.prank(owner);
-        avatar.deposit(10e18, 20e18);
-
+    function checked_processRewards(uint256 _auraPriceInUsd) internal {
         (,, uint256 voterBalanceBefore,) = AURA_LOCKER.lockedBalances(BADGER_VOTER);
         uint256 bauraBalBalanceBefore = BAURABAL.balanceOf(owner);
         uint256 usdcBalanceBefore = USDC.balanceOf(owner);
-
-        skip(1 hours);
-        forwardClFeed(BAL_USD_FEED, 1 hours);
-        forwardClFeed(ETH_USD_FEED, 1 hours);
 
         assertGt(BASE_REWARD_POOL_80BADGER_20WBTC.earned(address(avatar)), 0);
         assertGt(BASE_REWARD_POOL_40WBTC_40DIGG_20GRAVIAURA.earned(address(avatar)), 0);
@@ -765,7 +758,7 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
             vm.prank(actors[i]);
             vm.expectEmit(false, false, false, false);
             emit RewardsToStable(address(USDC), 0, block.timestamp);
-            TokenAmount[] memory processed = avatar.processRewards(0);
+            TokenAmount[] memory processed = avatar.processRewards(_auraPriceInUsd);
 
             (,, uint256 voterBalanceAfter,) = AURA_LOCKER.lockedBalances(BADGER_VOTER);
 
@@ -791,6 +784,24 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
         }
     }
 
+    function test_processRewards() public {
+        vm.prank(owner);
+        avatar.deposit(10e18, 20e18);
+
+        skipAndForwardFeeds(1 hours);
+
+        checked_processRewards(avatar.getAuraPriceInUsdSpot());
+    }
+
+    function test_processRewards_noAuraPrice() public {
+        vm.prank(owner);
+        avatar.deposit(10e18, 20e18);
+
+        skipAndForwardFeeds(1 hours);
+
+        checked_processRewards(0);
+    }
+
     function test_processRewards_permissions() public {
         vm.expectRevert(abi.encodeWithSelector(AuraAvatarTwoToken.NotOwnerOrManager.selector, address(this)));
         avatar.processRewards(0);
@@ -800,6 +811,17 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
         vm.expectRevert(AuraAvatarTwoToken.NoRewards.selector);
         vm.prank(owner);
         avatar.processRewards(0);
+    }
+
+    function test_processRewards_highAuraPrice() public {
+        vm.startPrank(owner);
+        avatar.deposit(10e18, 20e18);
+
+        skipAndForwardFeeds(1 hours);
+
+        // TODO
+        vm.expectRevert("BAL#507");
+        avatar.processRewards(100e18);
     }
 
     ////////////////////////////////////////////////////////////////////////////
@@ -839,9 +861,7 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
         uint256 bauraBalBalanceBefore = BAURABAL.balanceOf(owner);
         uint256 usdcBalanceBefore = USDC.balanceOf(owner);
 
-        skip(1 weeks);
-        forwardClFeed(BAL_USD_FEED, 1 weeks);
-        forwardClFeed(ETH_USD_FEED, 1 weeks);
+        skipAndForwardFeeds(1 weeks);
 
         bool upkeepNeeded;
         (upkeepNeeded,) = avatar.checkUpkeep(new bytes(0));
@@ -921,6 +941,8 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
         console.log(avatar.getBalAmountInUsdc(1e18));
         console.log(avatar.getAuraAmountInUsdc(1e18));
 
+        console.log(avatar.getBptPriceInBal());
+
         vm.startPrank(owner);
         avatar.deposit(10e18, 20e18);
 
@@ -945,9 +967,7 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
         vm.startPrank(owner);
         avatar.deposit(10e18, 20e18);
 
-        skip(1 hours);
-        forwardClFeed(BAL_USD_FEED, 1 hours);
-        forwardClFeed(ETH_USD_FEED, 1 hours);
+        skipAndForwardFeeds(1 hours);
 
         avatar.setMinOutBpsAuraToUsdcVal(MAX_BPS);
 
@@ -990,9 +1010,7 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
         vm.startPrank(owner);
         avatar.deposit(10e18, 20e18);
 
-        skip(1 hours);
-        forwardClFeed(BAL_USD_FEED, 1 hours);
-        forwardClFeed(ETH_USD_FEED, 1 hours);
+        skipAndForwardFeeds(1 hours);
 
         // auraBAL is minted since trading for it is not efficient
         vm.expectEmit(true, true, false, false);
@@ -1006,6 +1024,13 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
     ////////////////////////////////////////////////////////////////////////////
     // Internal helpers
     ////////////////////////////////////////////////////////////////////////////
+
+    function skipAndForwardFeeds(uint256 _duration) internal {
+        skip(_duration);
+        forwardClFeed(BAL_USD_FEED, _duration);
+        forwardClFeed(BAL_ETH_FEED, _duration);
+        forwardClFeed(ETH_USD_FEED, _duration);
+    }
 
     function forwardClFeed(IAggregatorV3 _feed) internal {
         int256 lastAnswer = _feed.latestAnswer();
