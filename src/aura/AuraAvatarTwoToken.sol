@@ -461,36 +461,21 @@ contract AuraAvatarTwoToken is BaseAvatar, PausableUpgradeable, AuraAvatarUtils,
         uint256 bptDeposited1 = baseRewardPool1.balanceOf(address(this));
         uint256 bptDeposited2 = baseRewardPool2.balanceOf(address(this));
 
-        withdraw(bptDeposited1, bptDeposited2);
+        _withdraw(bptDeposited1, bptDeposited2);
     }
 
     /// @notice Unstakes the given amount of assets and transfers them back to owner. Can only be called by owner.
     /// @dev This function doesn't claim any rewards.
     /// @param _amountAsset1 Amount of asset1 to be unstaked.
     /// @param _amountAsset2 Amount of asset2 to be unstaked.
-    function withdraw(uint256 _amountAsset1, uint256 _amountAsset2) public onlyOwner {
-        if (_amountAsset1 == 0 && _amountAsset2 == 0) {
-            revert NothingToWithdraw();
-        }
-
-        if (_amountAsset1 > 0) {
-            baseRewardPool1.withdrawAndUnwrap(_amountAsset1, false);
-            asset1.safeTransfer(owner(), _amountAsset1);
-
-            emit Withdraw(address(asset1), _amountAsset1, block.timestamp);
-        }
-        if (_amountAsset2 > 0) {
-            baseRewardPool2.withdrawAndUnwrap(_amountAsset2, false);
-            asset2.safeTransfer(owner(), _amountAsset2);
-
-            emit Withdraw(address(asset2), _amountAsset2, block.timestamp);
-        }
+    function withdraw(uint256 _amountAsset1, uint256 _amountAsset2) external onlyOwner {
+        _withdraw(_amountAsset1, _amountAsset2);
     }
 
     /// @notice Claims any pending BAL and AURA rewards and sends them to owner. Can only be called by owner.
     /// @dev This is a failsafe to handle rewards manually in case anything goes wrong (eg. rewards need to be sold
     ///      through other pools)
-    function claimRewardsAndSendToOwner() public onlyOwner {
+    function claimRewardsAndSendToOwner() external onlyOwner {
         // 1. Claim BAL and AURA rewards
         (uint256 totalBal, uint256 totalAura) = claimAndRegisterRewards();
 
@@ -578,6 +563,29 @@ contract AuraAvatarTwoToken is BaseAvatar, PausableUpgradeable, AuraAvatarUtils,
     ////////////////////////////////////////////////////////////////////////////
     // INTERNAL
     ////////////////////////////////////////////////////////////////////////////
+
+    /// @notice Unstakes the given amount of assets and transfers them back to owner.
+    /// @dev This function doesn't claim any rewards. Caller can only be owner.
+    /// @param _amountAsset1 Amount of asset1 to be unstaked.
+    /// @param _amountAsset2 Amount of asset2 to be unstaked.
+    function _withdraw(uint256 _amountAsset1, uint256 _amountAsset2) internal {
+        if (_amountAsset1 == 0 && _amountAsset2 == 0) {
+            revert NothingToWithdraw();
+        }
+
+        if (_amountAsset1 > 0) {
+            baseRewardPool1.withdrawAndUnwrap(_amountAsset1, false);
+            asset1.safeTransfer(msg.sender, _amountAsset1);
+
+            emit Withdraw(address(asset1), _amountAsset1, block.timestamp);
+        }
+        if (_amountAsset2 > 0) {
+            baseRewardPool2.withdrawAndUnwrap(_amountAsset2, false);
+            asset2.safeTransfer(msg.sender, _amountAsset2);
+
+            emit Withdraw(address(asset2), _amountAsset2, block.timestamp);
+        }
+    }
 
     /// @notice Claim and process BAL and AURA rewards, selling some of it to USDC and depositing the rest to bauraBAL
     ///         and vlAURA.
