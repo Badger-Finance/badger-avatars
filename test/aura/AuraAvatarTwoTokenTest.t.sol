@@ -898,7 +898,23 @@ contract AuraAvatarTwoTokenTest is Test, AuraAvatarUtils {
         // Get price from TWAP
         uint256 twapPrice = fetchBptPriceFromBalancerTwap(IPriceOracle(address(BPT_80BAL_20WETH)), 1 hours);
 
-        assertApproxEqRel(twapPrice, clPrice, 0.01e18);
+        // CL price is within 1% of TWAP
+        assertApproxEqRel(clPrice, twapPrice, 0.01e18);
+    }
+
+    function test_getAuraPriceInUsdSpot() public {
+        vm.startPrank(owner);
+        avatar.deposit(10e18, 20e18);
+
+        skipAndForwardFeeds(1 hours);
+
+        (, uint256 pendingAura) = avatar.pendingRewards();
+
+        uint256 spotPrice = getAuraPriceInUsdSpot(pendingAura) / 1e2;
+        uint256 twapPrice = getAuraAmountInUsdc(1e18, 1 hours);
+
+        // Spot price is within 2.5% of TWAP
+        assertApproxEqRel(spotPrice, twapPrice, 0.025e18);
     }
 
     function test_debug() public {
