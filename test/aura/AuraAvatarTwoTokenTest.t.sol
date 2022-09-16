@@ -67,7 +67,15 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
 
     function setUp() public {
         // TODO: Remove hardcoded block
-        vm.createSelectFork("mainnet", 15397859);
+        vm.createSelectFork("mainnet", 15544690);
+
+        // Labels
+        vm.label(address(AURA), "AURA");
+        vm.label(address(BAL), "BAL");
+        vm.label(address(WETH), "WETH");
+        vm.label(address(USDC), "USDC");
+        vm.label(address(AURABAL), "AURABAL");
+        vm.label(address(BPT_80BAL_20WETH), "BPT_80BAL_20WETH");
 
         avatar = new AuraAvatarTwoToken(PID_80BADGER_20WBTC, PID_40WBTC_40DIGG_20GRAVIAURA);
         avatar.initialize(owner, manager, keeper);
@@ -110,11 +118,11 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
         uint256 bpsMin;
 
         (bpsVal, bpsMin) = avatar.minOutBpsBalToUsdc();
-        assertEq(bpsVal, 9825);
+        assertEq(bpsVal, 9750);
         assertEq(bpsMin, 9000);
 
         (bpsVal, bpsMin) = avatar.minOutBpsAuraToUsdc();
-        assertEq(bpsVal, 9825);
+        assertEq(bpsVal, 9750);
         assertEq(bpsMin, 9000);
 
         (bpsVal, bpsMin) = avatar.minOutBpsBalToBpt();
@@ -429,7 +437,7 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
 
         vm.prank(owner);
         vm.expectEmit(false, false, false, true);
-        emit MinOutBpsBalToUsdcValUpdated(9100, 9825);
+        emit MinOutBpsBalToUsdcValUpdated(9100, 9750);
         avatar.setMinOutBpsBalToUsdcVal(9100);
         (val,) = avatar.minOutBpsBalToUsdc();
         assertEq(val, 9100);
@@ -461,7 +469,7 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
 
         vm.prank(owner);
         vm.expectEmit(false, false, false, true);
-        emit MinOutBpsAuraToUsdcValUpdated(9100, 9825);
+        emit MinOutBpsAuraToUsdcValUpdated(9100, 9750);
         avatar.setMinOutBpsAuraToUsdcVal(9100);
         (val,) = avatar.minOutBpsAuraToUsdc();
         assertEq(val, 9100);
