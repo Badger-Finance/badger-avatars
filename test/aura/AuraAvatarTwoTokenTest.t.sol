@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.16;
+pragma solidity ^0.8.0;
 
 import {console2 as console} from "forge-std/console2.sol";
 import {Test} from "forge-std/Test.sol";
@@ -9,17 +9,18 @@ import {IERC20MetadataUpgradeable} from
     "openzeppelin-contracts-upgradeable/token/ERC20/extensions/IERC20MetadataUpgradeable.sol";
 
 import {AuraAvatarTwoToken, TokenAmount} from "../../src/aura/AuraAvatarTwoToken.sol";
-import {AuraAvatarOracleUtils} from "../../src/aura/AuraAvatarOracleUtils.sol";
+import {AuraAvatarUtils} from "../../src/aura/AuraAvatarUtils.sol";
 import {MAX_BPS, PID_80BADGER_20WBTC, PID_40WBTC_40DIGG_20GRAVIAURA} from "../../src/BaseConstants.sol";
 import {AuraConstants} from "../../src/aura/AuraConstants.sol";
 import {IAsset} from "../../src/interfaces/balancer/IAsset.sol";
 import {IBalancerVault, JoinKind} from "../../src/interfaces/balancer/IBalancerVault.sol";
+import {IPriceOracle} from "../../src/interfaces/balancer/IPriceOracle.sol";
 import {IBaseRewardPool} from "../../src/interfaces/aura/IBaseRewardPool.sol";
 import {IAggregatorV3} from "../../src/interfaces/chainlink/IAggregatorV3.sol";
 
 import {MockV3Aggregator} from "../mocks/MockV3Aggregator.sol";
 
-contract AuraAvatarTwoTokenTest is Test, AuraConstants {
+contract AuraAvatarTwoTokenTest is Test, AuraAvatarUtils {
     AuraAvatarTwoToken avatar;
 
     IERC20MetadataUpgradeable constant BPT_80BADGER_20WBTC =
@@ -67,7 +68,15 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
 
     function setUp() public {
         // TODO: Remove hardcoded block
-        vm.createSelectFork("mainnet", 15397859);
+        vm.createSelectFork("mainnet", 15544690);
+
+        // Labels
+        vm.label(address(AURA), "AURA");
+        vm.label(address(BAL), "BAL");
+        vm.label(address(WETH), "WETH");
+        vm.label(address(USDC), "USDC");
+        vm.label(address(AURABAL), "AURABAL");
+        vm.label(address(BPT_80BAL_20WETH), "BPT_80BAL_20WETH");
 
         avatar = new AuraAvatarTwoToken(PID_80BADGER_20WBTC, PID_40WBTC_40DIGG_20GRAVIAURA);
         avatar.initialize(owner, manager, keeper);
@@ -110,11 +119,11 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
         uint256 bpsMin;
 
         (bpsVal, bpsMin) = avatar.minOutBpsBalToUsdc();
-        assertEq(bpsVal, 9825);
+        assertEq(bpsVal, 9750);
         assertEq(bpsMin, 9000);
 
         (bpsVal, bpsMin) = avatar.minOutBpsAuraToUsdc();
-        assertEq(bpsVal, 9825);
+        assertEq(bpsVal, 9750);
         assertEq(bpsMin, 9000);
 
         (bpsVal, bpsMin) = avatar.minOutBpsBalToBpt();
@@ -144,25 +153,11 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
         avatar.initialize(address(this), address(this), address(this));
     }
 
-    function test_name() public {
-        assertEq(avatar.name(), "Avatar_AuraTwoToken_20WBTC-80BADGER_40WBTC-40DIGG-20graviAURA");
-    }
-
-    function test_assets() public {
-        IERC20MetadataUpgradeable[2] memory assets = avatar.assets();
-
-        assertEq(address(assets[0]), address(BPT_80BADGER_20WBTC));
-        assertEq(address(assets[1]), address(BPT_40WBTC_40DIGG_20GRAVIAURA));
-    }
-
     function test_pendingRewards() public {
-        TokenAmount[2] memory rewards = avatar.pendingRewards();
+        (uint256 pendingBal, uint256 pendingAura) = avatar.pendingRewards();
 
-        assertEq(rewards[0].token, address(BAL));
-        assertEq(rewards[1].token, address(AURA));
-
-        assertEq(rewards[0].amount, BASE_REWARD_POOL_80BADGER_20WBTC.earned(address(avatar)));
-        assertEq(rewards[1].amount, BASE_REWARD_POOL_40WBTC_40DIGG_20GRAVIAURA.earned(address(avatar)));
+        assertEq(pendingBal, BASE_REWARD_POOL_80BADGER_20WBTC.earned(address(avatar)));
+        assertEq(pendingAura, BASE_REWARD_POOL_40WBTC_40DIGG_20GRAVIAURA.earned(address(avatar)));
     }
 
     ////////////////////////////////////////////////////////////////////////////
@@ -429,7 +424,7 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
 
         vm.prank(owner);
         vm.expectEmit(false, false, false, true);
-        emit MinOutBpsBalToUsdcValUpdated(9100, 9825);
+        emit MinOutBpsBalToUsdcValUpdated(9100, 9750);
         avatar.setMinOutBpsBalToUsdcVal(9100);
         (val,) = avatar.minOutBpsBalToUsdc();
         assertEq(val, 9100);
@@ -461,7 +456,7 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
 
         vm.prank(owner);
         vm.expectEmit(false, false, false, true);
-        emit MinOutBpsAuraToUsdcValUpdated(9100, 9825);
+        emit MinOutBpsAuraToUsdcValUpdated(9100, 9750);
         avatar.setMinOutBpsAuraToUsdcVal(9100);
         (val,) = avatar.minOutBpsAuraToUsdc();
         assertEq(val, 9100);
@@ -540,11 +535,13 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
         assertEq(BASE_REWARD_POOL_40WBTC_40DIGG_20GRAVIAURA.balanceOf(address(avatar)), 10e18);
 
         // lastClaimTimestamp matches current timestamp since it is the first deposit
-        uint256 intialTimestamp = block.timestamp;
-        assertEq(avatar.lastClaimTimestamp(), intialTimestamp);
+        // NOTE: Trick solidity compiler into not optimizing this
+        uint256 initialTimestamp = block.timestamp * 1;
+
+        assertEq(avatar.lastClaimTimestamp(), initialTimestamp);
 
         // Advancing in time
-        skip(3600);
+        skip(1 hours);
 
         // Single asset deposit
         vm.prank(owner);
@@ -559,7 +556,7 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
 
         // lastClaimTimestamp is not set after further deposits
         assertFalse(avatar.lastClaimTimestamp() == block.timestamp);
-        assertEq(avatar.lastClaimTimestamp(), intialTimestamp);
+        assertEq(avatar.lastClaimTimestamp(), initialTimestamp);
     }
 
     function test_deposit_permissions() public {
@@ -577,9 +574,9 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
         vm.prank(owner);
         avatar.deposit(10e18, 20e18);
 
-        uint256[2] memory amounts = avatar.totalAssets();
-        assertEq(amounts[0], 10e18);
-        assertEq(amounts[1], 20e18);
+        (uint256 asset1Amount, uint256 asset2Amount) = avatar.totalAssets();
+        assertEq(asset1Amount, 10e18);
+        assertEq(asset2Amount, 20e18);
     }
 
     function test_withdrawAll() public {
@@ -636,54 +633,6 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
         avatar.withdraw(10e18, 20e18);
     }
 
-    function test_withdrawAsset1() public {
-        vm.startPrank(owner);
-        avatar.deposit(10e18, 20e18);
-
-        vm.expectEmit(true, false, false, true);
-        emit Withdraw(address(BPT_80BADGER_20WBTC), 10e18, block.timestamp);
-        avatar.withdrawAsset1(10e18);
-        assertEq(BPT_80BADGER_20WBTC.balanceOf(owner), 10e18);
-        assertEq(BASE_REWARD_POOL_80BADGER_20WBTC.balanceOf(address(avatar)), 0);
-    }
-
-    function test_withdrawAsset1_permissions() public {
-        vm.expectRevert("Ownable: caller is not the owner");
-        avatar.withdrawAsset1(10e18);
-    }
-
-    function test_withdrawAsset1_moreThanBalance() public {
-        vm.startPrank(owner);
-        avatar.deposit(10e18, 20e18);
-
-        vm.expectRevert("SafeMath: subtraction overflow");
-        avatar.withdrawAsset1(20e18);
-    }
-
-    function test_withdrawAsset2() public {
-        vm.startPrank(owner);
-        avatar.deposit(10e18, 20e18);
-
-        vm.expectEmit(true, false, false, true);
-        emit Withdraw(address(BPT_40WBTC_40DIGG_20GRAVIAURA), 20e18, block.timestamp);
-        avatar.withdrawAsset2(20e18);
-        assertEq(BPT_40WBTC_40DIGG_20GRAVIAURA.balanceOf(owner), 20e18);
-        assertEq(BASE_REWARD_POOL_40WBTC_40DIGG_20GRAVIAURA.balanceOf(address(avatar)), 0);
-    }
-
-    function test_withdrawAsset2_permissions() public {
-        vm.expectRevert("Ownable: caller is not the owner");
-        avatar.withdrawAsset2(20e18);
-    }
-
-    function test_withdrawAsset2_moreThanBalance() public {
-        vm.startPrank(owner);
-        avatar.deposit(10e18, 20e18);
-
-        vm.expectRevert("SafeMath: subtraction overflow");
-        avatar.withdrawAsset2(30e18);
-    }
-
     function test_claimRewardsAndSendToOwner() public {
         vm.prank(owner);
         avatar.deposit(10e18, 20e18);
@@ -696,7 +645,7 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
         uint256 balReward1 = BASE_REWARD_POOL_80BADGER_20WBTC.earned(address(avatar));
         uint256 balReward2 = BASE_REWARD_POOL_40WBTC_40DIGG_20GRAVIAURA.earned(address(avatar));
 
-        uint256 auraReward = avatar.getMintableAuraForBalAmount(balReward1 + balReward2);
+        uint256 auraReward = getMintableAuraForBalAmount(balReward1 + balReward2);
 
         assertGt(balReward1, 0);
         assertGt(balReward2, 0);
@@ -741,17 +690,10 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
     // Actions: Owner/Manager
     ////////////////////////////////////////////////////////////////////////////
 
-    function test_processRewards() public {
-        vm.prank(owner);
-        avatar.deposit(10e18, 20e18);
-
+    function checked_processRewards(uint256 _auraPriceInUsd) internal {
         (,, uint256 voterBalanceBefore,) = AURA_LOCKER.lockedBalances(BADGER_VOTER);
         uint256 bauraBalBalanceBefore = BAURABAL.balanceOf(owner);
         uint256 usdcBalanceBefore = USDC.balanceOf(owner);
-
-        skip(1 hours);
-        forwardClFeed(BAL_USD_FEED, 1 hours);
-        forwardClFeed(ETH_USD_FEED, 1 hours);
 
         assertGt(BASE_REWARD_POOL_80BADGER_20WBTC.earned(address(avatar)), 0);
         assertGt(BASE_REWARD_POOL_40WBTC_40DIGG_20GRAVIAURA.earned(address(avatar)), 0);
@@ -763,7 +705,7 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
             vm.prank(actors[i]);
             vm.expectEmit(false, false, false, false);
             emit RewardsToStable(address(USDC), 0, block.timestamp);
-            TokenAmount[] memory processed = avatar.processRewards();
+            TokenAmount[] memory processed = avatar.processRewards(_auraPriceInUsd);
 
             (,, uint256 voterBalanceAfter,) = AURA_LOCKER.lockedBalances(BADGER_VOTER);
 
@@ -789,15 +731,47 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
         }
     }
 
+    function test_processRewards() public {
+        vm.prank(owner);
+        avatar.deposit(10e18, 20e18);
+
+        skipAndForwardFeeds(1 hours);
+
+        (, uint256 pendingAura) = avatar.pendingRewards();
+        checked_processRewards(getAuraPriceInUsdSpot(pendingAura));
+    }
+
+    function test_processRewards_noAuraPrice() public {
+        vm.prank(owner);
+        avatar.deposit(10e18, 20e18);
+
+        skipAndForwardFeeds(1 hours);
+
+        checked_processRewards(0);
+    }
+
     function test_processRewards_permissions() public {
         vm.expectRevert(abi.encodeWithSelector(AuraAvatarTwoToken.NotOwnerOrManager.selector, address(this)));
-        avatar.processRewards();
+        avatar.processRewards(0);
     }
 
     function test_processRewards_noRewards() public {
         vm.expectRevert(AuraAvatarTwoToken.NoRewards.selector);
         vm.prank(owner);
-        avatar.processRewards();
+        avatar.processRewards(0);
+    }
+
+    function test_processRewards_highAuraPrice() public {
+        vm.startPrank(owner);
+        avatar.deposit(10e18, 20e18);
+
+        skipAndForwardFeeds(1 hours);
+
+        (, uint256 pendingAura) = avatar.pendingRewards();
+        uint256 auraPriceInUsd = getAuraPriceInUsdSpot(pendingAura);
+
+        vm.expectRevert("BAL#507");
+        avatar.processRewards(2 * auraPriceInUsd);
     }
 
     ////////////////////////////////////////////////////////////////////////////
@@ -810,8 +784,11 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
 
         skip(1 weeks);
 
-        (bool upkeepNeeded,) = avatar.checkUpkeep(new bytes(0));
+        (bool upkeepNeeded, bytes memory performData) = avatar.checkUpkeep(new bytes(0));
         assertTrue(upkeepNeeded);
+
+        uint256 auraPriceInUsd = abi.decode(performData, (uint256));
+        assertGt(auraPriceInUsd, 0);
     }
 
     function test_checkUpkeep_premature() public {
@@ -837,9 +814,7 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
         uint256 bauraBalBalanceBefore = BAURABAL.balanceOf(owner);
         uint256 usdcBalanceBefore = USDC.balanceOf(owner);
 
-        skip(1 weeks);
-        forwardClFeed(BAL_USD_FEED, 1 weeks);
-        forwardClFeed(ETH_USD_FEED, 1 weeks);
+        skipAndForwardFeeds(1 weeks);
 
         bool upkeepNeeded;
         (upkeepNeeded,) = avatar.checkUpkeep(new bytes(0));
@@ -848,7 +823,7 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
         vm.prank(keeper);
         vm.expectEmit(false, false, false, false);
         emit RewardsToStable(address(USDC), 0, block.timestamp);
-        avatar.performUpkeep(new bytes(0));
+        avatar.performUpkeep(abi.encode(uint256(0)));
 
         // Ensure that rewards were processed properly
         assertEq(BASE_REWARD_POOL_80BADGER_20WBTC.earned(address(avatar)), 0);
@@ -890,7 +865,10 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
         skip(1 weeks - 1);
         vm.expectRevert(
             abi.encodeWithSelector(
-                AuraAvatarTwoToken.TooSoon.selector, block.timestamp, avatar.lastClaimTimestamp(), avatar.claimFrequency()
+                AuraAvatarTwoToken.TooSoon.selector,
+                block.timestamp,
+                avatar.lastClaimTimestamp(),
+                avatar.claimFrequency()
             )
         );
         vm.prank(keeper);
@@ -904,20 +882,52 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
         skip(1 weeks);
         vm.expectRevert(
             abi.encodeWithSelector(
-                AuraAvatarOracleUtils.StalePriceFeed.selector, block.timestamp, BAL_USD_FEED.latestTimestamp(), 24 hours
+                AuraAvatarUtils.StalePriceFeed.selector, block.timestamp, BAL_USD_FEED.latestTimestamp(), 24 hours
             )
         );
         vm.prank(keeper);
-        avatar.performUpkeep(new bytes(0));
+        avatar.performUpkeep(abi.encode(uint256(0)));
     }
 
     ////////////////////////////////////////////////////////////////////////////
     // MISC
     ////////////////////////////////////////////////////////////////////////////
 
+    function test_getBptPriceInBal() public {
+        uint256 clPrice = getBptPriceInBal();
+        uint256 spotPrice = IPriceOracle(address(BPT_80BAL_20WETH)).getLatest(IPriceOracle.Variable.BPT_PRICE);
+
+        // CL price is within 1% of spot price
+        assertApproxEqRel(clPrice, spotPrice, 0.01e18);
+    }
+
+    function test_getAuraPriceInUsdSpot() public {
+        vm.startPrank(owner);
+        avatar.deposit(10e18, 20e18);
+
+        skipAndForwardFeeds(1 hours);
+
+        (, uint256 pendingAura) = avatar.pendingRewards();
+
+        uint256 spotPrice = getAuraPriceInUsdSpot(pendingAura) / 1e2;
+        uint256 twapPrice = getAuraAmountInUsdc(1e18, 1 hours);
+
+        // Spot price is within 2.5% of TWAP
+        assertApproxEqRel(spotPrice, twapPrice, 0.025e18);
+    }
+
     function test_debug() public {
-        console.log(avatar.getBalAmountInUsdc(1e18));
-        console.log(avatar.getAuraAmountInUsdc(1e18));
+        console.log(getBalAmountInUsdc(1e18));
+        console.log(getAuraAmountInUsdc(1e18, avatar.twapPeriod()));
+
+        console.log(getBptPriceInBal());
+
+        vm.startPrank(owner);
+        avatar.deposit(10e18, 20e18);
+
+        skip(1 hours);
+        (, uint256 pendingAura) = avatar.pendingRewards();
+        console.log(getAuraPriceInUsdSpot(pendingAura));
     }
 
     function test_processRewards_highBalMinBps() public {
@@ -929,7 +939,7 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
         avatar.setMinOutBpsBalToUsdcVal(MAX_BPS);
 
         vm.expectRevert("BAL#507");
-        avatar.processRewards();
+        avatar.processRewards(0);
     }
 
     // TODO: This might not revert, maybe remove?
@@ -937,14 +947,12 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
         vm.startPrank(owner);
         avatar.deposit(10e18, 20e18);
 
-        skip(1 hours);
-        forwardClFeed(BAL_USD_FEED, 1 hours);
-        forwardClFeed(ETH_USD_FEED, 1 hours);
+        skipAndForwardFeeds(1 hours);
 
         avatar.setMinOutBpsAuraToUsdcVal(MAX_BPS);
 
         vm.expectRevert("BAL#507");
-        avatar.processRewards();
+        avatar.processRewards(0);
     }
 
     function test_processRewards_aurabalDeposit() public {
@@ -982,22 +990,43 @@ contract AuraAvatarTwoTokenTest is Test, AuraConstants {
         vm.startPrank(owner);
         avatar.deposit(10e18, 20e18);
 
-        skip(1 hours);
-        forwardClFeed(BAL_USD_FEED, 1 hours);
-        forwardClFeed(ETH_USD_FEED, 1 hours);
+        skipAndForwardFeeds(1 hours);
 
         // auraBAL is minted since trading for it is not efficient
         vm.expectEmit(true, true, false, false);
         emit Transfer(address(0), address(avatar), 0);
-        avatar.processRewards();
+        avatar.processRewards(0);
 
         // Confirm minting of auraBAL by checking increase in totalSupply
         assertGt(AURABAL.totalSupply(), totalSupplyBefore);
     }
 
+    function test_upkeep() public {
+        vm.prank(owner);
+        avatar.deposit(10e18, 20e18);
+
+        skipAndForwardFeeds(1 weeks);
+
+        (bool upkeepNeeded, bytes memory performData) = avatar.checkUpkeep(new bytes(0));
+        uint256 auraPriceInUsd = abi.decode(performData, (uint256));
+
+        assertTrue(upkeepNeeded);
+        assertGt(auraPriceInUsd, 0);
+
+        vm.prank(keeper);
+        avatar.performUpkeep(performData);
+    }
+
     ////////////////////////////////////////////////////////////////////////////
     // Internal helpers
     ////////////////////////////////////////////////////////////////////////////
+
+    function skipAndForwardFeeds(uint256 _duration) internal {
+        skip(_duration);
+        forwardClFeed(BAL_USD_FEED, _duration);
+        forwardClFeed(BAL_ETH_FEED, _duration);
+        forwardClFeed(ETH_USD_FEED, _duration);
+    }
 
     function forwardClFeed(IAggregatorV3 _feed) internal {
         int256 lastAnswer = _feed.latestAnswer();

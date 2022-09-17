@@ -1,22 +1,19 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.16;
+pragma solidity ^0.8.0;
 
+import {MathUpgradeable} from "openzeppelin-contracts-upgradeable/utils/math/MathUpgradeable.sol";
 import {PausableUpgradeable} from "openzeppelin-contracts-upgradeable/security/PausableUpgradeable.sol";
 import {SafeERC20Upgradeable} from "openzeppelin-contracts-upgradeable/token/ERC20/utils/SafeERC20Upgradeable.sol";
 import {IERC20MetadataUpgradeable} from
     "openzeppelin-contracts-upgradeable/token/ERC20/extensions/IERC20MetadataUpgradeable.sol";
 
 import {BaseAvatar} from "../lib/BaseAvatar.sol";
-import {AuraConstants} from "./AuraConstants.sol";
-import {AuraAvatarOracleUtils} from "./AuraAvatarOracleUtils.sol";
 import {MAX_BPS, PRECISION} from "../BaseConstants.sol";
 import {BpsConfig, TokenAmount} from "../BaseStructs.sol";
-
-import {IAuraToken} from "../interfaces/aura/IAuraToken.sol";
+import {AuraAvatarUtils} from "./AuraAvatarUtils.sol";
 import {IBaseRewardPool} from "../interfaces/aura/IBaseRewardPool.sol";
 import {IAsset} from "../interfaces/balancer/IAsset.sol";
 import {IBalancerVault, JoinKind} from "../interfaces/balancer/IBalancerVault.sol";
-import {IPriceOracle} from "../interfaces/balancer/IPriceOracle.sol";
 import {KeeperCompatibleInterface} from "../interfaces/chainlink/KeeperCompatibleInterface.sol";
 
 /// @title AuraAvatarTwoToken
@@ -26,13 +23,7 @@ import {KeeperCompatibleInterface} from "../interfaces/chainlink/KeeperCompatibl
 ///         The owner also has admin rights and can make arbitrary calls through this contract.
 /// @dev The avatar is never supposed to hold funds and only acts as an intermediary to facilitate staking and ease
 ///      accounting.
-contract AuraAvatarTwoToken is
-    BaseAvatar,
-    PausableUpgradeable,
-    AuraConstants,
-    AuraAvatarOracleUtils,
-    KeeperCompatibleInterface
-{
+contract AuraAvatarTwoToken is BaseAvatar, PausableUpgradeable, AuraAvatarUtils, KeeperCompatibleInterface {
     ////////////////////////////////////////////////////////////////////////////
     // LIBRARIES
     ////////////////////////////////////////////////////////////////////////////
@@ -178,11 +169,11 @@ contract AuraAvatarTwoToken is
         sellBpsAuraToUsdc = 3000; // 30%
 
         minOutBpsBalToUsdc = BpsConfig({
-            val: 9825, // 98.25%
+            val: 9750, // 97.5%
             min: 9000 // 90%
         });
         minOutBpsAuraToUsdc = BpsConfig({
-            val: 9825, // 98.25%
+            val: 9750, // 97.5%
             min: 9000 // 90%
         });
         minOutBpsBalToBpt = BpsConfig({
@@ -470,50 +461,21 @@ contract AuraAvatarTwoToken is
         uint256 bptDeposited1 = baseRewardPool1.balanceOf(address(this));
         uint256 bptDeposited2 = baseRewardPool2.balanceOf(address(this));
 
-        withdraw(bptDeposited1, bptDeposited2);
+        _withdraw(bptDeposited1, bptDeposited2);
     }
 
     /// @notice Unstakes the given amount of assets and transfers them back to owner. Can only be called by owner.
     /// @dev This function doesn't claim any rewards.
     /// @param _amountAsset1 Amount of asset1 to be unstaked.
     /// @param _amountAsset2 Amount of asset2 to be unstaked.
-    function withdraw(uint256 _amountAsset1, uint256 _amountAsset2) public onlyOwner {
-        if (_amountAsset1 == 0 && _amountAsset2 == 0) {
-            revert NothingToWithdraw();
-        }
-
-        if (_amountAsset1 > 0) {
-            withdrawAsset1(_amountAsset1);
-        }
-        if (_amountAsset2 > 0) {
-            withdrawAsset2(_amountAsset2);
-        }
-    }
-
-    /// @notice Unstakes a given amount of asset1 and transfers it back to owner. Can only be called by owner.
-    /// @dev This function doesn't claim any rewards. This doesn't revert if 0 is passed.
-    /// @param _amountAsset1 Amount of asset1 to be unstaked.
-    function withdrawAsset1(uint256 _amountAsset1) public onlyOwner {
-        baseRewardPool1.withdrawAndUnwrap(_amountAsset1, false);
-        asset1.safeTransfer(owner(), _amountAsset1);
-
-        emit Withdraw(address(asset1), _amountAsset1, block.timestamp);
-    }
-
-    /// @notice Unstakes a given amount of asset2 and transfers it back to owner. Can only be called by owner.
-    /// @dev This function doesn't claim any rewards. This doesn't revert if 0 is passed.
-    /// @param _amountAsset2 Amount of asset2 to be unstaked.
-    function withdrawAsset2(uint256 _amountAsset2) public onlyOwner {
-        baseRewardPool2.withdrawAndUnwrap(_amountAsset2, false);
-        asset2.safeTransfer(owner(), _amountAsset2);
-
-        emit Withdraw(address(asset2), _amountAsset2, block.timestamp);
+    function withdraw(uint256 _amountAsset1, uint256 _amountAsset2) external onlyOwner {
+        _withdraw(_amountAsset1, _amountAsset2);
     }
 
     /// @notice Claims any pending BAL and AURA rewards and sends them to owner. Can only be called by owner.
     /// @dev This is a failsafe to handle rewards manually in case anything goes wrong (eg. rewards need to be sold
     ///      through other pools)
-    function claimRewardsAndSendToOwner() public onlyOwner {
+    function claimRewardsAndSendToOwner() external onlyOwner {
         // 1. Claim BAL and AURA rewards
         (uint256 totalBal, uint256 totalAura) = claimAndRegisterRewards();
 
@@ -530,10 +492,15 @@ contract AuraAvatarTwoToken is
     /// @notice Claim and process BAL and AURA rewards, selling some of it to USDC and depositing the rest to bauraBAL
     ///         and vlAURA. Can be called by the owner or manager.
     /// @dev This can be called by the owner or manager to opportunistically harvest in good market conditions.
+    /// @param _auraPriceInUsd A reference price for AURA in USD (in 8 decimal precision) to compare with TWAP price. Leave as 0 to use only TWAP.
     /// @return processed_ An array containing addresses and amounts of harvested tokens (i.e. tokens that have finally
     ///                    been swapped into).
-    function processRewards() external onlyOwnerOrManager returns (TokenAmount[] memory processed_) {
-        processed_ = processRewardsInternal();
+    function processRewards(uint256 _auraPriceInUsd)
+        external
+        onlyOwnerOrManager
+        returns (TokenAmount[] memory processed_)
+    {
+        processed_ = processRewardsInternal(_auraPriceInUsd);
     }
 
     ////////////////////////////////////////////////////////////////////////////
@@ -542,88 +509,42 @@ contract AuraAvatarTwoToken is
 
     /// @notice A function to process pending BAL and AURA rewards at regular intervals. Can only be called by the
     ///         keeper when the contract is not paused.
-    function performUpkeep(bytes calldata) external override onlyKeeper whenNotPaused {
+    function performUpkeep(bytes calldata _performData) external override onlyKeeper whenNotPaused {
         uint256 lastClaimTimestampCached = lastClaimTimestamp;
         uint256 claimFrequencyCached = claimFrequency;
         if ((block.timestamp - lastClaimTimestampCached) < claimFrequencyCached) {
             revert TooSoon(block.timestamp, lastClaimTimestampCached, claimFrequencyCached);
         }
 
-        processRewardsInternal();
+        uint256 auraPriceInUsd = abi.decode(_performData, (uint256));
+        processRewardsInternal(auraPriceInUsd);
     }
 
     ////////////////////////////////////////////////////////////////////////////
     // PUBLIC VIEW
     ////////////////////////////////////////////////////////////////////////////
 
-    /// @notice The name of the avatar.
-    function name() external view returns (string memory name_) {
-        name_ = string.concat("Avatar_AuraTwoToken", "_", asset1.symbol(), "_", asset2.symbol());
-    }
-
-    /// @notice The version of the contract.
-    function version() external pure returns (string memory version_) {
-        version_ = "0.0.1";
-    }
-
-    /// @notice The two BPT tokens that the avatar is handling.
-    function assets() external view returns (IERC20MetadataUpgradeable[2] memory assets_) {
-        assets_[0] = asset1;
-        assets_[1] = asset2;
-    }
-
     /// @notice The total amounts of both BPT tokens that the avatar is handling.
-    function totalAssets() external view returns (uint256[2] memory assetAmounts_) {
-        assetAmounts_[0] = baseRewardPool1.balanceOf(address(this));
-        assetAmounts_[1] = baseRewardPool2.balanceOf(address(this));
+    function totalAssets() external view returns (uint256 asset1Amounts_, uint256 asset2Amounts_) {
+        asset1Amounts_ = baseRewardPool1.balanceOf(address(this));
+        asset2Amounts_ = baseRewardPool2.balanceOf(address(this));
     }
 
     /// @notice The pending BAL and AURA rewards that are yet to be processed.
     /// @dev Includes any BAL and AURA tokens in the contract.
-    function pendingRewards() external view returns (TokenAmount[2] memory rewards_) {
+    /// @return totalBal_ Pending BAL rewards.
+    /// @return totalAura_ Pending AURA rewards.
+    function pendingRewards() public view returns (uint256 totalBal_, uint256 totalAura_) {
         uint256 balEarned = baseRewardPool1.earned(address(this));
         balEarned += baseRewardPool2.earned(address(this));
 
-        uint256 totalBal = balEarned + BAL.balanceOf(address(this));
-        uint256 totalAura = getMintableAuraForBalAmount(balEarned) + AURA.balanceOf(address(this));
-
-        rewards_[0] = TokenAmount(address(BAL), totalBal);
-        rewards_[1] = TokenAmount(address(AURA), totalAura);
-    }
-
-    /// @notice Converts a given BAL amount into USDC using a Chainlink price feed.
-    /// @dev Assumes USDC is pegged 1:1 to USD.
-    /// @param _balAmount The input BAL amount.
-    /// @return usdcAmount_ The equivalent amount in USDC.
-    function getBalAmountInUsdc(uint256 _balAmount) public view returns (uint256 usdcAmount_) {
-        uint256 balInUsd = fetchPriceFromClFeed(BAL_USD_FEED, CL_FEED_HEARTBEAT_BAL_USD);
-        // Divisor is 10^20 and uint256 max ~ 10^77 so this shouldn't overflow for normal amounts
-        usdcAmount_ = (_balAmount * balInUsd) / BAL_USD_FEED_DIVISOR;
-    }
-
-    /// @notice Converts a given AURA amount into USDC using a Balancer TWAP and a Chainlink price feed.
-    /// @dev Assumes USDC is pegged 1:1 to USD.
-    /// @param _auraAmount The input AURA amount.
-    /// @return usdcAmount_ The equivalent amount in USDC.
-    function getAuraAmountInUsdc(uint256 _auraAmount) public view returns (uint256 usdcAmount_) {
-        uint256 auraInEth = fetchPriceFromBalancerTwap(BPT_80AURA_20WETH, twapPeriod);
-        uint256 ethInUsd = fetchPriceFromClFeed(ETH_USD_FEED, CL_FEED_HEARTBEAT_ETH_USD);
-        // Divisor is 10^38 and uint256 max ~ 10^77 so this shouldn't overflow for normal amounts
-        usdcAmount_ = (_auraAmount * auraInEth * ethInUsd) / AURA_USD_FEED_DIVISOR;
-    }
-
-    /// @notice Converts a given BAL amount into 80BAL-20WETH BPT using a Balancer TWAP.
-    /// @param _balAmount The input BAL amount.
-    /// @return bptAmount_ The equivalent amount in 80BAL-20WETH BPT.
-    // TODO: Maybe use invariant, totalSupply and BAL/ETH feed for this instead of twap?
-    function getBalAmountInBpt(uint256 _balAmount) public view returns (uint256 bptAmount_) {
-        uint256 bptPriceInBal = fetchBptPriceFromBalancerTwap(IPriceOracle(address(BPT_80BAL_20WETH)), twapPeriod);
-        bptAmount_ = (_balAmount * PRECISION) / bptPriceInBal;
+        totalBal_ = balEarned + BAL.balanceOf(address(this));
+        totalAura_ = getMintableAuraForBalAmount(balEarned) + AURA.balanceOf(address(this));
     }
 
     /// @notice Checks whether an upkeep is to be performed.
     /// @return upkeepNeeded_ A boolean indicating whether an upkeep is to be performed.
-    function checkUpkeep(bytes calldata) external view override returns (bool upkeepNeeded_, bytes memory) {
+    function checkUpkeep(bytes calldata) external override returns (bool upkeepNeeded_, bytes memory performData_) {
         uint256 balPending1 = baseRewardPool1.earned(address(this));
         uint256 balPending2 = baseRewardPool2.earned(address(this));
 
@@ -632,29 +553,9 @@ contract AuraAvatarTwoToken is
         if ((block.timestamp - lastClaimTimestamp) >= claimFrequency) {
             if (balPending1 > 0 || balPending2 > 0 || balBalance > 0) {
                 upkeepNeeded_ = true;
-            }
-        }
-    }
 
-    /// @notice Calculates the expected amount of AURA minted given some BAL rewards.
-    /// @dev ref: https://etherscan.io/address/0xc0c293ce456ff0ed870add98a0828dd4d2903dbf#code#F1#L86
-    /// @param _balAmount The input BAL reward amount.
-    /// @return auraAmount_ The expected amount of AURA minted.
-    function getMintableAuraForBalAmount(uint256 _balAmount) public view returns (uint256 auraAmount_) {
-        // NOTE: Only correct if AURA.minterMinted() == 0
-        // minterMinted is a private var in the contract, so no way to access it on-chain
-        uint256 emissionsMinted = AURA.totalSupply() - IAuraToken(address(AURA)).INIT_MINT_AMOUNT();
-
-        uint256 cliff = emissionsMinted / IAuraToken(address(AURA)).reductionPerCliff();
-        uint256 totalCliffs = IAuraToken(address(AURA)).totalCliffs();
-
-        if (cliff < totalCliffs) {
-            uint256 reduction = (((totalCliffs - cliff) * 5) / 2) + 700;
-            auraAmount_ = (_balAmount * reduction) / totalCliffs;
-
-            uint256 amtTillMax = IAuraToken(address(AURA)).EMISSIONS_MAX_SUPPLY() - emissionsMinted;
-            if (auraAmount_ > amtTillMax) {
-                auraAmount_ = amtTillMax;
+                (, uint256 totalAura) = pendingRewards();
+                performData_ = abi.encode(getAuraPriceInUsdSpot(totalAura));
             }
         }
     }
@@ -663,11 +564,35 @@ contract AuraAvatarTwoToken is
     // INTERNAL
     ////////////////////////////////////////////////////////////////////////////
 
+    /// @notice Unstakes the given amount of assets and transfers them back to owner.
+    /// @dev This function doesn't claim any rewards. Caller can only be owner.
+    /// @param _amountAsset1 Amount of asset1 to be unstaked.
+    /// @param _amountAsset2 Amount of asset2 to be unstaked.
+    function _withdraw(uint256 _amountAsset1, uint256 _amountAsset2) internal {
+        if (_amountAsset1 == 0 && _amountAsset2 == 0) {
+            revert NothingToWithdraw();
+        }
+
+        if (_amountAsset1 > 0) {
+            baseRewardPool1.withdrawAndUnwrap(_amountAsset1, false);
+            asset1.safeTransfer(msg.sender, _amountAsset1);
+
+            emit Withdraw(address(asset1), _amountAsset1, block.timestamp);
+        }
+        if (_amountAsset2 > 0) {
+            baseRewardPool2.withdrawAndUnwrap(_amountAsset2, false);
+            asset2.safeTransfer(msg.sender, _amountAsset2);
+
+            emit Withdraw(address(asset2), _amountAsset2, block.timestamp);
+        }
+    }
+
     /// @notice Claim and process BAL and AURA rewards, selling some of it to USDC and depositing the rest to bauraBAL
     ///         and vlAURA.
+    /// @param _auraPriceInUsd A reference price for AURA in USD (in 8 decimal precision) to compare with TWAP price. Leave as 0 to use only TWAP.
     /// @return processed_ An array containing addresses and amounts of harvested tokens (i.e. tokens that have finally
     ///                    been swapped into).
-    function processRewardsInternal() internal returns (TokenAmount[] memory processed_) {
+    function processRewardsInternal(uint256 _auraPriceInUsd) internal returns (TokenAmount[] memory processed_) {
         // 1. Claim BAL and AURA rewards
         (uint256 totalBal, uint256 totalAura) = claimAndRegisterRewards();
 
@@ -676,7 +601,7 @@ contract AuraAvatarTwoToken is
         uint256 auraForUsdc = (totalAura * sellBpsAuraToUsdc) / MAX_BPS;
 
         uint256 usdcEarnedFromBal = swapBalForUsdc(balForUsdc);
-        uint256 usdcEarnedFromAura = swapAuraForUsdc(auraForUsdc);
+        uint256 usdcEarnedFromAura = swapAuraForUsdc(auraForUsdc, _auraPriceInUsd);
 
         uint256 totalUsdcEarned = usdcEarnedFromBal + usdcEarnedFromAura;
 
@@ -749,7 +674,7 @@ contract AuraAvatarTwoToken is
 
         int256[] memory limits = new int256[](3);
         limits[0] = int256(_balAmount);
-        limits[2] = -int256((getBalAmountInUsdc(_balAmount) * minOutBpsBalToUsdc.val) / MAX_BPS); //
+        limits[2] = -int256((getBalAmountInUsdc(_balAmount) * minOutBpsBalToUsdc.val) / MAX_BPS);
         IBalancerVault.BatchSwapStep[] memory swaps = new IBalancerVault.BatchSwapStep[](2);
         // BAL --> WETH
         swaps[0] = IBalancerVault.BatchSwapStep({
@@ -788,8 +713,9 @@ contract AuraAvatarTwoToken is
     ///      A combination of the Balancer TWAP for the 80AURA-20WETH pool and a ETH-USD Chainlink price feed is used
     ///      as the oracle.
     /// @param _auraAmount The amount of AURA to sell.
+    /// @param _auraPriceInUsd A reference price for AURA in USD (in 8 decimal precision) to compare with TWAP price. Leave as 0 to use only TWAP.
     /// @return usdcEarned_ The amount of USDC earned.
-    function swapAuraForUsdc(uint256 _auraAmount) internal returns (uint256 usdcEarned_) {
+    function swapAuraForUsdc(uint256 _auraAmount, uint256 _auraPriceInUsd) internal returns (uint256 usdcEarned_) {
         IAsset[] memory assetArray = new IAsset[](3);
         assetArray[0] = IAsset(address(AURA));
         assetArray[1] = IAsset(address(WETH));
@@ -797,8 +723,15 @@ contract AuraAvatarTwoToken is
 
         int256[] memory limits = new int256[](3);
         limits[0] = int256(_auraAmount);
+        // Use max(TWAP price, reference price) as oracle price for AURA.
+        // If reference price is the spot price then swap will only process if:
+        //  1. TWAP price is less than spot price.
+        //  2. TWAP price is within the slippage threshold of spot price.
+        uint256 expectedUsdcOut = MathUpgradeable.max(
+            _auraAmount * _auraPriceInUsd / AURA_USD_SPOT_FACTOR, getAuraAmountInUsdc(_auraAmount, twapPeriod)
+        );
         // Assumes USDC is pegged. We should sell for other stableecoins if not
-        limits[2] = -int256((getAuraAmountInUsdc(_auraAmount) * minOutBpsAuraToUsdc.val) / MAX_BPS);
+        limits[2] = -int256((expectedUsdcOut * minOutBpsAuraToUsdc.val) / MAX_BPS);
 
         IBalancerVault.BatchSwapStep[] memory swaps = new IBalancerVault.BatchSwapStep[](2);
         // AURA --> WETH
