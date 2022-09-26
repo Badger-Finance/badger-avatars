@@ -6,10 +6,8 @@ import {Enum, Executor} from "safe-contracts/base/Executor.sol";
 
 import {GlobalAccessControlManaged} from "./GlobalAccessControlManaged.sol";
 
-/**
- * Avatar
- * Forwards calls from the owner
- */
+/// Avatar
+/// Forwards calls from the owner
 contract BaseAvatar is OwnableUpgradeable, Executor {
     ////////////////////////////////////////////////////////////////////////////
     // INITIALIZATION
@@ -25,19 +23,17 @@ contract BaseAvatar is OwnableUpgradeable, Executor {
     // PUBLIC: Owner
     ////////////////////////////////////////////////////////////////////////////
 
-    /**
-     * @dev Make arbitrary Ethereum call
-     * @param to Address to call
-     * @param value ETH value
-     * @param data TX data
-     */
-    function call(address to, uint256 value, bytes memory data)
+    /// @dev Make arbitrary Ethereum call
+    /// @param to Address to call
+    /// @param value ETH value
+    /// @param data TX data
+    function doCall(address to, uint256 value, bytes memory data)
         public
         payable
         virtual
         onlyOwner
         returns (bool success)
     {
-        return execute(to, value, data, Enum.Operation.Call, gasleft());
+        success = execute(to, value, data, Enum.Operation.Call, gasleft());
     }
 }
