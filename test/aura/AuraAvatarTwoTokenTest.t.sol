@@ -912,8 +912,8 @@ contract AuraAvatarTwoTokenTest is Test, AuraAvatarUtils {
         uint256 spotPrice = getAuraPriceInUsdSpot(pendingAura) / 1e2;
         uint256 twapPrice = getAuraAmountInUsdc(1e18, 1 hours);
 
-        // Spot price is within 3% of TWAP
-        assertApproxEqRel(spotPrice, twapPrice, 0.03e18);
+        // Spot price is within 2.5% of TWAP
+        assertApproxEqRel(spotPrice, twapPrice, 0.025e18);
     }
 
     function test_debug() public {
