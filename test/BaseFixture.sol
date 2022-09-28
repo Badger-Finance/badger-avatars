@@ -13,10 +13,6 @@ contract BaseFixture is Test {
     address immutable owner = address(1);
 
     // ==================
-    // === Contracts ====
-    // ==================
-
-    // ==================
     // == Deployments ===
     // ==================
 

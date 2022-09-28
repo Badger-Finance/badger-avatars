@@ -234,9 +234,7 @@ interface IBalancerVault {
         BatchSwapStep[] memory swaps,
         IAsset[] memory assets,
         FundManagement memory funds
-    )
-        external
-        returns (int256[] memory assetDeltas);
+    ) external returns (int256[] memory assetDeltas);
 
     /**
      * @dev Performs a series of swaps with one or multiple Pools. In each individual swap, the caller determines either
@@ -274,10 +272,7 @@ interface IBalancerVault {
         FundManagement memory funds,
         int256[] memory limits,
         uint256 deadline
-    )
-        external
-        payable
-        returns (int256[] memory);
+    ) external payable returns (int256[] memory);
 
     /**
      * @dev Data for each individual swap executed by `batchSwap`. The asset in and out fields are indexes into the

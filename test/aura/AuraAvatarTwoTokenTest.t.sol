@@ -29,9 +29,9 @@ contract AuraAvatarTwoTokenTest is Test, AuraAvatarUtils {
         IERC20MetadataUpgradeable(0x8eB6c82C3081bBBd45DcAC5afA631aaC53478b7C);
 
     IBaseRewardPool constant BASE_REWARD_POOL_80BADGER_20WBTC =
-        IBaseRewardPool(0xCea3aa5b2a50e39c7C7755EbFF1e9E1e1516D3f5);
+        IBaseRewardPool(0x05df1E87f41F793D9e03d341Cdc315b76595654C);
     IBaseRewardPool constant BASE_REWARD_POOL_40WBTC_40DIGG_20GRAVIAURA =
-        IBaseRewardPool(0x10Ca519614b0F3463890387c24819001AFfC5152);
+        IBaseRewardPool(0xe86f0312b06126855810B4a13a43c3E2b1B8DD90);
 
     address constant owner = address(1);
     address constant manager = address(2);
@@ -68,7 +68,7 @@ contract AuraAvatarTwoTokenTest is Test, AuraAvatarUtils {
 
     function setUp() public {
         // TODO: Remove hardcoded block
-        vm.createSelectFork("mainnet", 15544690);
+        vm.createSelectFork("mainnet", 15617600);
 
         // Labels
         vm.label(address(AURA), "AURA");
