@@ -511,7 +511,7 @@ contract AuraAvatarTwoToken is BaseAvatar, PausableUpgradeable, AuraAvatarUtils,
 
     /// @notice A function to process pending BAL and AURA rewards at regular intervals. Can only be called by the
     ///         keeper when the contract is not paused.
-    /// @param _performData ABI-encoded reference price for AURA in USD (in 8 decimal precision) to compare with TWAP price. 
+    /// @param _performData ABI-encoded reference price for AURA in USD (in 8 decimal precision) to compare with TWAP price.
     ///                     The first 4 bytes of the encoding are ignored and the rest is decoded into a uint256.
     function performUpkeep(bytes calldata _performData) external override onlyKeeper whenNotPaused {
         uint256 auraPriceInUsd = abi.decode(_performData[4:], (uint256));
@@ -520,7 +520,7 @@ contract AuraAvatarTwoToken is BaseAvatar, PausableUpgradeable, AuraAvatarUtils,
 
     /// @notice A function to process pending BAL and AURA rewards at regular intervals. Can only be called by the
     ///         keeper when the contract is not paused.
-    /// @param _auraPriceInUsd A reference price for AURA in USD (in 8 decimal precision) to compare with TWAP price. 
+    /// @param _auraPriceInUsd A reference price for AURA in USD (in 8 decimal precision) to compare with TWAP price.
     function processRewardsKeeper(uint256 _auraPriceInUsd) external onlyKeeper whenNotPaused {
         _processRewardsKeeper(_auraPriceInUsd);
     }
@@ -595,8 +595,8 @@ contract AuraAvatarTwoToken is BaseAvatar, PausableUpgradeable, AuraAvatarUtils,
         }
     }
 
-    /// @notice A function to process pending BAL and AURA rewards at regular intervals. Can only be called by the
-    ///         keeper when the contract is not paused.
+    /// @notice A function to process pending BAL and AURA rewards at regular intervals.
+    /// @param _auraPriceInUsd A reference price for AURA in USD (in 8 decimal precision) to compare with TWAP price. Leave as 0 to use only TWAP.
     function _processRewardsKeeper(uint256 _auraPriceInUsd) internal {
         uint256 lastClaimTimestampCached = lastClaimTimestamp;
         uint256 claimFrequencyCached = claimFrequency;

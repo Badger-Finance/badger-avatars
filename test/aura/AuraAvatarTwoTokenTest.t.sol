@@ -192,8 +192,13 @@ contract AuraAvatarTwoTokenTest is Test, AuraAvatarUtils {
 
             // Test pausable action to ensure modifier works
             vm.startPrank(keeper);
+
             vm.expectRevert("Pausable: paused");
             avatar.performUpkeep(new bytes(0));
+
+            vm.expectRevert("Pausable: paused");
+            avatar.processRewardsKeeper(0);
+
             vm.stopPrank();
 
             vm.revertTo(snapId);
@@ -889,6 +894,22 @@ contract AuraAvatarTwoTokenTest is Test, AuraAvatarUtils {
         avatar.performUpkeep(abi.encodeCall(AuraAvatarTwoToken.processRewardsKeeper, uint256(0)));
     }
 
+    function test_processRewardsKeeper_permissions() public {
+        vm.prank(owner);
+        avatar.deposit(10e18, 20e18);
+
+        address[3] memory actors = [address(this), owner, manager];
+        for (uint256 i; i < actors.length; ++i) {
+            uint256 snapId = vm.snapshot();
+
+            vm.expectRevert(abi.encodeWithSelector(AuraAvatarTwoToken.NotKeeper.selector, actors[i]));
+            vm.prank(actors[i]);
+            avatar.processRewardsKeeper(0);
+
+            vm.revertTo(snapId);
+        }
+    }
+
     ////////////////////////////////////////////////////////////////////////////
     // MISC
     ////////////////////////////////////////////////////////////////////////////
@@ -1015,6 +1036,27 @@ contract AuraAvatarTwoTokenTest is Test, AuraAvatarUtils {
 
         vm.prank(keeper);
         avatar.performUpkeep(performData);
+    }
+
+    function test_processRewardsKeeper() public {
+        vm.prank(owner);
+        avatar.deposit(10e18, 20e18);
+
+        skipAndForwardFeeds(1 weeks);
+
+        (bool upkeepNeeded, bytes memory performData) = avatar.checkUpkeep(new bytes(0));
+        uint256 auraPriceInUsd = abi.decode(performData, (uint256));
+
+        assertTrue(upkeepNeeded);
+        assertGt(auraPriceInUsd, 0);
+
+        vm.prank(keeper);
+        (bool success,) = address(avatar).call(performData);
+        assertTrue(success);
+
+        // Upkeep is not needed anymore
+        (upkeepNeeded,) = avatar.checkUpkeep(new bytes(0));
+        assertFalse(upkeepNeeded);
     }
 
     ////////////////////////////////////////////////////////////////////////////
