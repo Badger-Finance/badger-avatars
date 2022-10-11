@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import {PausableUpgradeable} from "openzeppelin-contracts-upgradeable/security/PausableUpgradeable.sol";
+import {PausableUpgradeable} from
+    "../../lib/openzeppelin-contracts-upgradeable/contracts/security/PausableUpgradeable.sol";
 
 import {IGac} from "../interfaces/badger/IGac.sol";
 

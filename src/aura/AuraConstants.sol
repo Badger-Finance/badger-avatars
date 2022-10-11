@@ -2,7 +2,7 @@
 pragma solidity ^0.8.0;
 
 import {IERC20MetadataUpgradeable} from
-    "openzeppelin-contracts-upgradeable/token/ERC20/extensions/IERC20MetadataUpgradeable.sol";
+    "../../lib/openzeppelin-contracts-upgradeable/contracts/token/ERC20/extensions/IERC20MetadataUpgradeable.sol";
 
 import {IAuraLocker} from "../interfaces/aura/IAuraLocker.sol";
 import {IBaseRewardPool} from "../interfaces/aura/IBaseRewardPool.sol";

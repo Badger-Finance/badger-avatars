@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import {MathUpgradeable} from "openzeppelin-contracts-upgradeable/utils/math/MathUpgradeable.sol";
-import {PausableUpgradeable} from "openzeppelin-contracts-upgradeable/security/PausableUpgradeable.sol";
-import {SafeERC20Upgradeable} from "openzeppelin-contracts-upgradeable/token/ERC20/utils/SafeERC20Upgradeable.sol";
+import {MathUpgradeable} from "../../lib/openzeppelin-contracts-upgradeable/contracts/utils/math/MathUpgradeable.sol";
+import {PausableUpgradeable} from
+    "../../lib/openzeppelin-contracts-upgradeable/contracts/security/PausableUpgradeable.sol";
+import {SafeERC20Upgradeable} from
+    "../../lib/openzeppelin-contracts-upgradeable/contracts/token/ERC20/utils/SafeERC20Upgradeable.sol";
 import {IERC20MetadataUpgradeable} from
-    "openzeppelin-contracts-upgradeable/token/ERC20/extensions/IERC20MetadataUpgradeable.sol";
+    "../../lib/openzeppelin-contracts-upgradeable/contracts/token/ERC20/extensions/IERC20MetadataUpgradeable.sol";
 
 import {BaseAvatar} from "../lib/BaseAvatar.sol";
 import {MAX_BPS, PRECISION} from "../BaseConstants.sol";
@@ -500,7 +502,7 @@ contract AuraAvatarTwoToken is BaseAvatar, PausableUpgradeable, AuraAvatarUtils,
         onlyOwnerOrManager
         returns (TokenAmount[] memory processed_)
     {
-        processed_ = processRewardsInternal(_auraPriceInUsd);
+        processed_ = _processRewards(_auraPriceInUsd);
     }
 
     ////////////////////////////////////////////////////////////////////////////
@@ -509,15 +511,18 @@ contract AuraAvatarTwoToken is BaseAvatar, PausableUpgradeable, AuraAvatarUtils,
 
     /// @notice A function to process pending BAL and AURA rewards at regular intervals. Can only be called by the
     ///         keeper when the contract is not paused.
+    /// @param _performData ABI-encoded reference price for AURA in USD (in 8 decimal precision) to compare with TWAP price. 
+    ///                     The first 4 bytes of the encoding are ignored and the rest is decoded into a uint256.
     function performUpkeep(bytes calldata _performData) external override onlyKeeper whenNotPaused {
-        uint256 lastClaimTimestampCached = lastClaimTimestamp;
-        uint256 claimFrequencyCached = claimFrequency;
-        if ((block.timestamp - lastClaimTimestampCached) < claimFrequencyCached) {
-            revert TooSoon(block.timestamp, lastClaimTimestampCached, claimFrequencyCached);
-        }
+        uint256 auraPriceInUsd = abi.decode(_performData[4:], (uint256));
+        _processRewardsKeeper(auraPriceInUsd);
+    }
 
-        uint256 auraPriceInUsd = abi.decode(_performData, (uint256));
-        processRewardsInternal(auraPriceInUsd);
+    /// @notice A function to process pending BAL and AURA rewards at regular intervals. Can only be called by the
+    ///         keeper when the contract is not paused.
+    /// @param _auraPriceInUsd A reference price for AURA in USD (in 8 decimal precision) to compare with TWAP price. 
+    function processRewardsKeeper(uint256 _auraPriceInUsd) external onlyKeeper whenNotPaused {
+        _processRewardsKeeper(_auraPriceInUsd);
     }
 
     ////////////////////////////////////////////////////////////////////////////
@@ -543,7 +548,10 @@ contract AuraAvatarTwoToken is BaseAvatar, PausableUpgradeable, AuraAvatarUtils,
     }
 
     /// @notice Checks whether an upkeep is to be performed.
+    /// @dev The calldata is encoded with the `processRewardsKeeper` selector. This selector is ignored when
+    ///      performing upkeeps using the `performUpkeep` function.
     /// @return upkeepNeeded_ A boolean indicating whether an upkeep is to be performed.
+    /// @return performData_ The calldata to be passed to the upkeep function.
     function checkUpkeep(bytes calldata) external override returns (bool upkeepNeeded_, bytes memory performData_) {
         uint256 balPending1 = baseRewardPool1.earned(address(this));
         uint256 balPending2 = baseRewardPool2.earned(address(this));
@@ -555,7 +563,7 @@ contract AuraAvatarTwoToken is BaseAvatar, PausableUpgradeable, AuraAvatarUtils,
                 upkeepNeeded_ = true;
 
                 (, uint256 totalAura) = pendingRewards();
-                performData_ = abi.encode(getAuraPriceInUsdSpot(totalAura));
+                performData_ = abi.encodeCall(this.processRewardsKeeper, getAuraPriceInUsdSpot(totalAura));
             }
         }
     }
@@ -587,12 +595,24 @@ contract AuraAvatarTwoToken is BaseAvatar, PausableUpgradeable, AuraAvatarUtils,
         }
     }
 
+    /// @notice A function to process pending BAL and AURA rewards at regular intervals. Can only be called by the
+    ///         keeper when the contract is not paused.
+    function _processRewardsKeeper(uint256 _auraPriceInUsd) internal {
+        uint256 lastClaimTimestampCached = lastClaimTimestamp;
+        uint256 claimFrequencyCached = claimFrequency;
+        if ((block.timestamp - lastClaimTimestampCached) < claimFrequencyCached) {
+            revert TooSoon(block.timestamp, lastClaimTimestampCached, claimFrequencyCached);
+        }
+
+        _processRewards(_auraPriceInUsd);
+    }
+
     /// @notice Claim and process BAL and AURA rewards, selling some of it to USDC and depositing the rest to bauraBAL
     ///         and vlAURA.
     /// @param _auraPriceInUsd A reference price for AURA in USD (in 8 decimal precision) to compare with TWAP price. Leave as 0 to use only TWAP.
     /// @return processed_ An array containing addresses and amounts of harvested tokens (i.e. tokens that have finally
     ///                    been swapped into).
-    function processRewardsInternal(uint256 _auraPriceInUsd) internal returns (TokenAmount[] memory processed_) {
+    function _processRewards(uint256 _auraPriceInUsd) internal returns (TokenAmount[] memory processed_) {
         // 1. Claim BAL and AURA rewards
         (uint256 totalBal, uint256 totalAura) = claimAndRegisterRewards();
 

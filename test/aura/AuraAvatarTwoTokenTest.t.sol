@@ -6,7 +6,7 @@ import {Test} from "forge-std/Test.sol";
 import {TransparentUpgradeableProxy} from "openzeppelin-contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
 import {ProxyAdmin} from "openzeppelin-contracts/proxy/transparent/ProxyAdmin.sol";
 import {IERC20MetadataUpgradeable} from
-    "openzeppelin-contracts-upgradeable/token/ERC20/extensions/IERC20MetadataUpgradeable.sol";
+    "../../lib/openzeppelin-contracts-upgradeable/contracts/token/ERC20/extensions/IERC20MetadataUpgradeable.sol";
 
 import {AuraAvatarTwoToken, TokenAmount} from "../../src/aura/AuraAvatarTwoToken.sol";
 import {AuraAvatarUtils} from "../../src/aura/AuraAvatarUtils.sol";
@@ -823,7 +823,7 @@ contract AuraAvatarTwoTokenTest is Test, AuraAvatarUtils {
         vm.prank(keeper);
         vm.expectEmit(false, false, false, false);
         emit RewardsToStable(address(USDC), 0, block.timestamp);
-        avatar.performUpkeep(abi.encode(uint256(0)));
+        avatar.performUpkeep(abi.encodeCall(AuraAvatarTwoToken.processRewardsKeeper, uint256(0)));
 
         // Ensure that rewards were processed properly
         assertEq(BASE_REWARD_POOL_80BADGER_20WBTC.earned(address(avatar)), 0);
@@ -872,7 +872,7 @@ contract AuraAvatarTwoTokenTest is Test, AuraAvatarUtils {
             )
         );
         vm.prank(keeper);
-        avatar.performUpkeep(new bytes(0));
+        avatar.performUpkeep(abi.encodeCall(AuraAvatarTwoToken.processRewardsKeeper, uint256(0)));
     }
 
     function test_performUpkeep_staleFeed() public {
@@ -886,7 +886,7 @@ contract AuraAvatarTwoTokenTest is Test, AuraAvatarUtils {
             )
         );
         vm.prank(keeper);
-        avatar.performUpkeep(abi.encode(uint256(0)));
+        avatar.performUpkeep(abi.encodeCall(AuraAvatarTwoToken.processRewardsKeeper, uint256(0)));
     }
 
     ////////////////////////////////////////////////////////////////////////////
