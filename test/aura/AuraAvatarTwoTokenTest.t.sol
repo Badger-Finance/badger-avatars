@@ -1059,6 +1059,38 @@ contract AuraAvatarTwoTokenTest is Test, AuraAvatarUtils {
         assertFalse(upkeepNeeded);
     }
 
+    function test_upkeep_allUsdc() public {
+        vm.startPrank(owner);
+        avatar.setSellBpsBalToUsdc(MAX_BPS);
+        avatar.setSellBpsAuraToUsdc(MAX_BPS);
+
+        avatar.deposit(10e18, 20e18);
+        vm.stopPrank();
+
+        skipAndForwardFeeds(1 weeks);
+
+        (, bytes memory performData) = avatar.checkUpkeep(new bytes(0));
+
+        vm.prank(keeper);
+        avatar.performUpkeep(performData);
+    }
+
+    function test_upkeep_noUsdc() public {
+        vm.startPrank(owner);
+        avatar.setSellBpsBalToUsdc(0);
+        avatar.setSellBpsAuraToUsdc(0);
+
+        avatar.deposit(10e18, 20e18);
+        vm.stopPrank();
+
+        skipAndForwardFeeds(1 weeks);
+
+        (, bytes memory performData) = avatar.checkUpkeep(new bytes(0));
+
+        vm.prank(keeper);
+        avatar.performUpkeep(performData);
+    }
+
     ////////////////////////////////////////////////////////////////////////////
     // Internal helpers
     ////////////////////////////////////////////////////////////////////////////

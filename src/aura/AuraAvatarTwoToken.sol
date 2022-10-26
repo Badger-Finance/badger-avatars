@@ -620,34 +620,54 @@ contract AuraAvatarTwoToken is BaseAvatar, PausableUpgradeable, AuraAvatarUtils,
         uint256 balForUsdc = (totalBal * sellBpsBalToUsdc) / MAX_BPS;
         uint256 auraForUsdc = (totalAura * sellBpsAuraToUsdc) / MAX_BPS;
 
-        uint256 usdcEarnedFromBal = swapBalForUsdc(balForUsdc);
-        uint256 usdcEarnedFromAura = swapAuraForUsdc(auraForUsdc, _auraPriceInUsd);
+        uint256 usdcEarnedFromBal;
+        if (balForUsdc > 0) {
+            usdcEarnedFromBal = swapBalForUsdc(balForUsdc);
+        }
+        uint256 usdcEarnedFromAura;
+        if (auraForUsdc > 0) {
+            usdcEarnedFromAura = swapAuraForUsdc(auraForUsdc, _auraPriceInUsd);
+        }
 
         uint256 totalUsdcEarned = usdcEarnedFromBal + usdcEarnedFromAura;
 
         address ownerCached = owner();
-        USDC.safeTransfer(ownerCached, totalUsdcEarned);
+        if (totalUsdcEarned > 0) {
+            USDC.safeTransfer(ownerCached, totalUsdcEarned);
+        }
 
         // 3. Deposit remaining BAL to 80BAL-20ETH BPT
-        depositBalToBpt(totalBal - balForUsdc);
+        uint256 balToBpt = totalBal - balForUsdc;
+        if (balToBpt > 0) {
+            depositBalToBpt(totalBal - balForUsdc);
+        }
 
         // 4. Swap BPT for auraBAL or lock
-        swapBptForAuraBal(BPT_80BAL_20WETH.balanceOf(address(this)));
+        uint256 bptToAuraBal = BPT_80BAL_20WETH.balanceOf(address(this));
+        if (bptToAuraBal > 0) {
+            swapBptForAuraBal(bptToAuraBal);
+        }
 
         // 5. Dogfood auraBAL in Badger vault on behalf of owner
-        uint256 bauraBalBefore = BAURABAL.balanceOf(ownerCached);
-        BAURABAL.depositFor(ownerCached, AURABAL.balanceOf(address(this)));
-        uint256 bauraBalAfter = BAURABAL.balanceOf(ownerCached);
+        uint256 auraBalBalance = AURABAL.balanceOf(address(this));
+        uint256 bAuraBalEarned;
+        if (auraBalBalance > 0) {
+            uint256 bAuraBalBefore = BAURABAL.balanceOf(ownerCached);
+            BAURABAL.depositFor(ownerCached, auraBalBalance);
+            bAuraBalEarned = BAURABAL.balanceOf(ownerCached) - bAuraBalBefore;
+        }
 
         // 6. Lock remaining AURA on behalf of Badger voter msig
         uint256 auraToLock = totalAura - auraForUsdc;
-        AURA_LOCKER.lock(BADGER_VOTER, auraToLock);
+        if (auraToLock > 0) {
+            AURA_LOCKER.lock(BADGER_VOTER, auraToLock);
+        }
 
         // Return processed amounts
         processed_ = new TokenAmount[](3);
         processed_[0] = TokenAmount(address(USDC), totalUsdcEarned);
         processed_[1] = TokenAmount(address(AURA), auraToLock);
-        processed_[2] = TokenAmount(address(BAURABAL), bauraBalAfter - bauraBalBefore);
+        processed_[2] = TokenAmount(address(BAURABAL), bAuraBalEarned);
 
         // Emit events for analysis
         emit RewardsToStable(address(USDC), totalUsdcEarned, block.timestamp);
