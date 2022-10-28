@@ -792,7 +792,7 @@ contract AuraAvatarTwoTokenTest is Test, AuraAvatarUtils {
         (bool upkeepNeeded, bytes memory performData) = avatar.checkUpkeep(new bytes(0));
         assertTrue(upkeepNeeded);
 
-        uint256 auraPriceInUsd = abi.decode(performData, (uint256));
+        uint256 auraPriceInUsd = getPriceFromPerformData(performData);
         assertGt(auraPriceInUsd, 0);
     }
 
@@ -937,6 +937,22 @@ contract AuraAvatarTwoTokenTest is Test, AuraAvatarUtils {
         assertApproxEqRel(spotPrice, twapPrice, 0.025e18);
     }
 
+    function test_checkUpkeep_price() public {
+        vm.startPrank(owner);
+        avatar.deposit(10e18, 20e18);
+
+        skip(1 weeks);
+        (, uint256 pendingAura) = avatar.pendingRewards();
+        console.log(getAuraPriceInUsdSpot(pendingAura));
+
+        (, bytes memory performData) = avatar.checkUpkeep(new bytes(0));
+        uint256 auraPriceInUsd = getPriceFromPerformData(performData);
+
+        uint256 spotPrice = getAuraPriceInUsdSpot(pendingAura);
+
+        assertEq(auraPriceInUsd, spotPrice);
+    }
+
     function test_debug() public {
         console.log(getBalAmountInUsdc(1e18));
         console.log(getAuraAmountInUsdc(1e18, avatar.twapPeriod()));
@@ -946,9 +962,13 @@ contract AuraAvatarTwoTokenTest is Test, AuraAvatarUtils {
         vm.startPrank(owner);
         avatar.deposit(10e18, 20e18);
 
-        skip(1 hours);
+        skip(1 weeks);
         (, uint256 pendingAura) = avatar.pendingRewards();
         console.log(getAuraPriceInUsdSpot(pendingAura));
+
+        (, bytes memory performData) = avatar.checkUpkeep(new bytes(0));
+        uint256 auraPriceInUsd = getPriceFromPerformData(performData);
+        console.log(auraPriceInUsd);
     }
 
     function test_processRewards_highBalMinBps() public {
@@ -1029,7 +1049,7 @@ contract AuraAvatarTwoTokenTest is Test, AuraAvatarUtils {
         skipAndForwardFeeds(1 weeks);
 
         (bool upkeepNeeded, bytes memory performData) = avatar.checkUpkeep(new bytes(0));
-        uint256 auraPriceInUsd = abi.decode(performData, (uint256));
+        uint256 auraPriceInUsd = getPriceFromPerformData(performData);
 
         assertTrue(upkeepNeeded);
         assertGt(auraPriceInUsd, 0);
@@ -1045,7 +1065,7 @@ contract AuraAvatarTwoTokenTest is Test, AuraAvatarUtils {
         skipAndForwardFeeds(1 weeks);
 
         (bool upkeepNeeded, bytes memory performData) = avatar.checkUpkeep(new bytes(0));
-        uint256 auraPriceInUsd = abi.decode(performData, (uint256));
+        uint256 auraPriceInUsd = getPriceFromPerformData(performData);
 
         assertTrue(upkeepNeeded);
         assertGt(auraPriceInUsd, 0);
@@ -1113,5 +1133,11 @@ contract AuraAvatarTwoTokenTest is Test, AuraAvatarUtils {
         uint256 lastTimestamp = _feed.latestTimestamp();
         vm.etch(address(_feed), type(MockV3Aggregator).runtimeCode);
         MockV3Aggregator(address(_feed)).updateAnswerAndTimestamp(lastAnswer, lastTimestamp + _duration);
+    }
+
+    function getPriceFromPerformData(bytes memory _performData) internal pure returns (uint256 auraPriceInUsd_) {
+        assembly {
+            auraPriceInUsd_ := mload(add(_performData, 36))
+        }
     }
 }
