@@ -636,24 +636,18 @@ contract AuraAvatarTwoToken is BaseAvatar, PausableUpgradeable, AuraAvatarUtils,
             USDC.safeTransfer(ownerCached, totalUsdcEarned);
         }
 
-        // 3. Deposit remaining BAL to 80BAL-20ETH BPT
+        uint256 bAuraBalEarned;
         uint256 balToBpt = totalBal - balForUsdc;
         if (balToBpt > 0) {
-            depositBalToBpt(totalBal - balForUsdc);
-        }
+            // 3. Deposit remaining BAL to 80BAL-20ETH BPT
+            depositBalToBpt(balToBpt);
 
-        // 4. Swap BPT for auraBAL or lock
-        uint256 bptToAuraBal = BPT_80BAL_20WETH.balanceOf(address(this));
-        if (bptToAuraBal > 0) {
-            swapBptForAuraBal(bptToAuraBal);
-        }
+            // 4. Swap BPT for auraBAL or lock
+            swapBptForAuraBal(BPT_80BAL_20WETH.balanceOf(address(this)));
 
-        // 5. Dogfood auraBAL in Badger vault on behalf of owner
-        uint256 auraBalBalance = AURABAL.balanceOf(address(this));
-        uint256 bAuraBalEarned;
-        if (auraBalBalance > 0) {
+            // 5. Dogfood auraBAL in Badger vault on behalf of owner
             uint256 bAuraBalBefore = BAURABAL.balanceOf(ownerCached);
-            BAURABAL.depositFor(ownerCached, auraBalBalance);
+            BAURABAL.depositFor(ownerCached, AURABAL.balanceOf(address(this)));
             bAuraBalEarned = BAURABAL.balanceOf(ownerCached) - bAuraBalBefore;
         }
 
