@@ -78,7 +78,10 @@ contract AuraAvatarTwoTokenTest is Test, AuraAvatarUtils {
         vm.label(address(AURABAL), "AURABAL");
         vm.label(address(BPT_80BAL_20WETH), "BPT_80BAL_20WETH");
 
-        avatar = new AuraAvatarTwoToken(PID_80BADGER_20WBTC, PID_40WBTC_40DIGG_20GRAVIAURA);
+        avatar = new AuraAvatarTwoToken(
+            PID_80BADGER_20WBTC,
+            PID_40WBTC_40DIGG_20GRAVIAURA
+        );
         avatar.initialize(owner, manager, keeper);
 
         deal(address(avatar.asset1()), owner, 10e18, true);
@@ -133,10 +136,22 @@ contract AuraAvatarTwoTokenTest is Test, AuraAvatarUtils {
 
     function test_proxy_immutables() public {
         ProxyAdmin proxyAdmin = new ProxyAdmin();
-        address logic = address(new AuraAvatarTwoToken(PID_80BADGER_20WBTC, PID_40WBTC_40DIGG_20GRAVIAURA));
+        address logic = address(
+            new AuraAvatarTwoToken(
+                PID_80BADGER_20WBTC,
+                PID_40WBTC_40DIGG_20GRAVIAURA
+            )
+        );
         bytes memory initData = abi.encodeCall(AuraAvatarTwoToken.initialize, (owner, manager, keeper));
-        AuraAvatarTwoToken avatarProxy =
-            AuraAvatarTwoToken(address(new TransparentUpgradeableProxy(logic, address(proxyAdmin), initData)));
+        AuraAvatarTwoToken avatarProxy = AuraAvatarTwoToken(
+            address(
+                new TransparentUpgradeableProxy(
+                    logic,
+                    address(proxyAdmin),
+                    initData
+                )
+            )
+        );
 
         assertEq(avatarProxy.pid1(), PID_80BADGER_20WBTC);
         assertEq(avatarProxy.pid2(), PID_40WBTC_40DIGG_20GRAVIAURA);
@@ -1091,8 +1106,19 @@ contract AuraAvatarTwoTokenTest is Test, AuraAvatarUtils {
 
         (, bytes memory performData) = avatar.checkUpkeep(new bytes(0));
 
+        uint256 usdcBalBefore = USDC.balanceOf(owner);
+        uint256 bauraBalBalanceBefore = BAURABAL.balanceOf(owner);
+        (,, uint256 voterBalanceBefore,) = AURA_LOCKER.lockedBalances(BADGER_VOTER);
+
         vm.prank(keeper);
         avatar.performUpkeep(performData);
+
+        (,, uint256 voterBalanceAfter,) = AURA_LOCKER.lockedBalances(BADGER_VOTER);
+
+        // Check expected behaviour when all goes to usdc
+        assertGt(USDC.balanceOf(owner), usdcBalBefore);
+        assertEq(BAURABAL.balanceOf(owner), bauraBalBalanceBefore);
+        assertEq(voterBalanceAfter, voterBalanceBefore);
     }
 
     function test_upkeep_noUsdc() public {
@@ -1107,8 +1133,19 @@ contract AuraAvatarTwoTokenTest is Test, AuraAvatarUtils {
 
         (, bytes memory performData) = avatar.checkUpkeep(new bytes(0));
 
+        uint256 usdcBalBefore = USDC.balanceOf(owner);
+        uint256 bauraBalBalanceBefore = BAURABAL.balanceOf(owner);
+        (,, uint256 voterBalanceBefore,) = AURA_LOCKER.lockedBalances(BADGER_VOTER);
+
         vm.prank(keeper);
         avatar.performUpkeep(performData);
+
+        (,, uint256 voterBalanceAfter,) = AURA_LOCKER.lockedBalances(BADGER_VOTER);
+
+        // Check expected behaviour when nothing is sold for usdc
+        assertEq(USDC.balanceOf(owner), usdcBalBefore);
+        assertGt(BAURABAL.balanceOf(owner), bauraBalBalanceBefore);
+        assertGt(voterBalanceAfter, voterBalanceBefore);
     }
 
     ////////////////////////////////////////////////////////////////////////////
