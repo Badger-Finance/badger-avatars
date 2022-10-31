@@ -68,7 +68,7 @@ contract AuraAvatarTwoTokenTest is Test, AuraAvatarUtils {
 
     function setUp() public {
         // TODO: Remove hardcoded block
-        vm.createSelectFork("mainnet", 15617600);
+        vm.createSelectFork("mainnet", 15858000);
 
         // Labels
         vm.label(address(AURA), "AURA");
