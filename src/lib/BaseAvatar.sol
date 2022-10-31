@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import {OwnableUpgradeable} from "openzeppelin-contracts-upgradeable/access/OwnableUpgradeable.sol";
-import {Enum, Executor} from "safe-contracts/base/Executor.sol";
+import {OwnableUpgradeable} from "../../lib/openzeppelin-contracts-upgradeable/contracts/access/OwnableUpgradeable.sol";
+import {Enum, Executor} from "../../lib/safe-contracts/contracts/base/Executor.sol";
 
 import {GlobalAccessControlManaged} from "./GlobalAccessControlManaged.sol";
 
