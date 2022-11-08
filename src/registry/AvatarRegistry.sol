@@ -121,6 +121,9 @@ contract AvatarRegistry is PausableUpgradeable, KeeperCompatibleInterface {
     /// @notice only callable via governance
     function avatarMonitoring() external onlyGovernance {
         avatarMonitoringUpKeepId = 0;
+
+        /// @dev give allowance of spending LINK funds
+        LINK.approve(KEEPER_REGISTRY, type(uint256).max);
     }
 
     /// @dev Adds an avatar into the registry
