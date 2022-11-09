@@ -39,6 +39,7 @@ contract AvatarRegistry is PausableUpgradeable, KeeperCompatibleInterface {
     }
 
     /* ========== CONSTANTS VARIABLES ========== */
+    string public constant AVATAR_REGISTRY_NAME = "BadgerDAO Avatar Registry";
     address public constant KEEPER_REGISTRAR =
         0xDb8e8e2ccb5C033938736aa89Fe4fa1eDfD15a1d;
     address public constant KEEPER_REGISTRY =
@@ -114,16 +115,32 @@ contract AvatarRegistry is PausableUpgradeable, KeeperCompatibleInterface {
 
     event RemoveAvatar(address avatarAddress, uint256 timestamp);
 
+    event UpdateAvatarStatus(
+        address avatarAddress,
+        AvatarStatus oldStatus,
+        AvatarStatus newStatus,
+        uint256 timestamp
+    );
+
     /***************************************
                ADMIN - GOVERNANCE
     ****************************************/
     /// @dev It will initiate the upKeep job for monitoring avatars
     /// @notice only callable via governance
-    function avatarMonitoring() external onlyGovernance {
-        avatarMonitoringUpKeepId = 0;
+    /// @param gasLimit gas limit for the avatar monitoring upkeep task
+    function avatarMonitoring(uint256 gasLimit) external onlyGovernance {
+        require(gasLimit > 0, "AvatarRegistry: gasLimit=0!");
 
-        /// @dev give allowance of spending LINK funds
-        LINK.approve(KEEPER_REGISTRY, type(uint256).max);
+        avatarMonitoringUpKeepId = _registerUpKeep(
+            address(this),
+            gasLimit,
+            AVATAR_REGISTRY_NAME
+        );
+
+        if (avatarMonitoringUpKeepId > 0) {
+            /// @dev give allowance of spending LINK funds
+            LINK.approve(KEEPER_REGISTRY, type(uint256).max);
+        }
     }
 
     /// @dev Adds an avatar into the registry
@@ -138,14 +155,17 @@ contract AvatarRegistry is PausableUpgradeable, KeeperCompatibleInterface {
         uint256 gasLimit
     ) external onlyGovernance {
         /// @dev sanity checks before adding a new avatar in storage
-        require(avatarAddress != address(0), "zero-address!");
+        require(
+            avatarAddress != address(0),
+            "AvatarRegistry: AvatarRegistry: zero-address!"
+        );
         require(
             avatarsInfo[avatarAddress].gasLimit == 0,
-            "avatar-already-added!"
+            "AvatarRegistry: avatar-already-added!"
         );
-        require(gasLimit > 0, "gasLimit=0!");
+        require(gasLimit > 0, "AvatarRegistry: gasLimit=0!");
 
-        require(_avatars.add(avatarAddress), "not-add-in-set!");
+        require(_avatars.add(avatarAddress), "AvatarRegistry: not-add-in-set!");
         avatarsInfo[avatarAddress] = AvatarInfo({
             name: name,
             gasLimit: gasLimit,
@@ -160,12 +180,47 @@ contract AvatarRegistry is PausableUpgradeable, KeeperCompatibleInterface {
     /// @notice only callable via governance
     /// @param avatarAddress contract address to be remove from the registry
     function removeAvatar(address avatarAddress) external onlyGovernance {
-        require(_avatars.contains(avatarAddress), "avatar-doesnt-exist!");
-        require(_avatars.remove(avatarAddress), "not-remove-in-set!");
+        require(
+            _avatars.contains(avatarAddress),
+            "AvatarRegistry: Avatar doesnt exist!"
+        );
+        require(
+            _avatars.remove(avatarAddress),
+            "AvatarRegistry: Not remove in the set!"
+        );
 
         delete avatarsInfo[avatarAddress];
 
         emit RemoveAvatar(avatarAddress, block.timestamp);
+    }
+
+    /// @dev Updates status of an avatar in the registry
+    /// @notice only callable via governance
+    /// @param avatarAddress contract address update status of
+    /// @param newStatus latest status of the avatar
+    function updateStatus(address avatarAddress, AvatarStatus newStatus)
+        external
+        onlyGovernance
+    {
+        require(
+            _avatars.contains(avatarAddress),
+            "AvatarRegistry: Avatar doesnt exist!"
+        );
+
+        AvatarStatus oldStatus = avatarsInfo[avatarAddress].status;
+        require(
+            oldStatus != newStatus,
+            "AvatarRegistry: Updating to same status!"
+        );
+
+        avatarsInfo[avatarAddress].status = newStatus;
+
+        emit UpdateAvatarStatus(
+            avatarAddress,
+            oldStatus,
+            newStatus,
+            block.timestamp
+        );
     }
 
     /***************************************
@@ -211,6 +266,8 @@ contract AvatarRegistry is PausableUpgradeable, KeeperCompatibleInterface {
                 break;
             }
         }
+
+        /// @dev check for the registry itself if its upkeep needs topup
     }
 
     /// @dev Contains the logic that should be executed on-chain when
@@ -228,11 +285,11 @@ contract AvatarRegistry is PausableUpgradeable, KeeperCompatibleInterface {
         /// @dev check on-chain that config in avatar is correct
         require(
             IAvatar(avatarTarget).keeper() != KEEPER_REGISTRY,
-            "CL registry not set!"
+            "AvatarRegistry: CL registry not set!"
         );
         require(
             avatarsInfo[avatarTarget].upKeepId == 0,
-            "upKeep already register!"
+            "AvatarRegistry: UpKeep already register!"
         );
 
         if (operationType == OperationKeeperType.REGISTER_UPKEEP) {
@@ -243,6 +300,8 @@ contract AvatarRegistry is PausableUpgradeable, KeeperCompatibleInterface {
     }
 
     /// @dev returns the fast gwei and price of link/eth from CL
+    /// @return gasWei current fastest gas value in wei
+    /// @return linkEth latest answer of feed of link/eth
     function _getFeedData()
         internal
         view
@@ -281,6 +340,9 @@ contract AvatarRegistry is PausableUpgradeable, KeeperCompatibleInterface {
     }
 
     /// @dev converts a gas limit value into link expressed amount
+    /// @param gasLimit amount of gas to provide the target contract when
+    /// performing upkeep
+    /// @return linkAmount amount of LINK needed to cover the job
     function _getLinkAmount(uint256 gasLimit)
         internal
         view
@@ -304,59 +366,11 @@ contract AvatarRegistry is PausableUpgradeable, KeeperCompatibleInterface {
     /// @notice only callable from `performUpKeep` method via keepers
     /// @param avatar contract avatar target to register
     function _registerAndRecordId(address avatar) internal {
-        /// @dev we ensure we top-up enough LINK for couple of test-runs (20) and sanity checks
-        uint256 linkAmount = _getLinkAmount(avatarsInfo[avatar].gasLimit) *
-            ROUNDS_TOP_UP;
-        uint256 registryLinkBal = LINK.balanceOf(address(this));
-        require(linkAmount >= MIN_FUNDING_UPKEEP, "min funding 5 LINK!");
-        require(
-            registryLinkBal >= MIN_FUNDING_UPKEEP &&
-                registryLinkBal >= linkAmount,
-            "Not enough LINK in registry!"
+        avatarsInfo[avatar].upKeepId = _registerUpKeep(
+            avatar,
+            avatarsInfo[avatar].gasLimit,
+            avatarsInfo[avatar].name
         );
-
-        /// @dev check registry state before registering
-        (
-            IKeeperRegistry.State memory state,
-            IKeeperRegistry.Config memory _c,
-            address[] memory _k
-        ) = CL_REGISTRY.getState();
-        uint256 oldNonce = state.nonce;
-
-        bytes memory data = abi.encodeCall(
-            IKeeperRegistrar.register,
-            (
-                avatarsInfo[avatar].name,
-                bytes(""),
-                avatar,
-                uint32(avatarsInfo[avatar].gasLimit),
-                ADMIN_KEEPERS,
-                bytes(""),
-                uint96(linkAmount),
-                0,
-                address(this)
-            )
-        );
-
-        LINK.transferAndCall(KEEPER_REGISTRAR, linkAmount, data);
-
-        (state, _c, _k) = CL_REGISTRY.getState();
-        uint256 newNonce = state.nonce;
-        if (newNonce == oldNonce + 1) {
-            uint256 upkeepID = uint256(
-                keccak256(
-                    abi.encodePacked(
-                        blockhash(block.number - 1),
-                        KEEPER_REGISTRY,
-                        uint32(oldNonce)
-                    )
-                )
-            );
-
-            avatarsInfo[avatar].upKeepId = upkeepID;
-        } else {
-            revert NotAutoApproveKeeper();
-        }
     }
 
     /// @dev checks if an avatar upKeepId is under-funded, helper in `checkUpKeep`
@@ -401,10 +415,77 @@ contract AvatarRegistry is PausableUpgradeable, KeeperCompatibleInterface {
 
         require(
             LINK.balanceOf(address(this)) >= topupAmount,
-            "Not enough LINK in registry!"
+            "AvatarRegistry: Not enough LINK in registry!"
         );
 
         CL_REGISTRY.addFunds(upKeepId, topupAmount);
+    }
+
+    /// @dev carries registration of target contract in CL
+    /// @param targetAddress contract which will be register
+    /// @param gasLimit amount of gas to provide the target contract when
+    /// performing upkeep
+    /// @param name detailed name for the upkeep job
+    /// @return upkeepID id of cl job
+    function _registerUpKeep(
+        address targetAddress,
+        uint256 gasLimit,
+        string memory name
+    ) internal returns (uint256 upkeepID) {
+        /// @dev we ensure we top-up enough LINK for couple of test-runs (20) and sanity checks
+        uint256 linkAmount = _getLinkAmount(gasLimit) * ROUNDS_TOP_UP;
+        uint256 registryLinkBal = LINK.balanceOf(address(this));
+        require(
+            linkAmount >= MIN_FUNDING_UPKEEP,
+            "AvatarRegistry: Min funding 5 LINK!"
+        );
+        require(
+            registryLinkBal >= MIN_FUNDING_UPKEEP &&
+                registryLinkBal >= linkAmount,
+            "AvatarRegistry: Not enough LINK in registry!"
+        );
+
+        /// @dev check registry state before registering
+        (
+            IKeeperRegistry.State memory state,
+            IKeeperRegistry.Config memory _c,
+            address[] memory _k
+        ) = CL_REGISTRY.getState();
+        uint256 oldNonce = state.nonce;
+
+        bytes memory data = abi.encodeCall(
+            IKeeperRegistrar.register,
+            (
+                name,
+                bytes(""),
+                targetAddress,
+                uint32(gasLimit),
+                ADMIN_KEEPERS,
+                bytes(""),
+                uint96(linkAmount),
+                0,
+                address(this)
+            )
+        );
+
+        LINK.transferAndCall(KEEPER_REGISTRAR, linkAmount, data);
+
+        (state, _c, _k) = CL_REGISTRY.getState();
+        uint256 newNonce = state.nonce;
+
+        if (newNonce == oldNonce + 1) {
+            upkeepID = uint256(
+                keccak256(
+                    abi.encodePacked(
+                        blockhash(block.number - 1),
+                        KEEPER_REGISTRY,
+                        uint32(oldNonce)
+                    )
+                )
+            );
+        } else {
+            revert NotAutoApproveKeeper();
+        }
     }
 
     /***************************************
