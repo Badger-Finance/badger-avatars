@@ -498,6 +498,16 @@ contract AvatarRegistry is PausableUpgradeable, KeeperCompatibleInterface {
 
     /// @dev Returns all avatar addresses which have `TESTING` status
     function getAvatarsInTestStatus() public view returns (address[] memory) {
-        return _avatars.values();
+        uint256 length = _avatars.length();
+        address[] memory avatarInTestStatus = new address[](length);
+
+        for (uint256 i = 0; i < length; i++) {
+            address avatar = _avatars.at(i);
+            if (avatarsInfo[avatar].status == AvatarStatus.TESTING) {
+                avatarInTestStatus[i] = avatar;
+            }
+        }
+
+        return avatarInTestStatus;
     }
 }
