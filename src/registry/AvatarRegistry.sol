@@ -122,6 +122,11 @@ contract AvatarRegistry is PausableUpgradeable, KeeperCompatibleInterface {
         uint256 timestamp
     );
 
+    constructor(address _governance) {
+        require(_governance != address(0), "AvatarRegistry: zero-address!");
+        governance = _governance;
+    }
+
     /***************************************
                ADMIN - GOVERNANCE
     ****************************************/
