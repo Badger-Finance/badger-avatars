@@ -228,6 +228,16 @@ contract AvatarRegistry is PausableUpgradeable, KeeperCompatibleInterface {
         );
     }
 
+    /// @dev Pauses the contract, which prevents executing performUpkeep.
+    function pause() external onlyGovernance {
+        _pause();
+    }
+
+    /// @dev Unpauses the contract.
+    function unpause() external onlyGovernance {
+        _unpause();
+    }
+
     /***************************************
                 KEEPERS - EXECUTORS
     ****************************************/
@@ -243,32 +253,36 @@ contract AvatarRegistry is PausableUpgradeable, KeeperCompatibleInterface {
         address[] memory avatarsInTestStatus = getAvatarsInTestStatus();
 
         for (uint256 i = 0; i < avatarsInTestStatus.length; i++) {
-            /// @dev requires that CL keeper is config properly
-            if (IAvatar(avatarsInTestStatus[i]).keeper() != KEEPER_REGISTRY) {
-                continue;
-            }
+            if (avatarsInTestStatus[i] != address(0)) {
+                /// @dev requires that CL keeper is config properly
+                if (
+                    IAvatar(avatarsInTestStatus[i]).keeper() != KEEPER_REGISTRY
+                ) {
+                    continue;
+                }
 
-            /// @dev prio `test` avatar unregister
-            if (avatarsInfo[avatarsInTestStatus[i]].upKeepId == 0) {
-                upkeepNeeded_ = true;
-                performData_ = abi.encode(
-                    avatarsInTestStatus[i],
-                    OperationKeeperType.REGISTER_UPKEEP
-                );
-                break;
-            }
+                /// @dev prio `test` avatar unregister
+                if (avatarsInfo[avatarsInTestStatus[i]].upKeepId == 0) {
+                    upkeepNeeded_ = true;
+                    performData_ = abi.encode(
+                        avatarsInTestStatus[i],
+                        OperationKeeperType.REGISTER_UPKEEP
+                    );
+                    break;
+                }
 
-            /// @dev check for under funded avatar upkeeps
-            (, , bool underFunded) = _isAvatarUpKeepUnderFunded(
-                avatarsInTestStatus[i]
-            );
-            if (underFunded) {
-                upkeepNeeded_ = true;
-                performData_ = abi.encode(
-                    avatarsInTestStatus[i],
-                    OperationKeeperType.TOPUP_UPKEEP
+                /// @dev check for under funded avatar upkeeps
+                (, , bool underFunded) = _isAvatarUpKeepUnderFunded(
+                    avatarsInTestStatus[i]
                 );
-                break;
+                if (underFunded) {
+                    upkeepNeeded_ = true;
+                    performData_ = abi.encode(
+                        avatarsInTestStatus[i],
+                        OperationKeeperType.TOPUP_UPKEEP
+                    );
+                    break;
+                }
             }
         }
 
@@ -281,6 +295,7 @@ contract AvatarRegistry is PausableUpgradeable, KeeperCompatibleInterface {
         external
         override
         onlyKeeper
+        whenNotPaused
     {
         (address avatarTarget, OperationKeeperType operationType) = abi.decode(
             _performData,
@@ -289,7 +304,7 @@ contract AvatarRegistry is PausableUpgradeable, KeeperCompatibleInterface {
 
         /// @dev check on-chain that config in avatar is correct
         require(
-            IAvatar(avatarTarget).keeper() != KEEPER_REGISTRY,
+            IAvatar(avatarTarget).keeper() == KEEPER_REGISTRY,
             "AvatarRegistry: CL registry not set!"
         );
         require(
