@@ -251,7 +251,9 @@ contract AvatarRegistry is PausableUpgradeable, KeeperCompatibleInterface {
         returns (bool upkeepNeeded_, bytes memory performData_)
     {
         address[] memory avatarsInTestStatus = getAvatarsInTestStatus();
+        bool underFunded;
 
+        /// @dev loop thru avatar in test status for register or topup if required
         for (uint256 i = 0; i < avatarsInTestStatus.length; i++) {
             if (avatarsInTestStatus[i] != address(0)) {
                 /// @dev requires that CL keeper is config properly
@@ -272,7 +274,7 @@ contract AvatarRegistry is PausableUpgradeable, KeeperCompatibleInterface {
                 }
 
                 /// @dev check for under funded avatar upkeeps
-                (, , bool underFunded) = _isAvatarUpKeepUnderFunded(
+                (, , underFunded) = _isAvatarUpKeepUnderFunded(
                     avatarsInTestStatus[i]
                 );
                 if (underFunded) {
@@ -287,6 +289,14 @@ contract AvatarRegistry is PausableUpgradeable, KeeperCompatibleInterface {
         }
 
         /// @dev check for the registry itself if its upkeep needs topup
+        (, , underFunded) = _isAvatarUpKeepUnderFunded(address(this));
+        if (underFunded) {
+            upkeepNeeded_ = true;
+            performData_ = abi.encode(
+                address(this),
+                OperationKeeperType.TOPUP_UPKEEP
+            );
+        }
     }
 
     /// @dev Contains the logic that should be executed on-chain when
@@ -302,13 +312,12 @@ contract AvatarRegistry is PausableUpgradeable, KeeperCompatibleInterface {
             (address, OperationKeeperType)
         );
 
-        /// @dev check on-chain that config in avatar is correct
-        require(
-            IAvatar(avatarTarget).keeper() == KEEPER_REGISTRY,
-            "AvatarRegistry: CL registry not set!"
-        );
-
         if (operationType == OperationKeeperType.REGISTER_UPKEEP) {
+            /// @dev check on-chain that config in avatar is correct
+            require(
+                IAvatar(avatarTarget).keeper() == KEEPER_REGISTRY,
+                "AvatarRegistry: CL registry not set!"
+            );
             require(
                 avatarsInfo[avatarTarget].upKeepId == 0,
                 "AvatarRegistry: UpKeep already register!"
@@ -405,7 +414,11 @@ contract AvatarRegistry is PausableUpgradeable, KeeperCompatibleInterface {
             bool underFunded
         )
     {
-        upKeepId = avatarsInfo[avatar].upKeepId;
+        if (avatar == address(this)) {
+            upKeepId = avatarMonitoringUpKeepId;
+        } else {
+            upKeepId = avatarsInfo[avatar].upKeepId;
+        }
 
         /// @dev check onchain the min and current amounts to consider top-up
         minUpKeepBal = CL_REGISTRY.getMinBalanceForUpkeep(upKeepId);
@@ -426,6 +439,8 @@ contract AvatarRegistry is PausableUpgradeable, KeeperCompatibleInterface {
             uint96 minUpKeepBal,
             bool underFunded
         ) = _isAvatarUpKeepUnderFunded(avatar);
+
+        require(upKeepId > 0, "AvatarRegistry: Address not registered yet!");
 
         if (!underFunded) {
             revert NotUnderFundedUpkeep(upKeepId);
