@@ -250,7 +250,9 @@ contract AvatarRegistry is PausableUpgradeable, KeeperCompatibleInterface {
         whenNotPaused
         returns (bool upkeepNeeded_, bytes memory performData_)
     {
-        address[] memory avatarsInTestStatus = getAvatarsInTestStatus();
+        address[] memory avatarsInTestStatus = getAvatarsByStatus(
+            AvatarStatus.TESTING
+        );
         bool underFunded;
 
         /// @dev loop thru avatar in test status for register or topup if required
@@ -531,14 +533,18 @@ contract AvatarRegistry is PausableUpgradeable, KeeperCompatibleInterface {
         return _avatars.values();
     }
 
-    /// @dev Returns all avatar addresses which have `TESTING` status
-    function getAvatarsInTestStatus() public view returns (address[] memory) {
+    /// @dev Returns all avatar addresses with matching status
+    function getAvatarsByStatus(AvatarStatus status)
+        public
+        view
+        returns (address[] memory)
+    {
         uint256 length = _avatars.length();
         address[] memory avatarInTestStatus = new address[](length);
 
         for (uint256 i = 0; i < length; i++) {
             address avatar = _avatars.at(i);
-            if (avatarsInfo[avatar].status == AvatarStatus.TESTING) {
+            if (avatarsInfo[avatar].status == status) {
                 avatarInTestStatus[i] = avatar;
             }
         }
