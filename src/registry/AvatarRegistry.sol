@@ -307,12 +307,12 @@ contract AvatarRegistry is PausableUpgradeable, KeeperCompatibleInterface {
             IAvatar(avatarTarget).keeper() == KEEPER_REGISTRY,
             "AvatarRegistry: CL registry not set!"
         );
-        require(
-            avatarsInfo[avatarTarget].upKeepId == 0,
-            "AvatarRegistry: UpKeep already register!"
-        );
 
         if (operationType == OperationKeeperType.REGISTER_UPKEEP) {
+            require(
+                avatarsInfo[avatarTarget].upKeepId == 0,
+                "AvatarRegistry: UpKeep already register!"
+            );
             _registerAndRecordId(avatarTarget);
         } else {
             _topupUpkeep(avatarTarget);

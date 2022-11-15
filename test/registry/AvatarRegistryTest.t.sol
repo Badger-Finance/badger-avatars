@@ -260,7 +260,7 @@ contract AvatarRegistryTest is Test {
         assertFalse(upkeepNeeded);
     }
 
-    function test_performUpKeep() public {
+    function test_performUpKeep_avatar_registration() public {
         vm.prank(admin);
         registry.addAvatar(address(avatar), "randomAvatar", 500000);
 
@@ -307,5 +307,63 @@ contract AvatarRegistryTest is Test {
         assertEq(checkData, new bytes(0));
         assertTrue(balance > 0);
         assertEq(keeperJobAdmin, ADMIN_KEEPERS);
+    }
+
+    function test_performUpKeep_avatar_topup() public {
+        vm.prank(admin);
+        registry.addAvatar(address(avatar), "randomAvatar", 500000);
+
+        bool upkeepNeeded;
+        bytes memory performData;
+
+        (upkeepNeeded, performData) = registry.checkUpkeep(new bytes(0));
+        assertTrue(upkeepNeeded);
+
+        // simply first register and then dry link funds
+        vm.prank(KEEPER_REGISTRY);
+        registry.performUpkeep(performData);
+
+        (, , , uint256 upKeepId) = registry.avatarsInfo(address(avatar));
+
+        uint96 enforceUpKeepBal = 1 ether;
+        // https://book.getfoundry.sh/cheatcodes/mock-call#mockcall
+        vm.mockCall(
+            KEEPER_REGISTRY,
+            abi.encodeWithSelector(
+                IKeeperRegistry.getUpkeep.selector,
+                upKeepId
+            ),
+            // getUpKeep mock
+            abi.encode(
+                address(avatar),
+                500000,
+                new bytes(0),
+                enforceUpKeepBal,
+                address(0),
+                ADMIN_KEEPERS,
+                2**64 - 1,
+                0
+            )
+        );
+
+        (upkeepNeeded, performData) = registry.checkUpkeep(new bytes(0));
+        (, AvatarRegistry.OperationKeeperType operationType) = abi.decode(
+            performData,
+            (address, AvatarRegistry.OperationKeeperType)
+        );
+
+        assertTrue(upkeepNeeded);
+        assertTrue(
+            operationType == AvatarRegistry.OperationKeeperType.TOPUP_UPKEEP
+        );
+
+        uint256 linkBalBefore = LINK.balanceOf(address(registry));
+        vm.prank(KEEPER_REGISTRY);
+        registry.performUpkeep(performData);
+        vm.clearMockedCalls();
+
+        (, , , uint96 balance, , , , ) = CL_REGISTRY.getUpkeep(upKeepId);
+        assertTrue(balance > enforceUpKeepBal);
+        assertLt(LINK.balanceOf(address(registry)), linkBalBefore);
     }
 }
