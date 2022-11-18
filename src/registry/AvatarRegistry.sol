@@ -387,10 +387,16 @@ contract AvatarRegistry is PausableUpgradeable, KeeperCompatibleInterface {
         uint256 premium = PPB_BASE + _c.paymentPremiumPPB;
 
         /// @dev amount of LINK to carry one `performUpKeep` operation
+        // See: _calculatePaymentAmount
+        // https://etherscan.io/address/0x02777053d6764996e594c3E88AF1D58D5363a2e6#code#F1#L776
         linkAmount =
+            // From Wei to Eth * Premium / Ratio
             ((weiForGas * (1e9) * (premium)) / (linkEth)) +
+            // From microLink to Link
             (uint256(_c.flatFeeMicroLink) * (1e12));
     }
+
+    
 
     /// @dev registers target avatar into the CL registry and saves
     /// `upKeepId` into the mapping
