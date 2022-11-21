@@ -273,9 +273,10 @@ contract AvatarRegistry is Pausable, KeeperCompatibleInterface {
         );
         bool underFunded;
 
-        /// @dev loop thru avatar in test status for register or topup if required
-        for (uint256 i = 0; i < avatarsInTestStatus.length; i++) {
-            if (avatarsInTestStatus[i] != address(0)) {
+        uint256 avatarsTestLength = avatarsInTestStatus.length;
+        if (avatarsTestLength > 0) {
+            /// @dev loop thru avatar in test status for register or topup if required
+            for (uint256 i = 0; i < avatarsTestLength; i++) {
                 /// @dev requires that CL keeper is config properly
                 if (
                     IAvatar(avatarsInTestStatus[i]).keeper() != KEEPER_REGISTRY
@@ -308,14 +309,17 @@ contract AvatarRegistry is Pausable, KeeperCompatibleInterface {
             }
         }
 
-        /// @dev check for the registry itself if its upkeep needs topup
-        (, , underFunded) = _isAvatarUpKeepUnderFunded(address(this));
-        if (underFunded) {
-            upkeepNeeded_ = true;
-            performData_ = abi.encode(
-                address(this),
-                OperationKeeperType.TOPUP_UPKEEP
-            );
+        // NOTE: to avoid overwritten an `upKeep` meant for registration, check boolean
+        if (!upkeepNeeded_) {
+            /// @dev check for the registry itself if its upkeep needs topup
+            (, , underFunded) = _isAvatarUpKeepUnderFunded(address(this));
+            if (underFunded) {
+                upkeepNeeded_ = true;
+                performData_ = abi.encode(
+                    address(this),
+                    OperationKeeperType.TOPUP_UPKEEP
+                );
+            }
         }
     }
 
