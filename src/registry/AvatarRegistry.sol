@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import {EnumerableSetUpgradeable} from "../../lib/openzeppelin-contracts-upgradeable/contracts/utils/structs/EnumerableSetUpgradeable.sol";
-import {PausableUpgradeable} from "../../lib/openzeppelin-contracts-upgradeable/contracts/security/PausableUpgradeable.sol";
+import {EnumerableSet} from "../../lib/openzeppelin-contracts/contracts/utils/structs/EnumerableSet.sol";
+import {Pausable} from "../../lib/openzeppelin-contracts/contracts/security/Pausable.sol";
 
 import {IAvatar} from "../interfaces/badger/IAvatar.sol";
 import {IAggregatorV3} from "../interfaces/chainlink/IAggregatorV3.sol";
@@ -15,8 +15,8 @@ import {IKeeperRegistrar} from "../interfaces/chainlink/IKeeperRegistrar.sol";
 /// @author  Petrovska @ BadgerDAO
 /// @dev  Allows the registry to register new avatars and top-up under funded
 /// upkeeps via CL
-contract AvatarRegistry is PausableUpgradeable, KeeperCompatibleInterface {
-    using EnumerableSetUpgradeable for EnumerableSetUpgradeable.AddressSet;
+contract AvatarRegistry is Pausable, KeeperCompatibleInterface {
+    using EnumerableSet for EnumerableSet.AddressSet;
 
     /* ========== STRUCT & ENUMS ========== */
     enum OperationKeeperType {
@@ -62,12 +62,14 @@ contract AvatarRegistry is PausableUpgradeable, KeeperCompatibleInterface {
     uint256 internal constant PPB_BASE = 1_000_000_000;
 
     /* ========== STATE VARIABLES ========== */
-    address public governance;
     uint256 public avatarMonitoringUpKeepId;
 
     /// @dev set helper for ease of iterating thru avatars
-    EnumerableSetUpgradeable.AddressSet internal _avatars;
+    EnumerableSet.AddressSet internal _avatars;
     mapping(address => AvatarInfo) public avatarsInfo;
+
+    /* ========== IMMUTABLES ========== */
+    address public immutable governance;
 
     /***************************************
                     ERRORS
@@ -113,7 +115,11 @@ contract AvatarRegistry is PausableUpgradeable, KeeperCompatibleInterface {
         uint256 timestamp
     );
 
-    event RemoveAvatar(address avatarAddress, uint256 timestamp);
+    event RemoveAvatar(
+        address avatarAddress,
+        uint256 upKeepId,
+        uint256 timestamp
+    );
 
     event UpdateAvatarStatus(
         address avatarAddress,
@@ -189,14 +195,26 @@ contract AvatarRegistry is PausableUpgradeable, KeeperCompatibleInterface {
             _avatars.contains(avatarAddress),
             "AvatarRegistry: Avatar doesnt exist!"
         );
+
+        // NOTE: only avatar which upkeep is being cancelled can be removed
+        uint256 upKeepId = avatarsInfo[avatarAddress].upKeepId;
+        (, , , , , , uint64 maxValidBlocknumber, ) = CL_REGISTRY.getUpkeep(
+            upKeepId
+        );
+        // https://etherscan.io/address/0x02777053d6764996e594c3e88af1d58d5363a2e6#code#F1#L738
+        require(
+            maxValidBlocknumber < type(uint64).max,
+            "AvatarRegistry: UpkeepId not cancelled!"
+        );
+
+        // NOTE: removal actions after on-chain checkups
         require(
             _avatars.remove(avatarAddress),
             "AvatarRegistry: Not remove in the set!"
         );
-
         delete avatarsInfo[avatarAddress];
 
-        emit RemoveAvatar(avatarAddress, block.timestamp);
+        emit RemoveAvatar(avatarAddress, upKeepId, block.timestamp);
     }
 
     /// @dev Updates status of an avatar in the registry
@@ -396,8 +414,6 @@ contract AvatarRegistry is PausableUpgradeable, KeeperCompatibleInterface {
             (uint256(_c.flatFeeMicroLink) * (1e12));
     }
 
-    
-
     /// @dev registers target avatar into the CL registry and saves
     /// `upKeepId` into the mapping
     /// @notice only callable from `performUpKeep` method via keepers
@@ -548,10 +564,13 @@ contract AvatarRegistry is PausableUpgradeable, KeeperCompatibleInterface {
         uint256 length = _avatars.length();
         address[] memory avatarInTestStatus = new address[](length);
 
-        for (uint256 i = 0; i < length; i++) {
+        for (uint256 i = 0; i < length; ) {
             address avatar = _avatars.at(i);
             if (avatarsInfo[avatar].status == status) {
                 avatarInTestStatus[i] = avatar;
+            }
+            unchecked {
+                ++i;
             }
         }
 
