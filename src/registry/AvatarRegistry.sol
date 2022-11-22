@@ -605,7 +605,7 @@ contract AvatarRegistry is Pausable, KeeperCompatibleInterface {
         for (uint256 i = 0; i < length; ) {
             address avatar = _avatars.at(i);
             if (avatarsInfo[avatar].status == status) {
-                avatarInTestStatusHelper[i] = avatar;
+                avatarInTestStatusHelper[avatarStatusLength] = avatar;
                 unchecked {
                     ++avatarStatusLength;
                 }
@@ -617,7 +617,7 @@ contract AvatarRegistry is Pausable, KeeperCompatibleInterface {
 
         // NOTE: array trimming from values with `ZERO_ADDRESS` in `avatarInTestStatusHelper`
         address[] memory avatarInTestStatus = new address[](avatarStatusLength);
-        for (uint256 i; i < length; ) {
+        for (uint256 i; i < avatarStatusLength; ) {
             if (avatarInTestStatusHelper[i] != address(0)) {
                 avatarInTestStatus[i] = avatarInTestStatusHelper[i];
             }
