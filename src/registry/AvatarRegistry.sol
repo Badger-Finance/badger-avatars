@@ -46,7 +46,7 @@ contract AvatarRegistry is Pausable, KeeperCompatibleInterface {
         0x02777053d6764996e594c3E88AF1D58D5363a2e6;
     IKeeperRegistry public constant CL_REGISTRY =
         IKeeperRegistry(KEEPER_REGISTRY);
-    address public constant ADMIN_KEEPERS =
+    address public constant TECHOPS =
         0x86cbD0ce0c087b482782c181dA8d191De18C8275;
     ILink public constant LINK =
         ILink(0x514910771AF9Ca656af840dff83E8264EcF986CA);
@@ -128,6 +128,8 @@ contract AvatarRegistry is Pausable, KeeperCompatibleInterface {
         uint256 timestamp
     );
 
+    event SweepLink(address destination, uint256 amount, uint256 timestamp);
+
     constructor(address _governance) {
         require(_governance != address(0), "AvatarRegistry: zero-address!");
         governance = _governance;
@@ -150,7 +152,10 @@ contract AvatarRegistry is Pausable, KeeperCompatibleInterface {
 
         if (avatarMonitoringUpKeepId > 0) {
             /// @dev give allowance of spending LINK funds
-            LINK.approve(KEEPER_REGISTRY, type(uint256).max);
+            require(
+                LINK.approve(KEEPER_REGISTRY, type(uint256).max),
+                "AvatarRegistry: Link approval failed!"
+            );
         }
     }
 
@@ -175,6 +180,7 @@ contract AvatarRegistry is Pausable, KeeperCompatibleInterface {
             "AvatarRegistry: avatar-already-added!"
         );
         require(gasLimit > 0, "AvatarRegistry: gasLimit=0!");
+        require(bytes(name).length != 0, "AvatarRegistry: empty name!");
 
         require(_avatars.add(avatarAddress), "AvatarRegistry: not-add-in-set!");
         avatarsInfo[avatarAddress] = AvatarInfo({
@@ -187,34 +193,17 @@ contract AvatarRegistry is Pausable, KeeperCompatibleInterface {
         emit NewAvatar(avatarAddress, name, gasLimit, block.timestamp);
     }
 
-    /// @dev Removes an avatar into the registry
+    /// @dev Cancels an avatar upkeep job
     /// @notice only callable via governance
-    /// @param avatarAddress contract address to be remove from the registry
-    function removeAvatar(address avatarAddress) external onlyGovernance {
+    /// @param avatarAddress contract address to be cancel upkeep
+    function cancelAvatarUpKeep(address avatarAddress) external onlyGovernance {
         require(
             _avatars.contains(avatarAddress),
             "AvatarRegistry: Avatar doesnt exist!"
         );
-
         // NOTE: only avatar which upkeep is being cancelled can be removed
         uint256 upKeepId = avatarsInfo[avatarAddress].upKeepId;
-        (, , , , , , uint64 maxValidBlocknumber, ) = CL_REGISTRY.getUpkeep(
-            upKeepId
-        );
-        // https://etherscan.io/address/0x02777053d6764996e594c3e88af1d58d5363a2e6#code#F1#L738
-        require(
-            maxValidBlocknumber < type(uint64).max,
-            "AvatarRegistry: UpkeepId not cancelled!"
-        );
-
-        // NOTE: removal actions after on-chain checkups
-        require(
-            _avatars.remove(avatarAddress),
-            "AvatarRegistry: Not remove in the set!"
-        );
-        delete avatarsInfo[avatarAddress];
-
-        emit RemoveAvatar(avatarAddress, upKeepId, block.timestamp);
+        CL_REGISTRY.cancelUpkeep(upKeepId);
     }
 
     /// @dev Updates status of an avatar in the registry
@@ -244,6 +233,51 @@ contract AvatarRegistry is Pausable, KeeperCompatibleInterface {
             newStatus,
             block.timestamp
         );
+    }
+
+    /// @dev Withdraws LINK funds and remove avatar from registry
+    /// @notice only callable via governance
+    /// @param avatarAddress contract address to be remove from registry
+    function withdrawLinkFundsAndRemoveAvatar(address avatarAddress)
+        external
+        onlyGovernance
+    {
+        require(
+            _avatars.contains(avatarAddress),
+            "AvatarRegistry: Avatar doesnt exist!"
+        );
+
+        uint256 upKeepId = avatarsInfo[avatarAddress].upKeepId;
+        // NOTE: only avatar which upkeep is being cancelled can be removed
+        (, , , , , , uint64 maxValidBlocknumber, ) = CL_REGISTRY.getUpkeep(
+            upKeepId
+        );
+        // https://etherscan.io/address/0x02777053d6764996e594c3e88af1d58d5363a2e6#code#F1#L738
+        require(
+            maxValidBlocknumber < type(uint64).max,
+            "AvatarRegistry: UpkeepId not cancelled!"
+        );
+
+        // NOTE: removal actions after on-chain checkups
+        require(
+            _avatars.remove(avatarAddress),
+            "AvatarRegistry: Not remove in the set!"
+        );
+        delete avatarsInfo[avatarAddress];
+
+        CL_REGISTRY.withdrawFunds(upKeepId, address(this));
+
+        emit RemoveAvatar(avatarAddress, upKeepId, block.timestamp);
+    }
+
+    /// @dev  Sweep the full LINK balance to techops
+    function sweepLinkFunds() external onlyGovernance {
+        uint256 linkBal = LINK.balanceOf(address(this));
+        require(
+            LINK.transfer(TECHOPS, linkBal),
+            "AvatarRegistry: sweep failed!"
+        );
+        emit SweepLink(TECHOPS, linkBal, block.timestamp);
     }
 
     /// @dev Pauses the contract, which prevents executing performUpkeep.
@@ -343,6 +377,10 @@ contract AvatarRegistry is Pausable, KeeperCompatibleInterface {
                 "AvatarRegistry: CL registry not set!"
             );
             require(
+                _avatars.contains(avatarTarget),
+                "AvatarRegistry: Avatar not registered by governance!"
+            );
+            require(
                 avatarsInfo[avatarTarget].upKeepId == 0,
                 "AvatarRegistry: UpKeep already register!"
             );
@@ -414,7 +452,6 @@ contract AvatarRegistry is Pausable, KeeperCompatibleInterface {
         linkAmount =
             // From Wei to Eth * Premium / Ratio
             ((weiForGas * (1e9) * (premium)) / (linkEth)) +
-            // From microLink to Link
             (uint256(_c.flatFeeMicroLink) * (1e12));
     }
 
@@ -509,11 +546,7 @@ contract AvatarRegistry is Pausable, KeeperCompatibleInterface {
         );
 
         /// @dev check registry state before registering
-        (
-            IKeeperRegistry.State memory state,
-            IKeeperRegistry.Config memory _c,
-            address[] memory _k
-        ) = CL_REGISTRY.getState();
+        (IKeeperRegistry.State memory state, , ) = CL_REGISTRY.getState();
         uint256 oldNonce = state.nonce;
 
         bytes memory data = abi.encodeCall(
@@ -523,7 +556,7 @@ contract AvatarRegistry is Pausable, KeeperCompatibleInterface {
                 bytes(""),
                 targetAddress,
                 uint32(gasLimit),
-                ADMIN_KEEPERS,
+                address(this),
                 bytes(""),
                 uint96(linkAmount),
                 0,
@@ -533,7 +566,7 @@ contract AvatarRegistry is Pausable, KeeperCompatibleInterface {
 
         LINK.transferAndCall(KEEPER_REGISTRAR, linkAmount, data);
 
-        (state, _c, _k) = CL_REGISTRY.getState();
+        (state, , ) = CL_REGISTRY.getState();
         uint256 newNonce = state.nonce;
 
         if (newNonce == oldNonce + 1) {
@@ -566,12 +599,27 @@ contract AvatarRegistry is Pausable, KeeperCompatibleInterface {
         returns (address[] memory)
     {
         uint256 length = _avatars.length();
-        address[] memory avatarInTestStatus = new address[](length);
+        address[] memory avatarInTestStatusHelper = new address[](length);
+        uint256 avatarStatusLength;
 
         for (uint256 i = 0; i < length; ) {
             address avatar = _avatars.at(i);
             if (avatarsInfo[avatar].status == status) {
-                avatarInTestStatus[i] = avatar;
+                avatarInTestStatusHelper[i] = avatar;
+                unchecked {
+                    ++avatarStatusLength;
+                }
+            }
+            unchecked {
+                ++i;
+            }
+        }
+
+        // NOTE: array trimming from values with `ZERO_ADDRESS` in `avatarInTestStatusHelper`
+        address[] memory avatarInTestStatus = new address[](avatarStatusLength);
+        for (uint256 i; i < length; ) {
+            if (avatarInTestStatusHelper[i] != address(0)) {
+                avatarInTestStatus[i] = avatarInTestStatusHelper[i];
             }
             unchecked {
                 ++i;

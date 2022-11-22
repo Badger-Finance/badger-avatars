@@ -2,6 +2,7 @@
 pragma solidity ^0.8.0;
 
 import {Test} from "forge-std/Test.sol";
+import {console2 as console} from "forge-std/console2.sol";
 
 import {IERC20MetadataUpgradeable} from "../../lib/openzeppelin-contracts-upgradeable/contracts/token/ERC20/extensions/IERC20MetadataUpgradeable.sol";
 
@@ -20,13 +21,15 @@ contract AvatarRegistryTest is Test {
         0x02777053d6764996e594c3E88AF1D58D5363a2e6;
     IKeeperRegistry public constant CL_REGISTRY =
         IKeeperRegistry(KEEPER_REGISTRY);
-    address public constant ADMIN_KEEPERS =
+    address public constant TECHOPS =
         0x86cbD0ce0c087b482782c181dA8d191De18C8275;
     uint256 constant MONITORING_AVATAR_GAS_LIMIT = 1_000_000;
 
     address constant admin = address(1);
     address constant eoa = address(2);
     address constant dummy_avatar = address(3);
+
+    event SweepLink(address destination, uint256 amount, uint256 timestamp);
 
     function setUp() public {
         vm.createSelectFork("mainnet", 15858000);
@@ -96,28 +99,45 @@ contract AvatarRegistryTest is Test {
         assertEq(avatarBook[0], dummy_avatar);
     }
 
-    function test_removeAvatar_permissions() public {
+    function test_cancelAvatarUpKeep_permissions() public {
         vm.expectRevert(
             abi.encodeWithSelector(
                 AvatarRegistry.NotGovernance.selector,
                 (address(this))
             )
         );
-        registry.removeAvatar(address(0));
+        registry.cancelAvatarUpKeep(address(0));
     }
 
-    function test_removeAvatar_requires() public {
+    function test_cancelAvatarUpKeep_requires() public {
         vm.startPrank(admin);
         vm.expectRevert("AvatarRegistry: Avatar doesnt exist!");
         // Test for both cases, since it cannot remove from set if not avail
-        registry.removeAvatar(dummy_avatar);
+        registry.cancelAvatarUpKeep(dummy_avatar);
     }
 
-    function test_removeAvatar() public {
+    function test_cancelAvatarUpKeep_and_removeAvatar() public {
         vm.startPrank(admin);
-        registry.addAvatar(dummy_avatar, "randomAvatar", 500000);
+        registry.addAvatar(address(avatar), "randomAvatar", 500000);
+        vm.stopPrank();
 
-        registry.removeAvatar(dummy_avatar);
+        // register on registry to enable cancelling
+        (bool upkeepNeeded, bytes memory performData) = registry.checkUpkeep(
+            new bytes(0)
+        );
+        assertTrue(upkeepNeeded);
+        vm.prank(KEEPER_REGISTRY);
+        registry.performUpkeep(performData);
+        vm.stopPrank();
+
+        vm.startPrank(admin);
+        uint256 currentBlock = block.number;
+        registry.cancelAvatarUpKeep(address(avatar));
+
+        // NOTE: advance blocks to allow fund withdrawal
+        vm.roll(currentBlock + 51);
+        uint256 linkBalBefore = LINK.balanceOf(address(registry));
+        registry.withdrawLinkFundsAndRemoveAvatar(address(avatar));
 
         (
             string memory name,
@@ -130,6 +150,7 @@ contract AvatarRegistryTest is Test {
         assertEqUint(gasLimit, 0);
         assertTrue(status == AvatarRegistry.AvatarStatus.DEPRECATED);
         assertEqUint(upKeepId, 0);
+        assertGt(LINK.balanceOf(address(registry)), linkBalBefore);
     }
 
     function test_updateStatus_permissions() public {
@@ -164,6 +185,29 @@ contract AvatarRegistryTest is Test {
             dummy_avatar
         );
         assertTrue(status == AvatarRegistry.AvatarStatus.SEEDED);
+    }
+
+    function test_sweep_permissions() public {
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                AvatarRegistry.NotGovernance.selector,
+                (address(this))
+            )
+        );
+        registry.sweepLinkFunds();
+    }
+
+    function test_sweep() public {
+        uint256 linkBal = LINK.balanceOf(address(registry));
+        uint256 linkTechopsBal = LINK.balanceOf(address(TECHOPS));
+
+        vm.prank(admin);
+        vm.expectEmit(true, true, true, false);
+        emit SweepLink(TECHOPS, linkBal, block.timestamp);
+        registry.sweepLinkFunds();
+
+        // ensure techops link balance is increased
+        assertGt(LINK.balanceOf(address(TECHOPS)), linkTechopsBal);
     }
 
     ////////////////////////////////////////////////////////////////////////////
@@ -227,6 +271,14 @@ contract AvatarRegistryTest is Test {
         vm.prank(admin);
         registry.addAvatar(address(avatar), "randomAvatar", 500000);
 
+        address[] memory testA = registry.getAvatarsByStatus(
+            AvatarRegistry.AvatarStatus.TESTING
+        );
+
+        for (uint256 i = 0; i < testA.length; i++) {
+            console.log(testA[i]);
+        }
+
         (bool upkeepNeeded, bytes memory performData) = registry.checkUpkeep(
             new bytes(0)
         );
@@ -255,6 +307,17 @@ contract AvatarRegistryTest is Test {
             address(avatar),
             AvatarRegistry.AvatarStatus.SEEDED
         );
+
+        address[] memory testA = registry.getAvatarsByStatus(
+            AvatarRegistry.AvatarStatus.TESTING
+        );
+
+        uint256 len = testA.length;
+        console.log(len);
+
+        for (uint256 i = 0; i < len; i++) {
+            console.log(testA[i]);
+        }
 
         (bool upkeepNeeded, ) = registry.checkUpkeep(new bytes(0));
         assertFalse(upkeepNeeded);
@@ -306,7 +369,7 @@ contract AvatarRegistryTest is Test {
         assertEq(executeGas, 500000);
         assertEq(checkData, new bytes(0));
         assertTrue(balance > 0);
-        assertEq(keeperJobAdmin, ADMIN_KEEPERS);
+        assertEq(keeperJobAdmin, address(registry));
     }
 
     function test_performUpKeep_avatar_topup() public {
@@ -340,7 +403,7 @@ contract AvatarRegistryTest is Test {
                 new bytes(0),
                 enforceUpKeepBal,
                 address(0),
-                ADMIN_KEEPERS,
+                TECHOPS,
                 2**64 - 1,
                 0
             )
@@ -384,7 +447,7 @@ contract AvatarRegistryTest is Test {
                 new bytes(0),
                 enforceUpKeepBal,
                 address(0),
-                ADMIN_KEEPERS,
+                TECHOPS,
                 2**64 - 1,
                 0
             )
