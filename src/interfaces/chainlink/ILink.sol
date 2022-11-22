@@ -3,7 +3,7 @@ pragma solidity ^0.8.0;
 
 interface ILink {
     function approve(address _spender, uint256 _value) external returns (bool);
-    
+
     function transferAndCall(
         address _to,
         uint256 _value,
@@ -11,4 +11,8 @@ interface ILink {
     ) external returns (bool success);
 
     function balanceOf(address account) external view returns (uint256);
+
+    function transfer(address _to, uint256 _value)
+        external
+        returns (bool success);
 }

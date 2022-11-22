@@ -26,6 +26,8 @@ interface IKeeperRegistry {
 
     function addFunds(uint256 id, uint96 amount) external;
 
+    function cancelUpkeep(uint256 id) external;
+
     function getMinBalanceForUpkeep(uint256 id)
         external
         view
@@ -60,4 +62,6 @@ interface IKeeperRegistry {
         address admin,
         bytes memory checkData
     ) external returns (uint256 id);
+
+    function withdrawFunds(uint256 id, address to) external;
 }
