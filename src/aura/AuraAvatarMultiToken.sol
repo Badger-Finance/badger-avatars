@@ -103,6 +103,8 @@ contract AuraAvatarMultiToken is
 
     error TooSoon(uint256 currentTime, uint256 updateTime, uint256 minDuration);
 
+    error BptStillStaked(address bpt, address basePool, uint256 stakingBalance);
+
     ////////////////////////////////////////////////////////////////////////////
     // EVENTS
     ////////////////////////////////////////////////////////////////////////////
@@ -477,7 +479,10 @@ contract AuraAvatarMultiToken is
     ) external onlyOwner {
         if (initialDeposit) {
             // Initialize at first deposit
-            require(lastClaimTimestamp == 0, "Already initialised");
+            require(
+                lastClaimTimestamp == 0,
+                "AuraAvatarMultiToken: Already initialised"
+            );
             lastClaimTimestamp = block.timestamp;
         }
 
@@ -534,6 +539,41 @@ contract AuraAvatarMultiToken is
         address ownerCached = owner();
         BAL.safeTransfer(ownerCached, totalBal);
         AURA.safeTransfer(ownerCached, totalAura);
+    }
+
+    /// @dev given a target PID, it will add the details in the `EnumerableSet`: pids, assets & baseRewardPools
+    /// @param _newPid target pid numeric value to add in contract's storage
+    function addBptPositionInfo(uint256 _newPid) external onlyOwner {
+        pids.add(_newPid);
+        (address lpToken, , , address crvRewards, , ) = AURA_BOOSTER.poolInfo(
+            _newPid
+        );
+        assets.add(lpToken);
+        baseRewardPools.add(crvRewards);
+    }
+
+    /// @dev given a target PID, it will remove the details from the `EnumerableSet`: pids, assets & baseRewardPools
+    /// @param _removePid target pid numeric value to remove from contract's storage
+    function removeBptPositionInfo(uint256 _removePid) external onlyOwner {
+        require(
+            pids.contains(_removePid),
+            "AuraAvatarMultiToken: PID doesnt exist!"
+        );
+
+        (address lpToken, , , address crvRewards, , ) = AURA_BOOSTER.poolInfo(
+            _removePid
+        );
+        uint256 stakedBal = IBaseRewardPool(crvRewards).balanceOf(
+            address(this)
+        );
+        if (stakedBal > 0) {
+            revert BptStillStaked(lpToken, crvRewards, stakedBal);
+        }
+
+        // NOTE: indeed if nothing is staked, then remove from storage
+        pids.remove(_removePid);
+        assets.remove(lpToken);
+        baseRewardPools.remove(crvRewards);
     }
 
     ////////////////////////////////////////////////////////////////////////////
@@ -900,69 +940,18 @@ contract AuraAvatarMultiToken is
         usdcEarned_ = uint256(-assetBalances[assetBalances.length - 1]);
     }
 
-    /// @notice Deposits the given amount of BAL into the 80BAL-20WETH pool.
-    /// @dev The deposit is only carried out if the exchange rate is within a predefined threshold (given by
-    ///      minOutBpsBalToBpt.val) of the Balancer TWAP.
-    /// @param _balAmount The amount of BAL to deposit.
-    function depositBalToBpt(uint256 _balAmount) internal {
-        IAsset[] memory assetArray = new IAsset[](2);
-        assetArray[0] = IAsset(address(BAL));
-        assetArray[1] = IAsset(address(WETH));
-
-        uint256[] memory maxAmountsIn = new uint256[](2);
-        maxAmountsIn[0] = _balAmount;
-        maxAmountsIn[1] = 0;
-
-        BALANCER_VAULT.joinPool(
-            BAL_WETH_POOL_ID,
-            address(this),
-            address(this),
-            IBalancerVault.JoinPoolRequest({
-                assets: assetArray,
-                maxAmountsIn: maxAmountsIn,
-                userData: abi.encode(
-                    JoinKind.EXACT_TOKENS_IN_FOR_BPT_OUT,
-                    maxAmountsIn,
-                    (getBalAmountInBpt(_balAmount) * minOutBpsBalToBpt.val) /
-                        MAX_BPS
-                ),
-                fromInternalBalance: false
-            })
-        );
+    /// @dev Returns all pids values
+    function getPids() public view returns (uint256[] memory) {
+        return pids.values();
     }
 
-    /// @notice Either swaps or deposits the given amount of 80BAL-20WETH BPT for auraBAL.
-    /// @dev A swap is carried out if the execution price is better than 1:1, otherwise falls back to a deposit.
-    /// @param _bptAmount The amount of 80BAL-20WETH BPT to swap or deposit.
-    function swapBptForAuraBal(uint256 _bptAmount) internal {
-        IBalancerVault.SingleSwap memory swapParam = IBalancerVault.SingleSwap({
-            poolId: AURABAL_BAL_WETH_POOL_ID,
-            kind: IBalancerVault.SwapKind.GIVEN_IN,
-            assetIn: IAsset(address(BPT_80BAL_20WETH)),
-            assetOut: IAsset(address(AURABAL)),
-            amount: _bptAmount,
-            userData: new bytes(0)
-        });
+    /// @dev Returns all assets addresses
+    function getAssets() public view returns (address[] memory) {
+        return assets.values();
+    }
 
-        IBalancerVault.FundManagement memory fundManagement = IBalancerVault
-            .FundManagement({
-                sender: address(this),
-                fromInternalBalance: false,
-                recipient: payable(address(this)),
-                toInternalBalance: false
-            });
-
-        // Take the trade if we get more than 1: 1 auraBal out
-        try
-            BALANCER_VAULT.swap(
-                swapParam,
-                fundManagement,
-                _bptAmount, // minOut
-                type(uint256).max
-            )
-        returns (uint256) {} catch {
-            // Otherwise deposit
-            AURABAL_DEPOSITOR.deposit(_bptAmount, true, address(0));
-        }
+    /// @dev Returns all rewards pool addresses
+    function getbaseRewardPools() public view returns (address[] memory) {
+        return baseRewardPools.values();
     }
 }
