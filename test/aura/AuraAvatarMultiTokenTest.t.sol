@@ -5,11 +5,17 @@ import {console2 as console} from "forge-std/console2.sol";
 import {Test} from "forge-std/Test.sol";
 import {TransparentUpgradeableProxy} from "openzeppelin-contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
 import {ProxyAdmin} from "openzeppelin-contracts/proxy/transparent/ProxyAdmin.sol";
-import {IERC20MetadataUpgradeable} from "../../lib/openzeppelin-contracts-upgradeable/contracts/token/ERC20/extensions/IERC20MetadataUpgradeable.sol";
+import {IERC20MetadataUpgradeable} from
+    "../../lib/openzeppelin-contracts-upgradeable/contracts/token/ERC20/extensions/IERC20MetadataUpgradeable.sol";
 
 import {AuraAvatarMultiToken, TokenAmount} from "../../src/aura/AuraAvatarMultiToken.sol";
 import {AuraAvatarUtils} from "../../src/aura/AuraAvatarUtils.sol";
-import {MAX_BPS, PID_80BADGER_20WBTC, PID_40WBTC_40DIGG_20GRAVIAURA, PID_50BADGER_50RETH} from "../../src/BaseConstants.sol";
+import {
+    MAX_BPS,
+    PID_80BADGER_20WBTC,
+    PID_40WBTC_40DIGG_20GRAVIAURA,
+    PID_50BADGER_50RETH
+} from "../../src/BaseConstants.sol";
 import {AuraConstants} from "../../src/aura/AuraConstants.sol";
 import {IAsset} from "../../src/interfaces/balancer/IAsset.sol";
 import {IBalancerVault, JoinKind} from "../../src/interfaces/balancer/IBalancerVault.sol";
@@ -40,16 +46,9 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
     address constant manager = address(2);
     address constant keeper = address(3);
 
-    uint256[3] pidsExpected = [
-        PID_80BADGER_20WBTC,
-        PID_40WBTC_40DIGG_20GRAVIAURA,
-        PID_50BADGER_50RETH
-    ];
-    address[3] assetsExpected = [
-        address(BPT_80BADGER_20WBTC),
-        address(BPT_40WBTC_40DIGG_20GRAVIAURA),
-        address(BPT_50BADGER_50RETH)
-    ];
+    uint256[3] pidsExpected = [PID_80BADGER_20WBTC, PID_40WBTC_40DIGG_20GRAVIAURA, PID_50BADGER_50RETH];
+    address[3] assetsExpected =
+        [address(BPT_80BADGER_20WBTC), address(BPT_40WBTC_40DIGG_20GRAVIAURA), address(BPT_50BADGER_50RETH)];
     address[3] baseRewardsPoolExpected = [
         address(BASE_REWARD_POOL_80BADGER_20WBTC),
         address(BASE_REWARD_POOL_40WBTC_40DIGG_20GRAVIAURA),
@@ -60,17 +59,11 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
     // EVENTS
     ////////////////////////////////////////////////////////////////////////////
 
-    event ManagerUpdated(
-        address indexed oldManager,
-        address indexed newManager
-    );
+    event ManagerUpdated(address indexed oldManager, address indexed newManager);
     event KeeperUpdated(address indexed oldKeeper, address indexed newKeeper);
 
     event TwapPeriodUpdated(uint256 newTwapPeriod, uint256 oldTwapPeriod);
-    event ClaimFrequencyUpdated(
-        uint256 oldClaimFrequency,
-        uint256 newClaimFrequency
-    );
+    event ClaimFrequencyUpdated(uint256 oldClaimFrequency, uint256 newClaimFrequency);
 
     event MinOutBpsBalToUsdcMinUpdated(uint256 oldValue, uint256 newValue);
     event MinOutBpsAuraToUsdcMinUpdated(uint256 oldValue, uint256 newValue);
@@ -83,16 +76,8 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
     event Deposit(address indexed token, uint256 amount, uint256 timestamp);
     event Withdraw(address indexed token, uint256 amount, uint256 timestamp);
 
-    event RewardClaimed(
-        address indexed token,
-        uint256 amount,
-        uint256 timestamp
-    );
-    event RewardsToStable(
-        address indexed token,
-        uint256 amount,
-        uint256 timestamp
-    );
+    event RewardClaimed(address indexed token, uint256 amount, uint256 timestamp);
+    event RewardsToStable(address indexed token, uint256 amount, uint256 timestamp);
 
     event Transfer(address indexed from, address indexed to, uint256 value);
 
@@ -171,10 +156,7 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
         pidsInit[1] = pidsExpected[1];
         pidsInit[2] = pidsExpected[2];
         address logic = address(new AuraAvatarMultiToken(pidsInit));
-        bytes memory initData = abi.encodeCall(
-            AuraAvatarMultiToken.initialize,
-            (owner, manager, keeper)
-        );
+        bytes memory initData = abi.encodeCall(AuraAvatarMultiToken.initialize, (owner, manager, keeper));
         AuraAvatarMultiToken avatarProxy = AuraAvatarMultiToken(
             address(
                 new TransparentUpgradeableProxy(
@@ -203,14 +185,8 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
     function test_pendingRewards() public {
         (uint256 pendingBal, uint256 pendingAura) = avatar.pendingRewards();
 
-        assertEq(
-            pendingBal,
-            BASE_REWARD_POOL_80BADGER_20WBTC.earned(address(avatar))
-        );
-        assertEq(
-            pendingAura,
-            BASE_REWARD_POOL_40WBTC_40DIGG_20GRAVIAURA.earned(address(avatar))
-        );
+        assertEq(pendingBal, BASE_REWARD_POOL_80BADGER_20WBTC.earned(address(avatar)));
+        assertEq(pendingAura, BASE_REWARD_POOL_40WBTC_40DIGG_20GRAVIAURA.earned(address(avatar)));
     }
 
     ////////////////////////////////////////////////////////////////////////////
@@ -259,12 +235,7 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
     }
 
     function test_pause_permissions() public {
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                AuraAvatarMultiToken.NotOwnerOrManager.selector,
-                (address(this))
-            )
-        );
+        vm.expectRevert(abi.encodeWithSelector(AuraAvatarMultiToken.NotOwnerOrManager.selector, (address(this))));
         avatar.pause();
     }
 
@@ -337,9 +308,7 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
 
     function test_setTwapPeriod_zero() public {
         vm.prank(owner);
-        vm.expectRevert(
-            abi.encodeWithSelector(AuraAvatarMultiToken.ZeroTwapPeriod.selector)
-        );
+        vm.expectRevert(abi.encodeWithSelector(AuraAvatarMultiToken.ZeroTwapPeriod.selector));
         avatar.setTwapPeriod(0);
     }
 
@@ -376,21 +345,10 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
         vm.startPrank(owner);
         avatar.setMinOutBpsBalToUsdcVal(9500);
 
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                AuraAvatarMultiToken.InvalidBps.selector,
-                1000000
-            )
-        );
+        vm.expectRevert(abi.encodeWithSelector(AuraAvatarMultiToken.InvalidBps.selector, 1000000));
         avatar.setMinOutBpsBalToUsdcMin(1000000);
 
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                AuraAvatarMultiToken.MoreThanBpsVal.selector,
-                9600,
-                9500
-            )
-        );
+        vm.expectRevert(abi.encodeWithSelector(AuraAvatarMultiToken.MoreThanBpsVal.selector, 9600, 9500));
         avatar.setMinOutBpsBalToUsdcMin(9600);
     }
 
@@ -413,21 +371,10 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
         vm.startPrank(owner);
         avatar.setMinOutBpsAuraToUsdcVal(9500);
 
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                AuraAvatarMultiToken.InvalidBps.selector,
-                1000000
-            )
-        );
+        vm.expectRevert(abi.encodeWithSelector(AuraAvatarMultiToken.InvalidBps.selector, 1000000));
         avatar.setMinOutBpsAuraToUsdcMin(1000000);
 
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                AuraAvatarMultiToken.MoreThanBpsVal.selector,
-                9600,
-                9500
-            )
-        );
+        vm.expectRevert(abi.encodeWithSelector(AuraAvatarMultiToken.MoreThanBpsVal.selector, 9600, 9500));
         avatar.setMinOutBpsAuraToUsdcMin(9600);
     }
 
@@ -450,21 +397,10 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
         vm.startPrank(owner);
         avatar.setMinOutBpsBalToBptVal(9500);
 
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                AuraAvatarMultiToken.InvalidBps.selector,
-                1000000
-            )
-        );
+        vm.expectRevert(abi.encodeWithSelector(AuraAvatarMultiToken.InvalidBps.selector, 1000000));
         avatar.setMinOutBpsBalToBptMin(1000000);
 
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                AuraAvatarMultiToken.MoreThanBpsVal.selector,
-                9600,
-                9500
-            )
-        );
+        vm.expectRevert(abi.encodeWithSelector(AuraAvatarMultiToken.MoreThanBpsVal.selector, 9600, 9500));
         avatar.setMinOutBpsBalToBptMin(9600);
     }
 
@@ -484,12 +420,12 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
         vm.expectEmit(false, false, false, true);
         emit MinOutBpsBalToUsdcValUpdated(9100, 9750);
         avatar.setMinOutBpsBalToUsdcVal(9100);
-        (val, ) = avatar.minOutBpsBalToUsdc();
+        (val,) = avatar.minOutBpsBalToUsdc();
         assertEq(val, 9100);
 
         vm.prank(manager);
         avatar.setMinOutBpsBalToUsdcVal(9200);
-        (val, ) = avatar.minOutBpsBalToUsdc();
+        (val,) = avatar.minOutBpsBalToUsdc();
         assertEq(val, 9200);
     }
 
@@ -497,31 +433,15 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
         vm.startPrank(owner);
         avatar.setMinOutBpsBalToUsdcMin(9000);
 
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                AuraAvatarMultiToken.InvalidBps.selector,
-                1000000
-            )
-        );
+        vm.expectRevert(abi.encodeWithSelector(AuraAvatarMultiToken.InvalidBps.selector, 1000000));
         avatar.setMinOutBpsBalToUsdcVal(1000000);
 
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                AuraAvatarMultiToken.LessThanBpsMin.selector,
-                1000,
-                9000
-            )
-        );
+        vm.expectRevert(abi.encodeWithSelector(AuraAvatarMultiToken.LessThanBpsMin.selector, 1000, 9000));
         avatar.setMinOutBpsBalToUsdcVal(1000);
     }
 
     function test_setMinOutBpsBalToUsdcVal_permissions() external {
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                AuraAvatarMultiToken.NotOwnerOrManager.selector,
-                (address(this))
-            )
-        );
+        vm.expectRevert(abi.encodeWithSelector(AuraAvatarMultiToken.NotOwnerOrManager.selector, (address(this))));
         avatar.setMinOutBpsBalToUsdcVal(9100);
     }
 
@@ -532,12 +452,12 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
         vm.expectEmit(false, false, false, true);
         emit MinOutBpsAuraToUsdcValUpdated(9100, 9750);
         avatar.setMinOutBpsAuraToUsdcVal(9100);
-        (val, ) = avatar.minOutBpsAuraToUsdc();
+        (val,) = avatar.minOutBpsAuraToUsdc();
         assertEq(val, 9100);
 
         vm.prank(manager);
         avatar.setMinOutBpsAuraToUsdcVal(9200);
-        (val, ) = avatar.minOutBpsAuraToUsdc();
+        (val,) = avatar.minOutBpsAuraToUsdc();
         assertEq(val, 9200);
     }
 
@@ -545,31 +465,15 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
         vm.startPrank(owner);
         avatar.setMinOutBpsAuraToUsdcMin(9000);
 
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                AuraAvatarMultiToken.InvalidBps.selector,
-                1000000
-            )
-        );
+        vm.expectRevert(abi.encodeWithSelector(AuraAvatarMultiToken.InvalidBps.selector, 1000000));
         avatar.setMinOutBpsAuraToUsdcVal(1000000);
 
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                AuraAvatarMultiToken.LessThanBpsMin.selector,
-                1000,
-                9000
-            )
-        );
+        vm.expectRevert(abi.encodeWithSelector(AuraAvatarMultiToken.LessThanBpsMin.selector, 1000, 9000));
         avatar.setMinOutBpsAuraToUsdcVal(1000);
     }
 
     function test_setMinOutBpsAuraToUsdcVal_permissions() external {
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                AuraAvatarMultiToken.NotOwnerOrManager.selector,
-                address(this)
-            )
-        );
+        vm.expectRevert(abi.encodeWithSelector(AuraAvatarMultiToken.NotOwnerOrManager.selector, address(this)));
         avatar.setMinOutBpsAuraToUsdcVal(9100);
     }
 
@@ -580,12 +484,12 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
         vm.expectEmit(false, false, false, true);
         emit MinOutBpsBalToBptValUpdated(9100, 9950);
         avatar.setMinOutBpsBalToBptVal(9100);
-        (val, ) = avatar.minOutBpsBalToBpt();
+        (val,) = avatar.minOutBpsBalToBpt();
         assertEq(val, 9100);
 
         vm.prank(manager);
         avatar.setMinOutBpsBalToBptVal(9200);
-        (val, ) = avatar.minOutBpsBalToBpt();
+        (val,) = avatar.minOutBpsBalToBpt();
         assertEq(val, 9200);
     }
 
@@ -593,31 +497,15 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
         vm.startPrank(owner);
         avatar.setMinOutBpsBalToBptMin(9000);
 
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                AuraAvatarMultiToken.InvalidBps.selector,
-                1000000
-            )
-        );
+        vm.expectRevert(abi.encodeWithSelector(AuraAvatarMultiToken.InvalidBps.selector, 1000000));
         avatar.setMinOutBpsBalToBptVal(1000000);
 
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                AuraAvatarMultiToken.LessThanBpsMin.selector,
-                1000,
-                9000
-            )
-        );
+        vm.expectRevert(abi.encodeWithSelector(AuraAvatarMultiToken.LessThanBpsMin.selector, 1000, 9000));
         avatar.setMinOutBpsBalToBptVal(1000);
     }
 
     function test_setMinOutBpsBalToBptVal_permissions() external {
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                AuraAvatarMultiToken.NotOwnerOrManager.selector,
-                (address(this))
-            )
-        );
+        vm.expectRevert(abi.encodeWithSelector(AuraAvatarMultiToken.NotOwnerOrManager.selector, (address(this))));
         avatar.setMinOutBpsBalToBptVal(9100);
     }
 
@@ -631,11 +519,7 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
         vm.expectEmit(true, false, false, true);
         emit Deposit(address(BPT_80BADGER_20WBTC), 20 ether, block.timestamp);
         vm.expectEmit(true, false, false, true);
-        emit Deposit(
-            address(BPT_40WBTC_40DIGG_20GRAVIAURA),
-            10 ether,
-            block.timestamp
-        );
+        emit Deposit(address(BPT_40WBTC_40DIGG_20GRAVIAURA), 10 ether, block.timestamp);
         vm.expectEmit(true, false, false, true);
         emit Deposit(address(BPT_50BADGER_50RETH), 10 ether, block.timestamp);
         uint256[] memory amountsDeposit = new uint256[](3);
@@ -652,20 +536,9 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
         assertEq(BPT_40WBTC_40DIGG_20GRAVIAURA.balanceOf(owner), 10e18);
         assertEq(BPT_50BADGER_50RETH.balanceOf(owner), 10e18);
 
-        assertEq(
-            BASE_REWARD_POOL_80BADGER_20WBTC.balanceOf(address(avatar)),
-            20e18
-        );
-        assertEq(
-            BASE_REWARD_POOL_40WBTC_40DIGG_20GRAVIAURA.balanceOf(
-                address(avatar)
-            ),
-            10e18
-        );
-        assertEq(
-            BASE_REWARD_POOL_50BADGER_50RETH.balanceOf(address(avatar)),
-            10e18
-        );
+        assertEq(BASE_REWARD_POOL_80BADGER_20WBTC.balanceOf(address(avatar)), 20e18);
+        assertEq(BASE_REWARD_POOL_40WBTC_40DIGG_20GRAVIAURA.balanceOf(address(avatar)), 10e18);
+        assertEq(BASE_REWARD_POOL_50BADGER_50RETH.balanceOf(address(avatar)), 10e18);
 
         // lastClaimTimestamp matches current timestamp since it is the first deposit
         // NOTE: Trick solidity compiler into not optimizing this
@@ -679,11 +552,7 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
         // Single asset deposit
         vm.prank(owner);
         vm.expectEmit(true, false, false, true);
-        emit Deposit(
-            address(BPT_40WBTC_40DIGG_20GRAVIAURA),
-            10e18,
-            block.timestamp
-        );
+        emit Deposit(address(BPT_40WBTC_40DIGG_20GRAVIAURA), 10e18, block.timestamp);
         amountsDeposit = new uint256[](1);
         amountsDeposit[0] = 10 ether;
         pidsInit = new uint256[](1);
@@ -692,16 +561,8 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
 
         assertEq(BPT_40WBTC_40DIGG_20GRAVIAURA.balanceOf(owner), 0);
 
-        assertEq(
-            BASE_REWARD_POOL_80BADGER_20WBTC.balanceOf(address(avatar)),
-            20e18
-        );
-        assertEq(
-            BASE_REWARD_POOL_40WBTC_40DIGG_20GRAVIAURA.balanceOf(
-                address(avatar)
-            ),
-            20e18
-        );
+        assertEq(BASE_REWARD_POOL_80BADGER_20WBTC.balanceOf(address(avatar)), 20e18);
+        assertEq(BASE_REWARD_POOL_40WBTC_40DIGG_20GRAVIAURA.balanceOf(address(avatar)), 20e18);
 
         // lastClaimTimestamp is not set after further deposits
         assertFalse(avatar.lastClaimTimestamp() == block.timestamp);
@@ -765,23 +626,11 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
         vm.expectEmit(true, false, false, true);
         emit Withdraw(address(BPT_80BADGER_20WBTC), 20e18, block.timestamp);
         vm.expectEmit(true, false, false, true);
-        emit Withdraw(
-            address(BPT_40WBTC_40DIGG_20GRAVIAURA),
-            20e18,
-            block.timestamp
-        );
+        emit Withdraw(address(BPT_40WBTC_40DIGG_20GRAVIAURA), 20e18, block.timestamp);
         avatar.withdrawAll();
 
-        assertEq(
-            BASE_REWARD_POOL_80BADGER_20WBTC.balanceOf(address(avatar)),
-            0
-        );
-        assertEq(
-            BASE_REWARD_POOL_40WBTC_40DIGG_20GRAVIAURA.balanceOf(
-                address(avatar)
-            ),
-            0
-        );
+        assertEq(BASE_REWARD_POOL_80BADGER_20WBTC.balanceOf(address(avatar)), 0);
+        assertEq(BASE_REWARD_POOL_40WBTC_40DIGG_20GRAVIAURA.balanceOf(address(avatar)), 0);
 
         assertEq(BPT_80BADGER_20WBTC.balanceOf(owner), 20e18);
         assertEq(BPT_40WBTC_40DIGG_20GRAVIAURA.balanceOf(owner), 20e18);
@@ -813,11 +662,7 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
         vm.expectEmit(true, false, false, true);
         emit Withdraw(address(BPT_80BADGER_20WBTC), 10e18, block.timestamp);
         vm.expectEmit(true, false, false, true);
-        emit Withdraw(
-            address(BPT_40WBTC_40DIGG_20GRAVIAURA),
-            20e18,
-            block.timestamp
-        );
+        emit Withdraw(address(BPT_40WBTC_40DIGG_20GRAVIAURA), 20e18, block.timestamp);
         vm.expectEmit(true, false, false, true);
         emit Withdraw(address(BPT_50BADGER_50RETH), 20e18, block.timestamp);
         uint256[] memory amountsWithdraw = new uint256[](3);
@@ -871,44 +716,28 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
 
         skip(1 hours);
 
-        uint256 balReward1 = BASE_REWARD_POOL_80BADGER_20WBTC.earned(
-            address(avatar)
-        );
-        uint256 balReward2 = BASE_REWARD_POOL_40WBTC_40DIGG_20GRAVIAURA.earned(
-            address(avatar)
-        );
+        uint256 balReward1 = BASE_REWARD_POOL_80BADGER_20WBTC.earned(address(avatar));
+        uint256 balReward2 = BASE_REWARD_POOL_40WBTC_40DIGG_20GRAVIAURA.earned(address(avatar));
 
-        uint256 auraReward = getMintableAuraForBalAmount(
-            balReward1 + balReward2
-        );
+        uint256 auraReward = getMintableAuraForBalAmount(balReward1 + balReward2);
 
         assertGt(balReward1, 0);
         assertGt(balReward2, 0);
 
         vm.prank(owner);
         vm.expectEmit(true, false, false, true);
-        emit RewardClaimed(
-            address(BAL),
-            balReward1 + balReward2,
-            block.timestamp
-        );
+        emit RewardClaimed(address(BAL), balReward1 + balReward2, block.timestamp);
         vm.expectEmit(true, false, false, true);
         emit RewardClaimed(address(AURA), auraReward, block.timestamp);
         avatar.claimRewardsAndSendToOwner();
 
         assertEq(BASE_REWARD_POOL_80BADGER_20WBTC.earned(address(avatar)), 0);
-        assertEq(
-            BASE_REWARD_POOL_40WBTC_40DIGG_20GRAVIAURA.earned(address(avatar)),
-            0
-        );
+        assertEq(BASE_REWARD_POOL_40WBTC_40DIGG_20GRAVIAURA.earned(address(avatar)), 0);
 
         assertEq(BAL.balanceOf(address(avatar)), 0);
         assertEq(AURA.balanceOf(address(avatar)), 0);
 
-        assertEq(
-            BAL.balanceOf(owner) - initialOwnerBal,
-            balReward1 + balReward2
-        );
+        assertEq(BAL.balanceOf(owner) - initialOwnerBal, balReward1 + balReward2);
         assertEq(AURA.balanceOf(owner) - initialOwnerAura, auraReward);
     }
 
@@ -1009,16 +838,11 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
     ////////////////////////////////////////////////////////////////////////////
 
     function checked_processRewards() internal {
-        (, , uint256 voterBalanceBefore, ) = AURA_LOCKER.lockedBalances(
-            BADGER_VOTER
-        );
+        (,, uint256 voterBalanceBefore,) = AURA_LOCKER.lockedBalances(BADGER_VOTER);
         uint256 usdcBalanceBefore = USDC.balanceOf(owner);
 
         assertGt(BASE_REWARD_POOL_80BADGER_20WBTC.earned(address(avatar)), 0);
-        assertGt(
-            BASE_REWARD_POOL_40WBTC_40DIGG_20GRAVIAURA.earned(address(avatar)),
-            0
-        );
+        assertGt(BASE_REWARD_POOL_40WBTC_40DIGG_20GRAVIAURA.earned(address(avatar)), 0);
 
         address[2] memory actors = [owner, manager];
         for (uint256 i; i < actors.length; ++i) {
@@ -1029,9 +853,7 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
             emit RewardsToStable(address(USDC), 0, block.timestamp);
             TokenAmount[] memory processed = avatar.processRewards();
 
-            (, , uint256 voterBalanceAfter, ) = AURA_LOCKER.lockedBalances(
-                BADGER_VOTER
-            );
+            (,, uint256 voterBalanceAfter,) = AURA_LOCKER.lockedBalances(BADGER_VOTER);
 
             assertEq(processed[0].token, address(USDC));
             assertEq(processed[1].token, address(AURA));
@@ -1039,16 +861,8 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
             assertGt(processed[0].amount, 0);
             assertGt(processed[1].amount, 0);
 
-            assertEq(
-                BASE_REWARD_POOL_80BADGER_20WBTC.earned(address(avatar)),
-                0
-            );
-            assertEq(
-                BASE_REWARD_POOL_40WBTC_40DIGG_20GRAVIAURA.earned(
-                    address(avatar)
-                ),
-                0
-            );
+            assertEq(BASE_REWARD_POOL_80BADGER_20WBTC.earned(address(avatar)), 0);
+            assertEq(BASE_REWARD_POOL_40WBTC_40DIGG_20GRAVIAURA.earned(address(avatar)), 0);
 
             assertEq(BAL.balanceOf(address(avatar)), 0);
             assertEq(AURA.balanceOf(address(avatar)), 0);
@@ -1079,12 +893,7 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
     }
 
     function test_processRewards_permissions() public {
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                AuraAvatarMultiToken.NotOwnerOrManager.selector,
-                address(this)
-            )
-        );
+        vm.expectRevert(abi.encodeWithSelector(AuraAvatarMultiToken.NotOwnerOrManager.selector, address(this)));
         avatar.processRewards();
     }
 
@@ -1112,9 +921,7 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
 
         skip(1 weeks);
 
-        (bool upkeepNeeded, bytes memory performData) = avatar.checkUpkeep(
-            new bytes(0)
-        );
+        (bool upkeepNeeded, bytes memory performData) = avatar.checkUpkeep(new bytes(0));
         assertTrue(upkeepNeeded);
     }
 
@@ -1132,12 +939,12 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
 
         bool upkeepNeeded;
 
-        (upkeepNeeded, ) = avatar.checkUpkeep(new bytes(0));
+        (upkeepNeeded,) = avatar.checkUpkeep(new bytes(0));
         assertFalse(upkeepNeeded);
 
         skip(1 weeks - 1);
 
-        (upkeepNeeded, ) = avatar.checkUpkeep(new bytes(0));
+        (upkeepNeeded,) = avatar.checkUpkeep(new bytes(0));
         assertFalse(upkeepNeeded);
     }
 
@@ -1153,15 +960,13 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
         pidsInit[2] = pidsExpected[2];
         avatar.deposit(pidsInit, amountsDeposit, true);
 
-        (, , uint256 voterBalanceBefore, ) = AURA_LOCKER.lockedBalances(
-            BADGER_VOTER
-        );
+        (,, uint256 voterBalanceBefore,) = AURA_LOCKER.lockedBalances(BADGER_VOTER);
         uint256 usdcBalanceBefore = USDC.balanceOf(owner);
 
         skipAndForwardFeeds(1 weeks);
 
         bool upkeepNeeded;
-        (upkeepNeeded, ) = avatar.checkUpkeep(new bytes(0));
+        (upkeepNeeded,) = avatar.checkUpkeep(new bytes(0));
         assertTrue(upkeepNeeded);
 
         vm.prank(keeper);
@@ -1171,22 +976,17 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
 
         // Ensure that rewards were processed properly
         assertEq(BASE_REWARD_POOL_80BADGER_20WBTC.earned(address(avatar)), 0);
-        assertEq(
-            BASE_REWARD_POOL_40WBTC_40DIGG_20GRAVIAURA.earned(address(avatar)),
-            0
-        );
+        assertEq(BASE_REWARD_POOL_40WBTC_40DIGG_20GRAVIAURA.earned(address(avatar)), 0);
 
         assertEq(BAL.balanceOf(address(avatar)), 0);
         assertEq(AURA.balanceOf(address(avatar)), 0);
 
-        (, , uint256 voterBalanceAfter, ) = AURA_LOCKER.lockedBalances(
-            BADGER_VOTER
-        );
+        (,, uint256 voterBalanceAfter,) = AURA_LOCKER.lockedBalances(BADGER_VOTER);
         assertGt(voterBalanceAfter, voterBalanceBefore);
         assertGt(USDC.balanceOf(owner), usdcBalanceBefore);
 
         // Upkeep is not needed anymore
-        (upkeepNeeded, ) = avatar.checkUpkeep(new bytes(0));
+        (upkeepNeeded,) = avatar.checkUpkeep(new bytes(0));
         assertFalse(upkeepNeeded);
     }
 
@@ -1206,12 +1006,7 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
         for (uint256 i; i < actors.length; ++i) {
             uint256 snapId = vm.snapshot();
 
-            vm.expectRevert(
-                abi.encodeWithSelector(
-                    AuraAvatarMultiToken.NotKeeper.selector,
-                    actors[i]
-                )
-            );
+            vm.expectRevert(abi.encodeWithSelector(AuraAvatarMultiToken.NotKeeper.selector, actors[i]));
             vm.prank(actors[i]);
             avatar.performUpkeep(new bytes(0));
 
@@ -1259,10 +1054,7 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
         skip(1 weeks);
         vm.expectRevert(
             abi.encodeWithSelector(
-                AuraAvatarUtils.StalePriceFeed.selector,
-                block.timestamp,
-                BAL_USD_FEED.latestTimestamp(),
-                24 hours
+                AuraAvatarUtils.StalePriceFeed.selector, block.timestamp, BAL_USD_FEED.latestTimestamp(), 24 hours
             )
         );
         vm.prank(keeper);
@@ -1285,12 +1077,7 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
         for (uint256 i; i < actors.length; ++i) {
             uint256 snapId = vm.snapshot();
 
-            vm.expectRevert(
-                abi.encodeWithSelector(
-                    AuraAvatarMultiToken.NotKeeper.selector,
-                    actors[i]
-                )
-            );
+            vm.expectRevert(abi.encodeWithSelector(AuraAvatarMultiToken.NotKeeper.selector, actors[i]));
             vm.prank(actors[i]);
             avatar.processRewardsKeeper();
 
@@ -1304,9 +1091,7 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
 
     function test_getBptPriceInBal() public {
         uint256 clPrice = getBptPriceInBal();
-        uint256 spotPrice = IPriceOracle(address(BPT_80BAL_20WETH)).getLatest(
-            IPriceOracle.Variable.BPT_PRICE
-        );
+        uint256 spotPrice = IPriceOracle(address(BPT_80BAL_20WETH)).getLatest(IPriceOracle.Variable.BPT_PRICE);
 
         // CL price is within 1% of spot price
         assertApproxEqRel(clPrice, spotPrice, 0.01e18);
@@ -1414,9 +1199,7 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
 
         skipAndForwardFeeds(1 weeks);
 
-        (bool upkeepNeeded, bytes memory performData) = avatar.checkUpkeep(
-            new bytes(0)
-        );
+        (bool upkeepNeeded, bytes memory performData) = avatar.checkUpkeep(new bytes(0));
 
         assertTrue(upkeepNeeded);
 
@@ -1438,9 +1221,7 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
 
         skipAndForwardFeeds(1 weeks);
 
-        (bool upkeepNeeded, bytes memory performData) = avatar.checkUpkeep(
-            new bytes(0)
-        );
+        (bool upkeepNeeded, bytes memory performData) = avatar.checkUpkeep(new bytes(0));
 
         assertTrue(upkeepNeeded);
 
@@ -1448,7 +1229,7 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
         avatar.performUpkeep(new bytes(0));
 
         // Upkeep is not needed anymore
-        (upkeepNeeded, ) = avatar.checkUpkeep(new bytes(0));
+        (upkeepNeeded,) = avatar.checkUpkeep(new bytes(0));
         assertFalse(upkeepNeeded);
     }
 
@@ -1473,17 +1254,10 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
         int256 lastAnswer = _feed.latestAnswer();
         uint256 lastTimestamp = _feed.latestTimestamp();
         vm.etch(address(_feed), type(MockV3Aggregator).runtimeCode);
-        MockV3Aggregator(address(_feed)).updateAnswerAndTimestamp(
-            lastAnswer,
-            lastTimestamp + _duration
-        );
+        MockV3Aggregator(address(_feed)).updateAnswerAndTimestamp(lastAnswer, lastTimestamp + _duration);
     }
 
-    function getPriceFromPerformData(bytes memory _performData)
-        internal
-        pure
-        returns (uint256 auraPriceInUsd_)
-    {
+    function getPriceFromPerformData(bytes memory _performData) internal pure returns (uint256 auraPriceInUsd_) {
         assembly {
             auraPriceInUsd_ := mload(add(_performData, 36))
         }
