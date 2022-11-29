@@ -17,15 +17,41 @@ import {MAX_BPS} from "../BaseConstants.sol";
 import {BpsConfig, TokenAmount} from "../BaseStructs.sol";
 import {ConvexAvatarUtils} from "./ConvexAvatarUtils.sol";
 import {IBaseRewardPool} from "../interfaces/aura/IBaseRewardPool.sol";
+import {IStakingProxy} from "../interfaces/convex/IStakingProxy.sol";
+import {IFraxUnifiedFarm} from "../interfaces/convex/IFraxUnifiedFarm.sol";
+import {KeeperCompatibleInterface} from "../interfaces/chainlink/KeeperCompatibleInterface.sol";
 
 /// @title ConvexAvatarMultiToken
-contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgradeable {
+/// @notice This contract handles multiple Curve Pool Token positions on behalf of an owner. It stakes the curve LPs on
+///         Convex and has the resulting CRV, CVX & FXS rewards periodically harvested by a keeper. Only the owner can
+///         deposit and withdraw funds through this contract.
+///         The owner also has admin rights and can make arbitrary calls through this contract.
+/// @dev The avatar is never supposed to hold funds and only acts as an intermediary to facilitate staking and ease
+///      accounting.
+contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgradeable, KeeperCompatibleInterface {
     ////////////////////////////////////////////////////////////////////////////
     // LIBRARIES
     ////////////////////////////////////////////////////////////////////////////
 
     using SafeERC20Upgradeable for IERC20MetadataUpgradeable;
     using EnumerableSetUpgradeable for EnumerableSetUpgradeable.AddressSet;
+    using EnumerableSetUpgradeable for EnumerableSetUpgradeable.UintSet;
+
+    ////////////////////////////////////////////////////////////////////////////
+    // STORAGE
+    ////////////////////////////////////////////////////////////////////////////
+
+    /// @notice Address of the manager of the avatar. Manager has limited permissions and can harvest rewards or
+    ///         fine-tune operational settings.
+    address public manager;
+    /// @notice Address of the keeper of the avatar. Keeper can only harvest rewards at a predefined frequency.
+    address public keeper;
+
+    /// @notice Pool IDS (in CONVEX Booster) of strategy tokens.
+    EnumerableSetUpgradeable.UintSet internal pids;
+
+    /// @notice Address of the Curve Lps.
+    EnumerableSetUpgradeable.AddressSet internal assets;
 
     /// @notice Address of the staking rewards contracts
     EnumerableSetUpgradeable.AddressSet internal baseRewardPools;
@@ -34,47 +60,110 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
     uint256 public claimFrequency;
 
     /// @notice The current and minimum value (in bps) controlling the minimum executable price (as proprtion of oracle
-    ///         price) for a CRV to USDC swap.
-    BpsConfig public minOutBpsCrvToUsdc;
+    ///         price) for a CRV to WETH swap.
+    BpsConfig public minOutBpsCrvToWeth;
     /// @notice The current and minimum value (in bps) controlling the minimum executable price (as proprtion of oracle
-    ///         price) for an CVX to USDC swap.
-    BpsConfig public minOutBpsCvxToUsdc;
+    ///         price) for an CVX to WETH swap.
+    BpsConfig public minOutBpsCvxToWeth;
     /// @notice The current and minimum value (in bps) controlling the minimum executable price (as proprtion of oracle
-    ///         price) for an FXS to USDC swap.
-    BpsConfig public minOutBpsFxsToUsdc;
+    ///         price) for an FXS to FRAX swap.
+    BpsConfig public minOutBpsFxsToFrax;
+    /// @notice The current and minimum value (in bps) controlling the minimum executable price (as proprtion of oracle
+    ///         price) for an WETH to USDC swap.
+    BpsConfig public minOutBpsWethToUsdc;
 
     /// @notice The timestamp at which rewards were last claimed and harvested.
     uint256 public lastClaimTimestamp;
+
+    /// @notice Pool IDS (in CONVEX-FRAX Booster) of strategy tokens.
+    EnumerableSetUpgradeable.UintSet internal pidsPrivateVaults;
+
+    /// @dev holds the relation between pid in convex-frax system and private vaults avatar created
+    mapping(uint256 => address) public privateVaults;
+    mapping(address => bytes32[]) public kekIds;
 
     ////////////////////////////////////////////////////////////////////////////
     // ERRORS
     ////////////////////////////////////////////////////////////////////////////
 
+    error NotOwnerOrManager(address caller);
+    error NotKeeper(address caller);
+
+    error InvalidBps(uint256 bps);
+    error LessThanBpsMin(uint256 bpsVal, uint256 bpsMin);
+    error MoreThanBpsVal(uint256 bpsMin, uint256 bpsVal);
+
+    error NothingToDeposit();
+    error NothingToWithdraw();
     error NoRewards();
+
+    error TooSoon(uint256 currentTime, uint256 updateTime, uint256 minDuration);
+
+    error CurveLpStillStaked(address curveLp, address basePool, uint256 stakingBalance);
+    error PoolDeactivated(uint256 pid);
 
     ////////////////////////////////////////////////////////////////////////////
     // EVENTS
     ////////////////////////////////////////////////////////////////////////////
 
+    event ManagerUpdated(address indexed newManager, address indexed oldManager);
+    event KeeperUpdated(address indexed newKeeper, address indexed oldKeeper);
+
+    event ClaimFrequencyUpdated(uint256 newClaimFrequency, uint256 oldClaimFrequency);
+
+    event MinOutBpsCrvToWethValUpdated(uint256 newValue, uint256 oldValue);
+    event MinOutBpsCvxToWethValUpdated(uint256 newValue, uint256 oldValue);
+    event MinOutBpsFxsToFraxValUpdated(uint256 newValue, uint256 oldValue);
+    event MinOutBpsWethToUsdcValUpdated(uint256 newValue, uint256 oldValue);
+
+    event Deposit(address indexed token, uint256 amount, uint256 timestamp);
+    event Withdraw(address indexed token, uint256 amount, uint256 timestamp);
+
     event RewardClaimed(address indexed token, uint256 amount, uint256 timestamp);
     event RewardsToStable(address indexed token, uint256 amount, uint256 timestamp);
-    event AvatarEthReceived(address indexed sender, uint256 value);
 
-    function initialize(address _owner) public initializer {
+    ////////////////////////////////////////////////////////////////////////////
+    // MODIFIERS
+    ////////////////////////////////////////////////////////////////////////////
+
+    /// @notice Checks whether a call is from the owner or manager.
+    modifier onlyOwnerOrManager() {
+        if (msg.sender != owner() && msg.sender != manager) {
+            revert NotOwnerOrManager(msg.sender);
+        }
+        _;
+    }
+
+    /// @notice Checks whether a call is from the keeper.
+    modifier onlyKeeper() {
+        if (msg.sender != keeper) {
+            revert NotKeeper(msg.sender);
+        }
+        _;
+    }
+
+    function initialize(address _owner, address _manager, address _keeper) public initializer {
         __BaseAvatar_init(_owner);
         __Pausable_init();
 
+        manager = _manager;
+        keeper = _keeper;
+
         claimFrequency = 1 weeks;
 
-        minOutBpsCrvToUsdc = BpsConfig({
+        minOutBpsCrvToWeth = BpsConfig({
             val: 9850, // 98.5%
             min: 9500 // 95%
         });
-        minOutBpsCvxToUsdc = BpsConfig({
+        minOutBpsCvxToWeth = BpsConfig({
             val: 9850, // 98.5%
             min: 9500 // 95%
         });
-        minOutBpsFxsToUsdc = BpsConfig({
+        minOutBpsFxsToFrax = BpsConfig({
+            val: 9850, // 98.5%
+            min: 9500 // 95%
+        });
+        minOutBpsWethToUsdc = BpsConfig({
             val: 9850, // 98.5%
             min: 9500 // 95%
         });
@@ -85,15 +174,283 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
 
         // approvals for fraxswap route: fxs
         FXS.safeApprove(address(FRAXSWAP_ROUTER), type(uint256).max);
+
+        // approval for univ3 router: weth
+        WETH.safeApprove(address(UNIV3_ROUTER), type(uint256).max);
     }
 
-    /// @dev Fallback function accepts Ether transactions.
-    receive() external payable {
-        emit AvatarEthReceived(msg.sender, msg.value);
+    ////////////////////////////////////////////////////////////////////////////
+    // PUBLIC: Owner - Pausing
+    ////////////////////////////////////////////////////////////////////////////
+
+    /// @notice Pauses harvests. Can only be called by the owner or the manager.
+    function pause() external onlyOwnerOrManager {
+        _pause();
+    }
+
+    /// @notice Unpauses harvests. Can only be called by the owner.
+    function unpause() external onlyOwner {
+        _unpause();
+    }
+
+    ////////////////////////////////////////////////////////////////////////////
+    // PUBLIC: Owner - Config
+    ////////////////////////////////////////////////////////////////////////////
+
+    /// @notice Updates the manager address. Can only be called by owner.
+    /// @param _manager Address of the new manager.
+    function setManager(address _manager) external onlyOwner {
+        address oldManager = manager;
+
+        manager = _manager;
+        emit ManagerUpdated(_manager, oldManager);
+    }
+
+    /// @notice Updates the keeper address. Can only be called by owner.
+    /// @param _keeper Address of the new keeper.
+    function setKeeper(address _keeper) external onlyOwner {
+        address oldKeeper = keeper;
+
+        keeper = _keeper;
+        emit KeeperUpdated(_keeper, oldKeeper);
+    }
+
+    /// @notice Updates the frequency at which rewards are processed by the keeper. Can only be called by owner.
+    /// @param _claimFrequency The new claim frequency in seconds.
+    function setClaimFrequency(uint256 _claimFrequency) external onlyOwner {
+        uint256 oldClaimFrequency = claimFrequency;
+
+        claimFrequency = _claimFrequency;
+        emit ClaimFrequencyUpdated(_claimFrequency, oldClaimFrequency);
+    }
+
+    ////////////////////////////////////////////////////////////////////////////
+    // PUBLIC: Manager - Config
+    ////////////////////////////////////////////////////////////////////////////
+
+    /// @notice Updates the current value for the minimum executable price (in bps as proportion of an oracle price)
+    ///         for a CRV to WETH swap. The value should be more than the minimum value. Can be called by the owner or
+    ///         the manager.
+    /// @param _minOutBpsCrvToWeth The new value in bps.
+    function setMinOutBpsCrvToWethVal(uint256 _minOutBpsCrvToWeth) external onlyOwnerOrManager {
+        if (_minOutBpsCrvToWeth > MAX_BPS) {
+            revert InvalidBps(_minOutBpsCrvToWeth);
+        }
+
+        uint256 minOutBpsCrvToWethMin = minOutBpsCrvToWeth.min;
+        if (_minOutBpsCrvToWeth < minOutBpsCrvToWethMin) {
+            revert LessThanBpsMin(_minOutBpsCrvToWeth, minOutBpsCrvToWethMin);
+        }
+
+        uint256 oldMinOutBpsCrvToWethVal = minOutBpsCrvToWeth.val;
+        minOutBpsCrvToWeth.val = _minOutBpsCrvToWeth;
+
+        emit MinOutBpsCrvToWethValUpdated(_minOutBpsCrvToWeth, oldMinOutBpsCrvToWethVal);
+    }
+
+    ////////////////////////////////////////////////////////////////////////////
+    // PUBLIC: Owner
+    ////////////////////////////////////////////////////////////////////////////
+
+    function createPrivateVault(uint256 _pid) external onlyOwner {
+        (,, address stakingTokenAddr,, uint8 active) = CONVEX_FRAX_REGISTRY.poolInfo(_pid);
+        if (active == 0) {
+            revert PoolDeactivated(_pid);
+        }
+
+        address vaultAddr = FRAX_BOOSTER.createVault(_pid);
+        IERC20MetadataUpgradeable(stakingTokenAddr).safeApprove(vaultAddr, type(uint256).max);
+
+        // NOTE: we should store the `vaultAddr` on storage for ease of deposits/wds/reward claims
+        privateVaults[_pid] = vaultAddr;
+        pidsPrivateVaults.add(_pid);
+    }
+
+    /// @notice Takes a given amount of asset from the owner and stakes them on private vault. Can only be called by owner.
+    /// @param _pid Pid target to stake into its appropiate vault
+    /// @param _amountAsset Amount of asset to be lock.
+    function depositInPrivateVault(uint256 _pid, uint256 _amountAsset) external onlyOwner {
+        if (_amountAsset == 0) {
+            revert NothingToDeposit();
+        }
+
+        address vaultAddr = privateVaults[_pid];
+        IStakingProxy proxy = IStakingProxy(vaultAddr);
+        address stakingToken = proxy.stakingToken();
+        IFraxUnifiedFarm farm = IFraxUnifiedFarm(proxy.stakingAddress());
+
+        IERC20MetadataUpgradeable(stakingToken).safeTransferFrom(msg.sender, address(this), _amountAsset);
+        /// NOTE: we always try to lock for the min duration allowed
+        bytes32 kekId = proxy.stakeLocked(_amountAsset, farm.lock_time_min());
+        /// @dev detailed required to enable withdrawls later
+        kekIds[vaultAddr].push(kekId);
+
+        emit Deposit(stakingToken, _amountAsset, block.timestamp);
+    }
+
+    /// @notice Unstakes all staked assets and transfers them back to owner. Can only be called by owner.
+    /// It will loop thru all existent keks and withdraw fully from each of them.
+    /// @dev This function doesn't claim any rewards.
+    /// @param _pid Pid target to withdraw from avatar private vault
+    function withdrawFromPrivateVault(uint256 _pid) external onlyOwner {
+        address vaultAddr = privateVaults[_pid];
+        IStakingProxy proxy = IStakingProxy(vaultAddr);
+        bytes32[] memory keks = kekIds[vaultAddr];
+
+        for (uint256 i = 0; i < keks.length;) {
+            proxy.withdrawLockedAndUnwrap(keks[i]);
+            unchecked {
+                ++i;
+            }
+        }
+
+        IERC20MetadataUpgradeable curveLp = IERC20MetadataUpgradeable(proxy.curveLpToken());
+        uint256 curveLpBalance = curveLp.balanceOf(address(this));
+        curveLp.safeTransfer(msg.sender, curveLpBalance);
+
+        delete kekIds[vaultAddr];
+
+        emit Withdraw(address(curveLp), curveLpBalance, block.timestamp);
+    }
+
+    /// @notice Takes a given amount of assets from the owner and stakes them on the CONVEX Booster. Can only be called by owner.
+    /// @param _pids Pids target to stake into
+    /// @param _amountAssets Amount of assets to be staked.
+    function deposit(uint256[] memory _pids, uint256[] memory _amountAssets) external onlyOwner {
+        for (uint256 i = 0; i < _pids.length; i++) {
+            require(pids.contains(_pids[i]), "AuraAvatarMultiToken: PID doesnt exist!");
+            if (_amountAssets[i] == 0) {
+                revert NothingToDeposit();
+            }
+
+            (address lpToken,,,,,) = CONVEX_BOOSTER.poolInfo(_pids[i]);
+            IERC20MetadataUpgradeable(lpToken).safeTransferFrom(msg.sender, address(this), _amountAssets[i]);
+
+            CONVEX_BOOSTER.deposit(_pids[i], _amountAssets[i], true);
+
+            emit Deposit(lpToken, _amountAssets[i], block.timestamp);
+        }
+    }
+
+    /// @notice Unstakes all staked assets and transfers them back to owner. Can only be called by owner.
+    /// @dev This function doesn't claim any rewards.
+    function withdrawAll() external onlyOwner {
+        uint256 length = baseRewardPools.length();
+        uint256[] memory bptsDeposited = new uint256[](length);
+        for (uint256 i = 0; i < length; i++) {
+            bptsDeposited[i] = IBaseRewardPool(baseRewardPools.at(i)).balanceOf(address(this));
+        }
+
+        _withdraw(pids.values(), bptsDeposited);
+    }
+
+    /// @notice Unstakes the given amount of assets and transfers them back to owner. Can only be called by owner.
+    /// @dev This function doesn't claim any rewards.
+    /// @param _pids Pids targetted to withdraw from
+    /// @param _amountAssets Amount of assets to be unstaked.
+    function withdraw(uint256[] memory _pids, uint256[] memory _amountAssets) external onlyOwner {
+        _withdraw(_pids, _amountAssets);
+    }
+
+    /// @notice Claims any pending CRV, CVX & FXS rewards and sends them to owner. Can only be called by owner.
+    /// @dev This is a failsafe to handle rewards manually in case anything goes wrong (eg. rewards need to be sold
+    ///      through other pools)
+    function claimRewardsAndSendToOwner() external onlyOwner {
+        address ownerCached = owner();
+        // 1. Claim CVX, CRV & FXS rewards
+        (uint256 totalCrv, uint256 totalCvx, uint256 totalFxs) = claimAndRegisterRewards();
+
+        // 2. Send to owner
+        CRV.safeTransfer(ownerCached, totalCrv);
+        CVX.safeTransfer(ownerCached, totalCvx);
+        if (totalFxs > 0) {
+            FXS.safeTransfer(ownerCached, totalFxs);
+        }
+    }
+
+    /// @dev given a target PID, it will add the details in the `EnumerableSet`: pids, assets & baseRewardPools
+    /// @param _newPid target pid numeric value to add in contract's storage
+    function addCurveLpPositionInfo(uint256 _newPid) external onlyOwner {
+        pids.add(_newPid);
+        (address lpToken,,, address crvRewards,,) = CONVEX_BOOSTER.poolInfo(_newPid);
+        assets.add(lpToken);
+        baseRewardPools.add(crvRewards);
+    }
+
+    /// @dev given a target PID, it will remove the details from the `EnumerableSet`: pids, assets & baseRewardPools
+    /// @param _removePid target pid numeric value to remove from contract's storage
+    function removeCurveLpPositionInfo(uint256 _removePid) external onlyOwner {
+        require(pids.contains(_removePid), "AuraAvatarMultiToken: PID doesnt exist!");
+
+        (address lpToken,,, address crvRewards,,) = CONVEX_BOOSTER.poolInfo(_removePid);
+        uint256 stakedBal = IBaseRewardPool(crvRewards).balanceOf(address(this));
+        if (stakedBal > 0) {
+            revert CurveLpStillStaked(lpToken, crvRewards, stakedBal);
+        }
+
+        // NOTE: indeed if nothing is staked, then remove from storage
+        pids.remove(_removePid);
+        assets.remove(lpToken);
+        baseRewardPools.remove(crvRewards);
+    }
+
+    ////////////////////////////////////////////////////////////////////////////
+    // PUBLIC: Owner/Manager
+    ////////////////////////////////////////////////////////////////////////////
+
+    /// @notice Claim and process CRV, CVX & FXS rewards, selling them for stables: USDC & FRAX
+    /// @dev This can be called by the owner or manager to opportunistically harvest in good market conditions.
+    /// @return processed_ An array containing addresses and amounts of harvested tokens (i.e. tokens that have finally
+    ///                    been swapped into).
+    function processRewards() external onlyOwnerOrManager returns (TokenAmount[] memory processed_) {
+        processed_ = _processRewards();
+    }
+
+    ////////////////////////////////////////////////////////////////////////////
+    // PUBLIC: Keeper
+    ////////////////////////////////////////////////////////////////////////////
+
+    /// @notice A function to process pending CRV, CVX & FXS rewards at regular intervals. Can only be called by the
+    ///         keeper when the contract is not paused.
+    /// @param _performData The calldata to be passed to the upkeep function. Not used!
+    function performUpkeep(bytes calldata _performData) external override onlyKeeper whenNotPaused {
+        _processRewardsKeeper();
+    }
+
+    ////////////////////////////////////////////////////////////////////////////
+    // INTERNAL
+    ////////////////////////////////////////////////////////////////////////////
+
+    /// @notice Unstakes the given amount of assets and transfers them back to owner.
+    /// @dev This function doesn't claim any rewards. Caller can only be owner.
+    /// @param _pids Pids to be targetted to unstake from.
+    /// @param _bptsDeposited Amount of assets to be unstaked.
+    function _withdraw(uint256[] memory _pids, uint256[] memory _bptsDeposited) internal {
+        for (uint256 i = 0; i < _pids.length; i++) {
+            if (_bptsDeposited[i] == 0) {
+                revert NothingToWithdraw();
+            }
+            (address lpToken,,, address crvRewards,,) = CONVEX_BOOSTER.poolInfo(_pids[i]);
+
+            IBaseRewardPool(crvRewards).withdrawAndUnwrap(_bptsDeposited[i], false);
+            IERC20MetadataUpgradeable(lpToken).safeTransfer(msg.sender, _bptsDeposited[i]);
+
+            emit Withdraw(lpToken, _bptsDeposited[i], block.timestamp);
+        }
+    }
+
+    /// @notice A function to process pending CRV, CVX & FXS rewards at regular intervals.
+    function _processRewardsKeeper() internal {
+        uint256 lastClaimTimestampCached = lastClaimTimestamp;
+        uint256 claimFrequencyCached = claimFrequency;
+        if ((block.timestamp - lastClaimTimestampCached) < claimFrequencyCached) {
+            revert TooSoon(block.timestamp, lastClaimTimestampCached, claimFrequencyCached);
+        }
+
+        _processRewards();
     }
 
     function _processRewards() internal returns (TokenAmount[] memory processed_) {
-        address ownerCached = owner();
         // 1. Claim CVX, CRV & FXS rewards
         (uint256 totalCrv, uint256 totalCvx, uint256 totalFxs) = claimAndRegisterRewards();
 
@@ -102,21 +459,19 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
         uint256 totalUsdcEarned;
         uint256 totalFraxEarned;
 
-        totalUsdcEarned += swapCrvForUsdc(totalCrv);
-        totalUsdcEarned += swapCvxForUsdc(totalCvx);
+        swapCrvForWeth(totalCrv);
+        swapCvxForWeth(totalCvx);
+        totalUsdcEarned = swapWethForUsdc();
+
         if (totalFxs > 0) {
             // NOTE: only one hop, avoiding another swap tx form FRAX to USDC
-            totalFraxEarned = swapFxsForUsdc(totalFxs);
-            FRAX.safeTransfer(ownerCached, totalFraxEarned);
+            totalFraxEarned = swapFxsForFrax(totalFxs);
         }
-
-        // 3. Send USDC received to owner
-        USDC.safeTransfer(ownerCached, totalUsdcEarned);
 
         // Return processed amount
         processed_ = new TokenAmount[](2);
         processed_[0] = TokenAmount(address(USDC), totalUsdcEarned);
-        processed_[0] = TokenAmount(address(FRAX), totalFraxEarned);
+        processed_[1] = TokenAmount(address(FRAX), totalFraxEarned);
 
         emit RewardsToStable(address(USDC), totalUsdcEarned, block.timestamp);
         emit RewardsToStable(address(FRAX), totalFraxEarned, block.timestamp);
@@ -127,10 +482,27 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
         lastClaimTimestamp = block.timestamp;
 
         uint256 length = baseRewardPools.length();
-        for (uint256 i = 0; i < length; i++) {
+        for (uint256 i = 0; i < length;) {
             IBaseRewardPool baseRewardPool = IBaseRewardPool(baseRewardPools.at(i));
             if (baseRewardPool.earned(address(this)) > 0) {
                 baseRewardPool.getReward();
+            }
+            unchecked {
+                ++i;
+            }
+        }
+
+        length = pidsPrivateVaults.length();
+        for (uint256 i = 0; i < length;) {
+            address vaultAddr = privateVaults[pidsPrivateVaults.at(i)];
+            IStakingProxy proxy = IStakingProxy(vaultAddr);
+            (, uint256[] memory totalEarned) = proxy.earned();
+            /// NOTE: order is at [0] fxs rewards & at [1] crv rewards
+            if (totalEarned[0] > 0 || totalEarned[1] > 0) {
+                proxy.getReward();
+            }
+            unchecked {
+                ++i;
             }
         }
 
@@ -148,58 +520,73 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
         emit RewardClaimed(address(FXS), totalFxs_, block.timestamp);
     }
 
-    function swapCrvForUsdc(uint256 _crvAmount) internal returns (uint256 usdcEarned_) {
-        uint256 minUsdcExpected = (getCrvAmountInUsdc(_crvAmount) * minOutBpsCrvToUsdc.val) / MAX_BPS;
-        // 1. Swap crv -> eth
-        CRV_ETH_CURVE_POOL.exchange_underlying(
-            1, 0, _crvAmount, (getCrvAmountInEth(_crvAmount) * minOutBpsCrvToUsdc.val) / MAX_BPS
+    function swapCrvForWeth(uint256 _crvAmount) internal {
+        // Swap CRV -> WETH
+        CRV_ETH_CURVE_POOL.exchange(
+            1, 0, _crvAmount, (getCrvAmountInEth(_crvAmount) * minOutBpsCrvToWeth.val) / MAX_BPS
         );
-
-        // 2. Swap eth -> usdc
-        uint256 ethBal = address(this).balance;
-        IUniswapRouterV3.ExactInputParams memory params = IUniswapRouterV3.ExactInputParams({
-            path: abi.encodePacked(WETH, uint24(500), address(USDC)),
-            recipient: address(this),
-            amountIn: ethBal,
-            amountOutMinimum: minUsdcExpected
-        });
-        usdcEarned_ = UNIV3_ROUTER.exactInput{value: ethBal}(params);
-        // NOTE: conservative approach given https://hackmd.io/@0x534154/Hy6_66gT5
-        UNIV3_ROUTER.refundETH();
     }
 
-    function swapCvxForUsdc(uint256 _cvxAmount) internal returns (uint256 usdcEarned_) {
-        uint256 minUsdcExpected = (getCvxAmountInUsdc(_cvxAmount) * minOutBpsCvxToUsdc.val) / MAX_BPS;
-        // 1. Swap cvx -> eth
-        CVX_ETH_CURVE_POOL.exchange_underlying(
-            1, 0, _cvxAmount, (getCvxAmountInEth(_cvxAmount) * minOutBpsCrvToUsdc.val) / MAX_BPS
+    function swapCvxForWeth(uint256 _cvxAmount) internal {
+        // Swap CVX -> WETH
+        CVX_ETH_CURVE_POOL.exchange(
+            1, 0, _cvxAmount, (getCvxAmountInEth(_cvxAmount) * minOutBpsCrvToWeth.val) / MAX_BPS
         );
-
-        // 2. Swap cvx -> usdc
-        uint256 ethBal = address(this).balance;
-        IUniswapRouterV3.ExactInputParams memory params = IUniswapRouterV3.ExactInputParams({
-            path: abi.encodePacked(WETH, uint24(500), address(USDC)),
-            recipient: address(this),
-            amountIn: ethBal,
-            amountOutMinimum: minUsdcExpected
-        });
-        usdcEarned_ = UNIV3_ROUTER.exactInput{value: ethBal}(params);
-        // NOTE: conservative approach given https://hackmd.io/@0x534154/Hy6_66gT5
-        UNIV3_ROUTER.refundETH();
     }
 
-    function swapFxsForUsdc(uint256 _fxsAmount) internal returns (uint256 fraxEarned_) {
+    function swapWethForUsdc() internal returns (uint256 usdcEarned_) {
+        // Swap WETH -> USDC
+        uint256 wethBalance = WETH.balanceOf(address(this));
+        IUniswapRouterV3.ExactInputParams memory params = IUniswapRouterV3.ExactInputParams({
+            path: abi.encodePacked(address(WETH), uint24(500), address(USDC)),
+            recipient: owner(),
+            amountIn: wethBalance,
+            amountOutMinimum: (getWethAmountInUsdc(wethBalance) * minOutBpsWethToUsdc.val) / MAX_BPS
+        });
+        usdcEarned_ = UNIV3_ROUTER.exactInput(params);
+    }
+
+    function swapFxsForFrax(uint256 _fxsAmount) internal returns (uint256 fraxEarned_) {
         address[] memory path = new address[](2);
         path[1] = address(FXS);
         path[2] = address(FRAX);
-        // 1. Swap fxs -> frax
+        // 1. Swap FXS -> FRAX
         uint256[] memory amounts = FRAXSWAP_ROUTER.swapExactTokensForTokens(
             _fxsAmount,
-            (getFxsAmountInUsdc(_fxsAmount) * minOutBpsFxsToUsdc.val) / MAX_BPS,
+            (getFxsAmountInFrax(_fxsAmount) * minOutBpsFxsToFrax.val) / MAX_BPS,
             path,
-            address(this),
+            owner(),
             block.timestamp
         );
         fraxEarned_ = amounts[amounts.length - 1];
+    }
+
+    ////////////////////////////////////////////////////////////////////////////
+    // PUBLIC VIEW
+    ////////////////////////////////////////////////////////////////////////////
+
+    /// @notice Checks whether an upkeep is to be performed.
+    /// @dev The calldata is encoded with the `processRewardsKeeper` selector. This selector is ignored when
+    ///      performing upkeeps using the `performUpkeep` function.
+    /// @return upkeepNeeded_ A boolean indicating whether an upkeep is to be performed.
+    /// @return performData_ The calldata to be passed to the upkeep function.
+    function checkUpkeep(bytes calldata) external override returns (bool upkeepNeeded_, bytes memory performData_) {
+        uint256 crvPending;
+        uint256 length = baseRewardPools.length();
+
+        for (uint256 i = 0; i < length;) {
+            crvPending += IBaseRewardPool(baseRewardPools.at(i)).earned(address(this));
+            unchecked {
+                ++i;
+            }
+        }
+
+        uint256 crvBalance = CRV.balanceOf(address(this));
+
+        if ((block.timestamp - lastClaimTimestamp) >= claimFrequency) {
+            if (crvPending > 0 || crvBalance > 0) {
+                upkeepNeeded_ = true;
+            }
+        }
     }
 }
