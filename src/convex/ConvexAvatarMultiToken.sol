@@ -71,6 +71,9 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
     /// @notice The current and minimum value (in bps) controlling the minimum executable price (as proprtion of oracle
     ///         price) for an WETH to USDC swap.
     BpsConfig public minOutBpsWethToUsdc;
+    /// @notice The current and minimum value (in bps) controlling the minimum executable price (as proprtion of oracle
+    ///         price) for an FRAX to DAI swap.
+    BpsConfig public minOutBpsFraxToDai;
 
     /// @notice The timestamp at which rewards were last claimed and harvested.
     uint256 public lastClaimTimestamp;
@@ -142,7 +145,7 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
         _;
     }
 
-    function initialize(address _owner, address _manager, address _keeper) public initializer {
+    function initialize(address _owner, address _manager, address _keeper, uint256[] memory _pids) public initializer {
         __BaseAvatar_init(_owner);
         __Pausable_init();
 
@@ -150,6 +153,15 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
         keeper = _keeper;
 
         claimFrequency = 1 weeks;
+
+        for (uint256 i = 0; i < _pids.length; i++) {
+            pids.add(_pids[i]);
+            (address lpToken,,, address crvRewards,,) = CONVEX_BOOSTER.poolInfo(_pids[i]);
+            assets.add(lpToken);
+            baseRewardPools.add(crvRewards);
+            // NOTE: during loop approve those assets to convex booster
+            IERC20MetadataUpgradeable(lpToken).safeApprove(address(CONVEX_BOOSTER), type(uint256).max);
+        }
 
         minOutBpsCrvToWeth = BpsConfig({
             val: 9850, // 98.5%
@@ -167,10 +179,15 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
             val: 9850, // 98.5%
             min: 9500 // 95%
         });
+        minOutBpsFraxToDai = BpsConfig({
+            val: 9850, // 98.5%
+            min: 9500 // 95%
+        });
 
-        // aproval for curve pools: crv & cvx
+        // aproval for curve pools: crv, cvx & frax
         CRV.safeApprove(address(CRV_ETH_CURVE_POOL), type(uint256).max);
         CVX.safeApprove(address(CVX_ETH_CURVE_POOL), type(uint256).max);
+        FRAX.safeApprove(address(FRAX_3CRV_CURVE_POOL), type(uint256).max);
 
         // approvals for fraxswap route: fxs
         FXS.safeApprove(address(FRAXSWAP_ROUTER), type(uint256).max);
@@ -454,27 +471,24 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
         // 1. Claim CVX, CRV & FXS rewards
         (uint256 totalCrv, uint256 totalCvx, uint256 totalFxs) = claimAndRegisterRewards();
 
-        // 2. Swap all rewards for USDC
+        // 2. Swap all rewards for DAI
         // NOTE: assume that always will be crv & cvx to convert to stables, while fxs depends on private vaults
-        uint256 totalUsdcEarned;
-        uint256 totalFraxEarned;
+        uint256 totalDaiEarned;
 
         swapCrvForWeth(totalCrv);
         swapCvxForWeth(totalCvx);
-        totalUsdcEarned = swapWethForUsdc();
+        totalDaiEarned = swapWethForDai();
 
         if (totalFxs > 0) {
-            // NOTE: only one hop, avoiding another swap tx form FRAX to USDC
-            totalFraxEarned = swapFxsForFrax(totalFxs);
+            // NOTE: swapping to DAI given treasury decision
+            totalDaiEarned += swapFxsForDai(totalFxs);
         }
 
         // Return processed amount
-        processed_ = new TokenAmount[](2);
-        processed_[0] = TokenAmount(address(USDC), totalUsdcEarned);
-        processed_[1] = TokenAmount(address(FRAX), totalFraxEarned);
+        processed_ = new TokenAmount[](1);
+        processed_[0] = TokenAmount(address(DAI), totalDaiEarned);
 
-        emit RewardsToStable(address(USDC), totalUsdcEarned, block.timestamp);
-        emit RewardsToStable(address(FRAX), totalFraxEarned, block.timestamp);
+        emit RewardsToStable(address(DAI), totalDaiEarned, block.timestamp);
     }
 
     function claimAndRegisterRewards() internal returns (uint256 totalCrv_, uint256 totalCvx_, uint256 totalFxs_) {
@@ -534,19 +548,23 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
         );
     }
 
-    function swapWethForUsdc() internal returns (uint256 usdcEarned_) {
-        // Swap WETH -> USDC
+    function swapWethForDai() internal returns (uint256 daiEarned_) {
+        // Swap WETH -> DAI
         uint256 wethBalance = WETH.balanceOf(address(this));
-        IUniswapRouterV3.ExactInputParams memory params = IUniswapRouterV3.ExactInputParams({
-            path: abi.encodePacked(address(WETH), uint24(500), address(USDC)),
+        IUniswapRouterV3.ExactInputSingleParams memory params = IUniswapRouterV3.ExactInputSingleParams({
+            tokenIn: address(WETH),
+            tokenOut: address(DAI),
+            fee: uint24(500),
             recipient: owner(),
+            deadline: type(uint256).max,
             amountIn: wethBalance,
-            amountOutMinimum: (getWethAmountInUsdc(wethBalance) * minOutBpsWethToUsdc.val) / MAX_BPS
+            amountOutMinimum: 0, // (getWethAmountInDai(wethBalance) * minOutBpsWethToUsdc.val) / MAX_BPS
+            sqrtPriceLimitX96: 0 // Inactive param
         });
-        usdcEarned_ = UNIV3_ROUTER.exactInput(params);
+        daiEarned_ = UNIV3_ROUTER.exactInputSingle(params);
     }
 
-    function swapFxsForFrax(uint256 _fxsAmount) internal returns (uint256 fraxEarned_) {
+    function swapFxsForDai(uint256 _fxsAmount) internal returns (uint256 daiEarned_) {
         address[] memory path = new address[](2);
         path[1] = address(FXS);
         path[2] = address(FRAX);
@@ -555,10 +573,14 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
             _fxsAmount,
             (getFxsAmountInFrax(_fxsAmount) * minOutBpsFxsToFrax.val) / MAX_BPS,
             path,
-            owner(),
+            address(this),
             block.timestamp
         );
-        fraxEarned_ = amounts[amounts.length - 1];
+        uint256 fraxBal = amounts[amounts.length - 1];
+        // 2. Swap FRAX -> DAI
+        daiEarned_ = FRAX_3CRV_CURVE_POOL.exchange_underlying(
+            0, 1, fraxBal, (getFraxAmountInDai(fraxBal) * minOutBpsFraxToDai.val) / MAX_BPS, owner()
+        );
     }
 
     ////////////////////////////////////////////////////////////////////////////
