@@ -551,17 +551,18 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
     function swapWethForDai() internal returns (uint256 daiEarned_) {
         // Swap WETH -> DAI
         uint256 wethBalance = WETH.balanceOf(address(this));
-        IUniswapRouterV3.ExactInputSingleParams memory params = IUniswapRouterV3.ExactInputSingleParams({
-            tokenIn: address(WETH),
-            tokenOut: address(DAI),
-            fee: uint24(500),
-            recipient: owner(),
-            deadline: type(uint256).max,
-            amountIn: wethBalance,
-            amountOutMinimum: 0, // (getWethAmountInDai(wethBalance) * minOutBpsWethToUsdc.val) / MAX_BPS
-            sqrtPriceLimitX96: 0 // Inactive param
-        });
-        daiEarned_ = UNIV3_ROUTER.exactInputSingle(params);
+        daiEarned_ = UNIV3_ROUTER.exactInputSingle(
+            IUniswapRouterV3.ExactInputSingleParams({
+                tokenIn: address(WETH),
+                tokenOut: address(DAI),
+                fee: uint24(500),
+                recipient: owner(),
+                deadline: type(uint256).max,
+                amountIn: wethBalance,
+                amountOutMinimum: 0, // (getWethAmountInDai(wethBalance) * minOutBpsWethToUsdc.val) / MAX_BPS
+                sqrtPriceLimitX96: 0 // Inactive param
+            })
+        );
     }
 
     function swapFxsForDai(uint256 _fxsAmount) internal returns (uint256 daiEarned_) {

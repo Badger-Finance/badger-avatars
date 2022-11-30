@@ -19,7 +19,7 @@ abstract contract ConvexConstants {
     IFraxRegistry internal constant CONVEX_FRAX_REGISTRY = IFraxRegistry(0x41a5881c17185383e19Df6FA4EC158a6F4851A69);
 
     // uniswap v3
-    IUniswapRouterV3 internal constant UNIV3_ROUTER = IUniswapRouterV3(0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45);
+    IUniswapRouterV3 internal constant UNIV3_ROUTER = IUniswapRouterV3(0xE592427A0AEce92De3Edee1F18E0157C05861564);
 
     // curve pools
     ICurvePool internal constant CRV_ETH_CURVE_POOL = ICurvePool(0x8301AE4fc9c624d1D396cbDAa1ed877821D7C511);
