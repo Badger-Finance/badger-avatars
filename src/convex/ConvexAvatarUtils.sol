@@ -27,9 +27,9 @@ contract ConvexAvatarUtils is BaseAvatarUtils, ConvexConstants {
     }
 
     function getWethAmountInDai(uint256 _wethAmount) internal view returns (uint256 daiAmount_) {
-        uint256 daiInWeth = FEED_DIVISOR_USD / fetchPriceFromClFeed(DAI_ETH_FEED, CL_FEED_DAY_HEARTBEAT);
-        // Use the divisor for multiplying, since weth is 1e18 and oracle is 1e18
-        daiAmount_ = (_wethAmount * FEED_DIVISOR_USD * daiInWeth) / FEED_DIVISOR_USD;
+        uint256 daiInWeth = fetchPriceFromClFeed(DAI_ETH_FEED, CL_FEED_DAY_HEARTBEAT);
+        // Divide by the rate from oracle since it is dai expressed in eth
+        daiAmount_ = (_wethAmount * 1 ether) / daiInWeth;
     }
 
     function getFraxAmountInDai(uint256 _fraxAmount) internal view returns (uint256 daiAmount_) {

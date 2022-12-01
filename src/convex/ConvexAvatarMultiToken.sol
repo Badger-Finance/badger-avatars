@@ -559,7 +559,7 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
                 recipient: owner(),
                 deadline: type(uint256).max,
                 amountIn: wethBalance,
-                amountOutMinimum: 0, // (getWethAmountInDai(wethBalance) * minOutBpsWethToUsdc.val) / MAX_BPS
+                amountOutMinimum: (getWethAmountInDai(wethBalance) * minOutBpsWethToUsdc.val) / MAX_BPS,
                 sqrtPriceLimitX96: 0 // Inactive param
             })
         );

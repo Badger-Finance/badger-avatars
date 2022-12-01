@@ -81,3 +81,6 @@ AuraAvatarTwoTokenTest:test_withdrawAll_nothing() (gas: 24032)
 AuraAvatarTwoTokenTest:test_withdrawAll_permissions() (gas: 12763)
 AuraAvatarTwoTokenTest:test_withdraw_nothing() (gas: 12705)
 AuraAvatarTwoTokenTest:test_withdraw_permissions() (gas: 11737)
+ConvexAvatarMultiTokenTest:test_checkUpKeep() (gas: 686585)
+ConvexAvatarMultiTokenTest:test_performUpKeep() (gas: 2051735)
+
