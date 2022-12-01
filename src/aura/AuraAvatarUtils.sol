@@ -24,7 +24,7 @@ contract AuraAvatarUtils is AuraConstants {
     ////////////////////////////////////////////////////////////////////////////
 
     function getAuraPriceInUsdSpot(uint256 _auraAmount) internal returns (uint256 usdPrice_) {
-        usdPrice_ = querySwapAuraForUsdc(_auraAmount) * AURA_USD_SPOT_FACTOR / _auraAmount;
+        usdPrice_ = (querySwapAuraForUsdc(_auraAmount) * AURA_USD_SPOT_FACTOR) / _auraAmount;
     }
 
     function getBalAmountInUsdc(uint256 _balAmount) internal view returns (uint256 usdcAmount_) {
@@ -42,11 +42,6 @@ contract AuraAvatarUtils is AuraConstants {
         uint256 ethInUsd = fetchPriceFromClFeed(ETH_USD_FEED, CL_FEED_HEARTBEAT_ETH_USD);
         // Divisor is 10^38 and uint256 max ~ 10^77 so this shouldn't overflow for normal amounts
         usdcAmount_ = (_auraAmount * auraInEth * ethInUsd) / AURA_USD_TWAP_DIVISOR;
-    }
-
-    function getBalAmountInBpt(uint256 _balAmount) internal view returns (uint256 bptAmount_) {
-        uint256 bptPriceInBal = getBptPriceInBal();
-        bptAmount_ = (_balAmount * PRECISION) / bptPriceInBal;
     }
 
     function querySwapAuraForUsdc(uint256 _auraAmount) internal returns (uint256 usdcEarned_) {
@@ -84,29 +79,6 @@ contract AuraAvatarUtils is AuraConstants {
             BALANCER_VAULT.queryBatchSwap(IBalancerVault.SwapKind.GIVEN_IN, swaps, assetArray, fundManagement);
 
         usdcEarned_ = uint256(-assetDeltas[assetDeltas.length - 1]);
-    }
-
-    /// @notice Calculates the price of 80BAL-20WETH BPT in BAL using the BAL-ETH CL feed.
-    /// @return bptPriceInBal_ The price of 80BAL-20WETH BPT in BAL.
-    function getBptPriceInBal() internal view returns (uint256 bptPriceInBal_) {
-        uint256 ethPriceInBal = PRECISION_DOUBLE / fetchPriceFromClFeed(BAL_ETH_FEED, CL_FEED_HEARTBEAT_BAL);
-
-        uint256 invariant = IWeightedPool(address(BPT_80BAL_20WETH)).getInvariant();
-        uint256 totalSupply = BPT_80BAL_20WETH.totalSupply();
-
-        // p1: Price of BAL
-        // p2: Price of ETH
-        //        w1         w2
-        //  / p1 \     / p2 \
-        // |  --  | . |  --  |
-        //  \ w1 /     \ w2 /
-        // -------------------
-        //          p1
-        uint256 priceMultiplier = LogExpMath.pow(
-            ethPriceInBal * W1_BPT_80BAL_20WETH / W2_BPT_80BAL_20WETH, W2_BPT_80BAL_20WETH
-        ) * PRECISION / W1_BPT_80BAL_20WETH;
-
-        bptPriceInBal_ = invariant * priceMultiplier / totalSupply;
     }
 
     /// @notice Calculates the expected amount of AURA minted given some BAL rewards.
