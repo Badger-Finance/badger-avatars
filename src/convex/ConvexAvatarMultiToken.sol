@@ -303,6 +303,10 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
         }
 
         address vaultAddr = privateVaults[_pid];
+        if (vaultAddr == address(0)) {
+            revert NoPrivateVaultForPid(_pid);
+        }
+
         IStakingProxy proxy = IStakingProxy(vaultAddr);
         address stakingToken = proxy.stakingToken();
         IFraxUnifiedFarm farm = IFraxUnifiedFarm(proxy.stakingAddress());
