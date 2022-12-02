@@ -103,8 +103,10 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
     error TooSoon(uint256 currentTime, uint256 updateTime, uint256 minDuration);
 
     error CurveLpStillStaked(address curveLp, address basePool, uint256 stakingBalance);
+
     error PoolDeactivated(uint256 pid);
     error PidNotIncluded(uint256 pid);
+    error NoPrivateVaultForPid(uint256 pid);
 
     ////////////////////////////////////////////////////////////////////////////
     // EVENTS
@@ -295,7 +297,7 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
     /// @notice Takes a given amount of asset from the owner and stakes them on private vault. Can only be called by owner.
     /// @param _pid Pid target to stake into its appropiate vault
     /// @param _amountAsset Amount of asset to be lock.
-    function depositInPrivateVault(uint256 _pid, uint256 _amountAsset) external onlyOwner {
+    function depositInPrivateVault(uint256 _pid, uint256 _amountAsset) external onlyOwner returns (bytes32 kekId) {
         if (_amountAsset == 0) {
             revert NothingToDeposit();
         }
@@ -307,7 +309,7 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
 
         IERC20MetadataUpgradeable(stakingToken).safeTransferFrom(msg.sender, address(this), _amountAsset);
         /// NOTE: we always try to lock for the min duration allowed
-        bytes32 kekId = proxy.stakeLocked(_amountAsset, farm.lock_time_min());
+        kekId = proxy.stakeLocked(_amountAsset, farm.lock_time_min());
         /// @dev detailed required to enable withdrawls later
         kekIds[vaultAddr].push(kekId);
 
@@ -320,7 +322,17 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
     /// @param _pid Pid target to withdraw from avatar private vault
     function withdrawFromPrivateVault(uint256 _pid) external onlyOwner {
         address vaultAddr = privateVaults[_pid];
+
+        if (vaultAddr == address(0)) {
+            revert NoPrivateVaultForPid(_pid);
+        }
+
         IStakingProxy proxy = IStakingProxy(vaultAddr);
+        uint256 lockedBal = IFraxUnifiedFarm(proxy.stakingAddress()).lockedLiquidityOf(vaultAddr);
+        if (lockedBal == 0) {
+            revert NothingToWithdraw();
+        }
+
         bytes32[] memory keks = kekIds[vaultAddr];
 
         for (uint256 i = 0; i < keks.length;) {
