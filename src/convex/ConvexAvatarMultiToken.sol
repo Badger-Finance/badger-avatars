@@ -104,6 +104,7 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
 
     error CurveLpStillStaked(address curveLp, address basePool, uint256 stakingBalance);
     error PoolDeactivated(uint256 pid);
+    error PidNotIncluded(uint256 pid);
 
     ////////////////////////////////////////////////////////////////////////////
     // EVENTS
@@ -145,7 +146,13 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
         _;
     }
 
-    function initialize(address _owner, address _manager, address _keeper, uint256[] memory _pids) public initializer {
+    function initialize(
+        address _owner,
+        address _manager,
+        address _keeper,
+        uint256[] memory _pids,
+        uint256[] memory _fraxPids
+    ) public initializer {
         __BaseAvatar_init(_owner);
         __Pausable_init();
 
@@ -154,13 +161,25 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
 
         claimFrequency = 1 weeks;
 
-        for (uint256 i = 0; i < _pids.length; i++) {
+        // store vanilla convex pids and approve their lpToken
+        for (uint256 i; i < _pids.length;) {
             pids.add(_pids[i]);
             (address lpToken,,, address crvRewards,,) = CONVEX_BOOSTER.poolInfo(_pids[i]);
             assets.add(lpToken);
             baseRewardPools.add(crvRewards);
             // NOTE: during loop approve those assets to convex booster
             IERC20MetadataUpgradeable(lpToken).safeApprove(address(CONVEX_BOOSTER), type(uint256).max);
+            unchecked {
+                ++i;
+            }
+        }
+
+        // create private vaults for convex-frax pids
+        for (uint256 i; i < _fraxPids.length;) {
+            _createPrivateVault(_fraxPids[i]);
+            unchecked {
+                ++i;
+            }
         }
 
         minOutBpsCrvToWeth = BpsConfig({
@@ -270,17 +289,7 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
     ////////////////////////////////////////////////////////////////////////////
 
     function createPrivateVault(uint256 _pid) external onlyOwner {
-        (,, address stakingTokenAddr,, uint8 active) = CONVEX_FRAX_REGISTRY.poolInfo(_pid);
-        if (active == 0) {
-            revert PoolDeactivated(_pid);
-        }
-
-        address vaultAddr = FRAX_BOOSTER.createVault(_pid);
-        IERC20MetadataUpgradeable(stakingTokenAddr).safeApprove(vaultAddr, type(uint256).max);
-
-        // NOTE: we should store the `vaultAddr` on storage for ease of deposits/wds/reward claims
-        privateVaults[_pid] = vaultAddr;
-        pidsPrivateVaults.add(_pid);
+        _createPrivateVault(_pid);
     }
 
     /// @notice Takes a given amount of asset from the owner and stakes them on private vault. Can only be called by owner.
@@ -335,7 +344,10 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
     /// @param _amountAssets Amount of assets to be staked.
     function deposit(uint256[] memory _pids, uint256[] memory _amountAssets) external onlyOwner {
         for (uint256 i = 0; i < _pids.length; i++) {
-            require(pids.contains(_pids[i]), "AuraAvatarMultiToken: PID doesnt exist!");
+            /// @dev verify if pid is in storage and amount is > 0
+            if (!pids.contains(_pids[i])) {
+                revert PidNotIncluded(_pids[i]);
+            }
             if (_amountAssets[i] == 0) {
                 revert NothingToDeposit();
             }
@@ -397,7 +409,9 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
     /// @dev given a target PID, it will remove the details from the `EnumerableSet`: pids, assets & baseRewardPools
     /// @param _removePid target pid numeric value to remove from contract's storage
     function removeCurveLpPositionInfo(uint256 _removePid) external onlyOwner {
-        require(pids.contains(_removePid), "AuraAvatarMultiToken: PID doesnt exist!");
+        if (!pids.contains(_removePid)) {
+            revert PidNotIncluded(_removePid);
+        }
 
         (address lpToken,,, address crvRewards,,) = CONVEX_BOOSTER.poolInfo(_removePid);
         uint256 stakedBal = IBaseRewardPool(crvRewards).balanceOf(address(this));
@@ -437,6 +451,20 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
     ////////////////////////////////////////////////////////////////////////////
     // INTERNAL
     ////////////////////////////////////////////////////////////////////////////
+
+    function _createPrivateVault(uint256 _pid) internal {
+        (,, address stakingTokenAddr,, uint8 active) = CONVEX_FRAX_REGISTRY.poolInfo(_pid);
+        if (active == 0) {
+            revert PoolDeactivated(_pid);
+        }
+
+        address vaultAddr = FRAX_BOOSTER.createVault(_pid);
+        IERC20MetadataUpgradeable(stakingTokenAddr).safeApprove(vaultAddr, type(uint256).max);
+
+        // NOTE: we should store the `vaultAddr` on storage for ease of deposits/wds/reward claims
+        privateVaults[_pid] = vaultAddr;
+        pidsPrivateVaults.add(_pid);
+    }
 
     /// @notice Unstakes the given amount of assets and transfers them back to owner.
     /// @dev This function doesn't claim any rewards. Caller can only be owner.
@@ -511,8 +539,8 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
             address vaultAddr = privateVaults[pidsPrivateVaults.at(i)];
             IStakingProxy proxy = IStakingProxy(vaultAddr);
             (, uint256[] memory totalEarned) = proxy.earned();
-            /// NOTE: order is at [0] fxs rewards & at [1] crv rewards
-            if (totalEarned[0] > 0 || totalEarned[1] > 0) {
+            /// NOTE: assume as long at zero index rewards > 0, any other index could be as well
+            if (totalEarned[0] > 0) {
                 proxy.getReward();
             }
             unchecked {
@@ -567,8 +595,8 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
 
     function swapFxsForDai(uint256 _fxsAmount) internal returns (uint256 daiEarned_) {
         address[] memory path = new address[](2);
-        path[1] = address(FXS);
-        path[2] = address(FRAX);
+        path[0] = address(FXS);
+        path[1] = address(FRAX);
         // 1. Swap FXS -> FRAX
         uint256[] memory amounts = FRAXSWAP_ROUTER.swapExactTokensForTokens(
             _fxsAmount,
@@ -595,6 +623,7 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
     /// @return performData_ The calldata to be passed to the upkeep function.
     function checkUpkeep(bytes calldata) external override returns (bool upkeepNeeded_, bytes memory performData_) {
         uint256 crvPending;
+        uint256 fxsPending;
         uint256 length = baseRewardPools.length();
 
         for (uint256 i = 0; i < length;) {
@@ -604,12 +633,49 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
             }
         }
 
+        length = pidsPrivateVaults.length();
+        for (uint256 i; i < length;) {
+            address vaultAddr = privateVaults[pidsPrivateVaults.at(i)];
+            IStakingProxy proxy = IStakingProxy(vaultAddr);
+            (address[] memory tokenAddresses, uint256[] memory totalEarned) = proxy.earned();
+            for (uint256 j; j < tokenAddresses.length;) {
+                if (tokenAddresses[j] == address(CRV)) {
+                    crvPending += totalEarned[j];
+                }
+                if (tokenAddresses[j] == address(FXS)) {
+                    fxsPending += totalEarned[j];
+                }
+                unchecked {
+                    ++j;
+                }
+            }
+            unchecked {
+                ++i;
+            }
+        }
+
         uint256 crvBalance = CRV.balanceOf(address(this));
+        uint256 fxsBalance = FXS.balanceOf(address(this));
 
         if ((block.timestamp - lastClaimTimestamp) >= claimFrequency) {
-            if (crvPending > 0 || crvBalance > 0) {
+            if (crvPending > 0 || crvBalance > 0 || fxsPending > 0 || fxsBalance > 0) {
                 upkeepNeeded_ = true;
             }
         }
+    }
+
+    /// @dev Returns all pids values
+    function getPids() public view returns (uint256[] memory) {
+        return pids.values();
+    }
+
+    /// @dev Returns all assets addresses
+    function getAssets() public view returns (address[] memory) {
+        return assets.values();
+    }
+
+    /// @dev Returns all rewards pool addresses
+    function getbaseRewardPools() public view returns (address[] memory) {
+        return baseRewardPools.values();
     }
 }
