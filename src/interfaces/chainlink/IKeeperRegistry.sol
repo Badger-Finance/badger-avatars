@@ -28,19 +28,9 @@ interface IKeeperRegistry {
 
     function cancelUpkeep(uint256 id) external;
 
-    function getMinBalanceForUpkeep(uint256 id)
-        external
-        view
-        returns (uint96 minBalance);
+    function getMinBalanceForUpkeep(uint256 id) external view returns (uint96 minBalance);
 
-    function getState()
-        external
-        view
-        returns (
-            State memory state,
-            Config memory config,
-            address[] memory keepers
-        );
+    function getState() external view returns (State memory state, Config memory config, address[] memory keepers);
 
     function getUpkeep(uint256 id)
         external
@@ -56,12 +46,9 @@ interface IKeeperRegistry {
             uint96 amountSpent
         );
 
-    function registerUpkeep(
-        address target,
-        uint32 gasLimit,
-        address admin,
-        bytes memory checkData
-    ) external returns (uint256 id);
+    function registerUpkeep(address target, uint32 gasLimit, address admin, bytes memory checkData)
+        external
+        returns (uint256 id);
 
     function withdrawFunds(uint256 id, address to) external;
 }
