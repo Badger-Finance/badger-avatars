@@ -165,12 +165,7 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
 
         // store vanilla convex pids and approve their lpToken
         for (uint256 i; i < _pids.length;) {
-            pids.add(_pids[i]);
-            (address lpToken,,, address crvRewards,,) = CONVEX_BOOSTER.poolInfo(_pids[i]);
-            assets.add(lpToken);
-            baseRewardPools.add(crvRewards);
-            // NOTE: during loop approve those assets to convex booster
-            IERC20MetadataUpgradeable(lpToken).safeApprove(address(CONVEX_BOOSTER), type(uint256).max);
+            _addCurveLpPositionInfo(_pids[i]);
             unchecked {
                 ++i;
             }
@@ -416,10 +411,7 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
     /// @dev given a target PID, it will add the details in the `EnumerableSet`: pids, assets & baseRewardPools
     /// @param _newPid target pid numeric value to add in contract's storage
     function addCurveLpPositionInfo(uint256 _newPid) external onlyOwner {
-        pids.add(_newPid);
-        (address lpToken,,, address crvRewards,,) = CONVEX_BOOSTER.poolInfo(_newPid);
-        assets.add(lpToken);
-        baseRewardPools.add(crvRewards);
+        _addCurveLpPositionInfo(_newPid);
     }
 
     /// @dev given a target PID, it will remove the details from the `EnumerableSet`: pids, assets & baseRewardPools
@@ -480,6 +472,15 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
         // NOTE: we should store the `vaultAddr` on storage for ease of deposits/wds/reward claims
         privateVaults[_pid] = vaultAddr;
         pidsPrivateVaults.add(_pid);
+    }
+
+    function _addCurveLpPositionInfo(uint256 _newPid) internal {
+        pids.add(_newPid);
+        (address lpToken,,, address crvRewards,,) = CONVEX_BOOSTER.poolInfo(_newPid);
+        assets.add(lpToken);
+        baseRewardPools.add(crvRewards);
+        // NOTE: during new lp addition approve those assets to convex booster
+        IERC20MetadataUpgradeable(lpToken).safeApprove(address(CONVEX_BOOSTER), type(uint256).max);
     }
 
     /// @notice Unstakes the given amount of assets and transfers them back to owner.
