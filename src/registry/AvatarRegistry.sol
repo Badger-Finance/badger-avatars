@@ -412,11 +412,10 @@ contract AvatarRegistry is AvatarRegistryUtils, Pausable, KeeperCompatibleInterf
     {
         /// @dev we ensure we top-up enough LINK for couple of test-runs (20) and sanity checks
         uint256 linkAmount = _getLinkAmount(gasLimit) * ROUNDS_TOP_UP;
-        uint256 registryLinkBal = LINK.balanceOf(address(this));
         if (linkAmount < MIN_FUNDING_UPKEEP) {
             revert NotMinLinkFundedUpKeep();
         }
-        if (registryLinkBal < linkAmount) {
+        if (LINK.balanceOf(address(this)) < linkAmount) {
             _swapEthForLink(linkAmount);
         }
 
