@@ -107,6 +107,8 @@ contract AvatarRegistry is AvatarRegistryUtils, Pausable, KeeperCompatibleInterf
     event SweepLinkToTechops(uint256 amount, uint256 timestamp);
     event EthSwappedForLink(uint256 amountEthOut, uint256 amountLinkIn, uint256 timestamp);
 
+    event RegistryEthReceived(address indexed sender, uint256 value);
+
     ////////////////////////////////////////////////////////////////////////////
     // MODIFIERS
     ////////////////////////////////////////////////////////////////////////////
@@ -132,6 +134,11 @@ contract AvatarRegistry is AvatarRegistryUtils, Pausable, KeeperCompatibleInterf
             revert ZeroAddress();
         }
         governance = _governance;
+    }
+
+    /// @dev Fallback function accepts Ether transactions.
+    receive() external payable {
+        emit RegistryEthReceived(msg.sender, msg.value);
     }
 
     ////////////////////////////////////////////////////////////////////////////
