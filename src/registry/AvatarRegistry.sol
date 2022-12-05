@@ -4,18 +4,21 @@ pragma solidity ^0.8.0;
 import {EnumerableSet} from "../../lib/openzeppelin-contracts/contracts/utils/structs/EnumerableSet.sol";
 import {Pausable} from "../../lib/openzeppelin-contracts/contracts/security/Pausable.sol";
 
+import {MAX_BPS} from "../BaseConstants.sol";
+import {AvatarRegistryUtils} from "./AvatarRegistryUtils.sol";
+
 import {IAvatar} from "../interfaces/badger/IAvatar.sol";
 import {IAggregatorV3} from "../interfaces/chainlink/IAggregatorV3.sol";
 import {KeeperCompatibleInterface} from "../interfaces/chainlink/KeeperCompatibleInterface.sol";
 import {IKeeperRegistry} from "../interfaces/chainlink/IKeeperRegistry.sol";
-import {ILink} from "../interfaces/chainlink/ILink.sol";
 import {IKeeperRegistrar} from "../interfaces/chainlink/IKeeperRegistrar.sol";
+import {IUniswapRouterV3} from "../interfaces/uniswap/IUniswapRouterV3.sol";
 
 /// @title   AvatarRegistry
 /// @author  Petrovska @ BadgerDAO
 /// @dev  Allows the registry to register new avatars and top-up under funded
 /// upkeeps via CL
-contract AvatarRegistry is Pausable, KeeperCompatibleInterface {
+contract AvatarRegistry is AvatarRegistryUtils, Pausable, KeeperCompatibleInterface {
     ////////////////////////////////////////////////////////////////////////////
     // LIBRARIES
     ////////////////////////////////////////////////////////////////////////////
@@ -50,21 +53,6 @@ contract AvatarRegistry is Pausable, KeeperCompatibleInterface {
     ////////////////////////////////////////////////////////////////////////////
 
     string public constant AVATAR_REGISTRY_NAME = "BadgerDAO Avatar Registry";
-    address public constant KEEPER_REGISTRAR = 0xDb8e8e2ccb5C033938736aa89Fe4fa1eDfD15a1d;
-    IKeeperRegistry public constant CL_REGISTRY = IKeeperRegistry(0x02777053d6764996e594c3E88AF1D58D5363a2e6);
-    address public constant TECHOPS = 0x86cbD0ce0c087b482782c181dA8d191De18C8275;
-    ILink public constant LINK = ILink(0x514910771AF9Ca656af840dff83E8264EcF986CA);
-
-    uint256 internal constant CL_FEED_HEARTBEAT_GAS = 2 hours;
-    IAggregatorV3 public constant FAST_GAS_FEED = IAggregatorV3(0x169E633A2D1E6c10dD91238Ba11c4A708dfEF37C);
-    IAggregatorV3 public constant LINK_ETH_FEED = IAggregatorV3(0xDC530D9457755926550b59e8ECcdaE7624181557);
-    uint256 internal constant CL_FEED_HEARTBEAT_LINK = 6 hours;
-
-    uint256 internal constant ROUNDS_TOP_UP = 20;
-    uint256 internal constant MIN_ROUNDS_TOP_UP = 3;
-    uint256 internal constant MIN_FUNDING_UPKEEP = 5 ether;
-    uint256 internal constant REGISTRY_GAS_OVERHEAD = 80_000;
-    uint256 internal constant PPB_BASE = 1_000_000_000;
 
     ////////////////////////////////////////////////////////////////////////////
     // IMMUTABLES
@@ -89,8 +77,6 @@ contract AvatarRegistry is Pausable, KeeperCompatibleInterface {
     error NotGovernance(address caller);
     error NotKeeper(address caller);
 
-    error StalePriceFeed(address priceFeedAddress, uint256 currentTime, uint256 updateTime, uint256 maxPeriod);
-
     error NotAutoApproveKeeper();
     error NotUnderFundedUpkeep(uint256 upKeepId);
     error NotCLKeeperSet();
@@ -100,7 +86,6 @@ contract AvatarRegistry is Pausable, KeeperCompatibleInterface {
     error NotAvatarIncluded(address avatar);
     error AvatarAlreadyRegister(address avatar);
     error AvatarNotRegisteredYet(address avatar);
-    error RegistryLinkUnfunded();
     error UpdateSameStatus();
 
     error ZeroAddress();
@@ -120,6 +105,7 @@ contract AvatarRegistry is Pausable, KeeperCompatibleInterface {
     );
 
     event SweepLinkToTechops(uint256 amount, uint256 timestamp);
+    event EthSwappedForLink(uint256 amountEthOut, uint256 amountLinkIn, uint256 timestamp);
 
     ////////////////////////////////////////////////////////////////////////////
     // MODIFIERS
@@ -308,26 +294,11 @@ contract AvatarRegistry is Pausable, KeeperCompatibleInterface {
     /// @return gasWei current fastest gas value in wei
     /// @return linkEth latest answer of feed of link/eth
     function _getFeedData() internal view returns (uint256 gasWei, uint256 linkEth) {
-        uint256 timestamp;
-        int256 feedValue;
-
         /// @dev check as ref current fast wei gas
-        (, feedValue,, timestamp,) = FAST_GAS_FEED.latestRoundData();
-
-        if (block.timestamp - timestamp > CL_FEED_HEARTBEAT_GAS) {
-            revert StalePriceFeed(address(FAST_GAS_FEED), block.timestamp, timestamp, CL_FEED_HEARTBEAT_GAS);
-        }
-
-        gasWei = uint256(feedValue);
+        gasWei = fetchPriceFromClFeed(FAST_GAS_FEED, CL_FEED_HEARTBEAT_GAS);
 
         /// @dev check latest oracle rate link/eth
-        (, feedValue,, timestamp,) = LINK_ETH_FEED.latestRoundData();
-
-        if (block.timestamp - timestamp > CL_FEED_HEARTBEAT_LINK) {
-            revert StalePriceFeed(address(LINK_ETH_FEED), block.timestamp, timestamp, CL_FEED_HEARTBEAT_LINK);
-        }
-
-        linkEth = uint256(feedValue);
+        linkEth = fetchPriceFromClFeed(LINK_ETH_FEED, CL_FEED_HEARTBEAT_LINK);
     }
 
     /// @dev converts a gas limit value into link expressed amount
@@ -396,10 +367,26 @@ contract AvatarRegistry is Pausable, KeeperCompatibleInterface {
         uint96 topupAmount = minUpKeepBal * uint96(ROUNDS_TOP_UP);
 
         if (LINK.balanceOf(address(this)) < topupAmount) {
-            revert RegistryLinkUnfunded();
+            _swapEthForLink(topupAmount);
         }
 
         CL_REGISTRY.addFunds(upKeepId, topupAmount);
+    }
+
+    function _swapEthForLink(uint256 linkRequired) internal {
+        uint256 ethSpent = UNIV3_ROUTER.exactOutputSingle(
+            IUniswapRouterV3.ExactOutputSingleParams({
+                tokenIn: WETH,
+                tokenOut: address(LINK),
+                fee: uint24(500),
+                recipient: address(this),
+                deadline: type(uint256).max,
+                amountOut: linkRequired,
+                amountInMaximum: (getLinkAmountInEth(linkRequired) * BUMP_BPS) / MAX_BPS,
+                sqrtPriceLimitX96: 0 // Inactive param
+            })
+        );
+        emit EthSwappedForLink(ethSpent, linkRequired, block.timestamp);
     }
 
     /// @dev carries registration of target contract in CL
@@ -419,7 +406,7 @@ contract AvatarRegistry is Pausable, KeeperCompatibleInterface {
             revert NotMinLinkFundedUpKeep();
         }
         if (registryLinkBal < linkAmount) {
-            revert RegistryLinkUnfunded();
+            _swapEthForLink(linkAmount);
         }
 
         /// @dev check registry state before registering

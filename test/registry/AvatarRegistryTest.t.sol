@@ -45,7 +45,7 @@ contract AvatarRegistryTest is Test {
 
     function test_avatar_monitoring() public {
         assertTrue(registry.avatarMonitoringUpKeepId() > 0);
-        assertEq(LINK.allowance(address(registry), address(registry.CL_REGISTRY())), type(uint256).max);
+        assertEq(LINK.allowance(address(registry), address(CL_REGISTRY)), type(uint256).max);
     }
 
     ////////////////////////////////////////////////////////////////////////////
