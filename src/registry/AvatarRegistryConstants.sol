@@ -24,7 +24,7 @@ abstract contract AvatarRegistryConstants {
     // tokens involved
     address internal constant WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
 
-    uint256 internal constant BUMP_BPS = 11000;
+    uint256 internal constant BUMP_BPS = 10200;
     uint256 internal constant ROUNDS_TOP_UP = 20;
     uint256 internal constant MIN_ROUNDS_TOP_UP = 3;
     uint256 internal constant MIN_FUNDING_UPKEEP = 5 ether;
