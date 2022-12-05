@@ -10,7 +10,6 @@ contract AvatarRegistryUtils is BaseAvatarUtils, AvatarRegistryConstants {
     ////////////////////////////////////////////////////////////////////////////
     function getLinkAmountInEth(uint256 _linkAmount) internal view returns (uint256 ethAmount_) {
         uint256 linkInEth = fetchPriceFromClFeed(LINK_ETH_FEED, CL_FEED_HEARTBEAT_LINK);
-        // Divide by the rate from oracle since it is link expressed in eth
-        ethAmount_ = (_linkAmount * 1 ether) / linkInEth;
+        ethAmount_ = (_linkAmount * linkInEth) / 1 ether;
     }
 }

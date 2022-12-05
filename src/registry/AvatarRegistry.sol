@@ -380,19 +380,23 @@ contract AvatarRegistry is AvatarRegistryUtils, Pausable, KeeperCompatibleInterf
         CL_REGISTRY.addFunds(upKeepId, topupAmount);
     }
 
+    /// @dev executes the swap from ETH to LINK, for the amount of link required
+    /// @param linkRequired amount of link required for handling the `performUpKeep` task
     function _swapEthForLink(uint256 linkRequired) internal {
-        uint256 ethSpent = UNIV3_ROUTER.exactOutputSingle(
+        uint256 maxEth = (getLinkAmountInEth(linkRequired) / MAX_BPS) * BUMP_UP_BPS;
+        uint256 ethSpent = UNIV3_ROUTER.exactOutputSingle{value: maxEth}(
             IUniswapRouterV3.ExactOutputSingleParams({
                 tokenIn: WETH,
                 tokenOut: address(LINK),
-                fee: uint24(500),
+                fee: uint24(3000),
                 recipient: address(this),
                 deadline: type(uint256).max,
                 amountOut: linkRequired,
-                amountInMaximum: (getLinkAmountInEth(linkRequired) * BUMP_BPS) / MAX_BPS,
+                amountInMaximum: maxEth,
                 sqrtPriceLimitX96: 0 // Inactive param
             })
         );
+        UNIV3_ROUTER.refundETH();
         emit EthSwappedForLink(ethSpent, linkRequired, block.timestamp);
     }
 

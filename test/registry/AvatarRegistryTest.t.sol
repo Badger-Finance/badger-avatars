@@ -368,4 +368,41 @@ contract AvatarRegistryTest is Test {
         assertTrue(balance > enforceUpKeepBal);
         assertLt(LINK.balanceOf(address(registry)), linkBalBefore);
     }
+
+    function test_performUpKeep_swap_involved() public {
+        vm.prank(admin);
+        registry.addAvatar(address(avatar), "randomAvatar", 500000);
+
+        bool upkeepNeeded;
+        bytes memory performData;
+
+        (upkeepNeeded, performData) = registry.checkUpkeep(new bytes(0));
+        assertTrue(upkeepNeeded);
+
+        // remove all link funds from registry
+        vm.prank(admin);
+        registry.sweepLinkFunds();
+        assertEq(address(registry).balance, 0);
+        assertEq(LINK.balanceOf(address(registry)), 0);
+        vm.stopPrank();
+
+        // send eth from hypothetical gas station
+        vm.deal(address(registry), 2 ether);
+
+        // trigger a perform, inspect swap with verbosity -vvvv
+        vm.prank(KEEPER_REGISTRY);
+        registry.performUpkeep(performData);
+
+        (,,, uint256 upKeepId) = registry.avatarsInfo(address(avatar));
+        assertTrue(upKeepId > 0);
+
+        (address target, uint32 executeGas, bytes memory checkData, uint96 balance,, address keeperJobAdmin,,) =
+            CL_REGISTRY.getUpkeep(upKeepId);
+
+        assertEq(target, address(avatar));
+        assertEq(executeGas, 500000);
+        assertEq(checkData, new bytes(0));
+        assertTrue(balance > 0);
+        assertEq(keeperJobAdmin, address(registry));
+    }
 }
