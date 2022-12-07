@@ -152,8 +152,8 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
         address _owner,
         address _manager,
         address _keeper,
-        uint256[] memory _pids,
-        uint256[] memory _fraxPids
+        uint256[] calldata _pids,
+        uint256[] calldata _fraxPids
     ) public initializer {
         __BaseAvatar_init(_owner);
         __Pausable_init();
@@ -334,7 +334,7 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
 
         bytes32[] memory keks = kekIds[vaultAddr];
 
-        for (uint256 i = 0; i < keks.length;) {
+        for (uint256 i; i < keks.length;) {
             proxy.withdrawLockedAndUnwrap(keks[i]);
             unchecked {
                 ++i;
@@ -353,8 +353,8 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
     /// @notice Takes a given amount of assets from the owner and stakes them on the CONVEX Booster. Can only be called by owner.
     /// @param _pids Pids target to stake into
     /// @param _amountAssets Amount of assets to be staked.
-    function deposit(uint256[] memory _pids, uint256[] memory _amountAssets) external onlyOwner {
-        for (uint256 i = 0; i < _pids.length; i++) {
+    function deposit(uint256[] calldata _pids, uint256[] calldata _amountAssets) external onlyOwner {
+        for (uint256 i; i < _pids.length; i++) {
             /// @dev verify if pid is in storage and amount is > 0
             if (!pids.contains(_pids[i])) {
                 revert PidNotIncluded(_pids[i]);
@@ -376,19 +376,19 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
     /// @dev This function doesn't claim any rewards.
     function withdrawAll() external onlyOwner {
         uint256 length = baseRewardPools.length();
-        uint256[] memory bptsDeposited = new uint256[](length);
-        for (uint256 i = 0; i < length; i++) {
-            bptsDeposited[i] = IBaseRewardPool(baseRewardPools.at(i)).balanceOf(address(this));
+        uint256[] memory curveLpDeposited = new uint256[](length);
+        for (uint256 i; i < length; i++) {
+            curveLpDeposited[i] = IBaseRewardPool(baseRewardPools.at(i)).balanceOf(address(this));
         }
 
-        _withdraw(pids.values(), bptsDeposited);
+        _withdraw(pids.values(), curveLpDeposited);
     }
 
     /// @notice Unstakes the given amount of assets and transfers them back to owner. Can only be called by owner.
     /// @dev This function doesn't claim any rewards.
     /// @param _pids Pids targetted to withdraw from
     /// @param _amountAssets Amount of assets to be unstaked.
-    function withdraw(uint256[] memory _pids, uint256[] memory _amountAssets) external onlyOwner {
+    function withdraw(uint256[] calldata _pids, uint256[] calldata _amountAssets) external onlyOwner {
         _withdraw(_pids, _amountAssets);
     }
 
@@ -486,18 +486,18 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
     /// @notice Unstakes the given amount of assets and transfers them back to owner.
     /// @dev This function doesn't claim any rewards. Caller can only be owner.
     /// @param _pids Pids to be targetted to unstake from.
-    /// @param _bptsDeposited Amount of assets to be unstaked.
-    function _withdraw(uint256[] memory _pids, uint256[] memory _bptsDeposited) internal {
-        for (uint256 i = 0; i < _pids.length; i++) {
-            if (_bptsDeposited[i] == 0) {
+    /// @param _curveLpDeposited Amount of assets to be unstaked.
+    function _withdraw(uint256[] memory _pids, uint256[] memory _curveLpDeposited) internal {
+        for (uint256 i; i < _pids.length; i++) {
+            if (_curveLpDeposited[i] == 0) {
                 revert NothingToWithdraw();
             }
             (address lpToken,,, address crvRewards,,) = CONVEX_BOOSTER.poolInfo(_pids[i]);
 
-            IBaseRewardPool(crvRewards).withdrawAndUnwrap(_bptsDeposited[i], false);
-            IERC20MetadataUpgradeable(lpToken).safeTransfer(msg.sender, _bptsDeposited[i]);
+            IBaseRewardPool(crvRewards).withdrawAndUnwrap(_curveLpDeposited[i], false);
+            IERC20MetadataUpgradeable(lpToken).safeTransfer(msg.sender, _curveLpDeposited[i]);
 
-            emit Withdraw(lpToken, _bptsDeposited[i], block.timestamp);
+            emit Withdraw(lpToken, _curveLpDeposited[i], block.timestamp);
         }
     }
 
@@ -519,10 +519,11 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
         // 2. Swap all rewards for DAI
         // NOTE: assume that always will be crv & cvx to convert to stables, while fxs depends on private vaults
         uint256 totalDaiEarned;
+        uint256 totalWethSwapReceived;
 
-        swapCrvForWeth(totalCrv);
-        swapCvxForWeth(totalCvx);
-        totalDaiEarned = swapWethForDai();
+        totalWethSwapReceived = swapCrvForWeth(totalCrv);
+        totalWethSwapReceived += swapCvxForWeth(totalCvx);
+        totalDaiEarned = swapWethForDai(totalWethSwapReceived);
 
         if (totalFxs > 0) {
             // NOTE: swapping to DAI given treasury decision
@@ -541,7 +542,7 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
         lastClaimTimestamp = block.timestamp;
 
         uint256 length = baseRewardPools.length();
-        for (uint256 i = 0; i < length;) {
+        for (uint256 i; i < length;) {
             IBaseRewardPool baseRewardPool = IBaseRewardPool(baseRewardPools.at(i));
             if (baseRewardPool.earned(address(this)) > 0) {
                 baseRewardPool.getReward();
@@ -552,7 +553,7 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
         }
 
         length = pidsPrivateVaults.length();
-        for (uint256 i = 0; i < length;) {
+        for (uint256 i; i < length;) {
             address vaultAddr = privateVaults[pidsPrivateVaults.at(i)];
             IStakingProxy proxy = IStakingProxy(vaultAddr);
             (, uint256[] memory totalEarned) = proxy.earned();
@@ -579,23 +580,22 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
         emit RewardClaimed(address(FXS), totalFxs_, block.timestamp);
     }
 
-    function swapCrvForWeth(uint256 _crvAmount) internal {
+    function swapCrvForWeth(uint256 _crvAmount) internal returns (uint256 wethEarned_) {
         // Swap CRV -> WETH
-        CRV_ETH_CURVE_POOL.exchange(
+        wethEarned_ = CRV_ETH_CURVE_POOL.exchange(
             1, 0, _crvAmount, (getCrvAmountInEth(_crvAmount) * minOutBpsCrvToWeth.val) / MAX_BPS
         );
     }
 
-    function swapCvxForWeth(uint256 _cvxAmount) internal {
+    function swapCvxForWeth(uint256 _cvxAmount) internal returns (uint256 wethEarned_) {
         // Swap CVX -> WETH
-        CVX_ETH_CURVE_POOL.exchange(
+        wethEarned_ = CVX_ETH_CURVE_POOL.exchange(
             1, 0, _cvxAmount, (getCvxAmountInEth(_cvxAmount) * minOutBpsCrvToWeth.val) / MAX_BPS
         );
     }
 
-    function swapWethForDai() internal returns (uint256 daiEarned_) {
+    function swapWethForDai(uint256 _wethAmount) internal returns (uint256 daiEarned_) {
         // Swap WETH -> DAI
-        uint256 wethBalance = WETH.balanceOf(address(this));
         daiEarned_ = UNIV3_ROUTER.exactInputSingle(
             IUniswapRouterV3.ExactInputSingleParams({
                 tokenIn: address(WETH),
@@ -603,8 +603,8 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
                 fee: uint24(500),
                 recipient: owner(),
                 deadline: type(uint256).max,
-                amountIn: wethBalance,
-                amountOutMinimum: (getWethAmountInDai(wethBalance) * minOutBpsWethToUsdc.val) / MAX_BPS,
+                amountIn: _wethAmount,
+                amountOutMinimum: (getWethAmountInDai(_wethAmount) * minOutBpsWethToUsdc.val) / MAX_BPS,
                 sqrtPriceLimitX96: 0 // Inactive param
             })
         );
@@ -643,7 +643,7 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
         uint256 fxsPending;
         uint256 length = baseRewardPools.length();
 
-        for (uint256 i = 0; i < length;) {
+        for (uint256 i; i < length;) {
             crvPending += IBaseRewardPool(baseRewardPools.at(i)).earned(address(this));
             unchecked {
                 ++i;

@@ -8,6 +8,8 @@ contract ConvexAvatarUtils is BaseAvatarUtils, ConvexConstants {
     ////////////////////////////////////////////////////////////////////////////
     // INTERNAL VIEW
     ////////////////////////////////////////////////////////////////////////////
+
+    /// @dev Assumes frax:usd is 1:1
     function getFxsAmountInFrax(uint256 _fxsAmount) internal view returns (uint256 usdcAmount_) {
         uint256 fxsInUsd = fetchPriceFromClFeed(FXS_USD_FEED, CL_FEED_DAY_HEARTBEAT);
         // Divisor is 10^8 and uint256 max ~ 10^77 so this shouldn't overflow for normal amounts
@@ -29,7 +31,8 @@ contract ConvexAvatarUtils is BaseAvatarUtils, ConvexConstants {
     function getWethAmountInDai(uint256 _wethAmount) internal view returns (uint256 daiAmount_) {
         uint256 daiInWeth = fetchPriceFromClFeed(DAI_ETH_FEED, CL_FEED_DAY_HEARTBEAT);
         // Divide by the rate from oracle since it is dai expressed in eth
-        daiAmount_ = (_wethAmount * 1 ether) / daiInWeth;
+        // FEED_DIVISOR_ETH has 1e18 precision
+        daiAmount_ = (_wethAmount * FEED_DIVISOR_ETH) / daiInWeth;
     }
 
     function getFraxAmountInDai(uint256 _fraxAmount) internal view returns (uint256 daiAmount_) {
