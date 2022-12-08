@@ -29,11 +29,6 @@ contract AvatarRegistry is AvatarRegistryUtils, Pausable, KeeperCompatibleInterf
     // STRUCT & ENUMS
     ////////////////////////////////////////////////////////////////////////////
 
-    enum OperationKeeperType {
-        REGISTER_UPKEEP,
-        TOPUP_UPKEEP
-    }
-
     enum AvatarStatus {
         DEPRECATED,
         TESTING,
@@ -97,7 +92,6 @@ contract AvatarRegistry is AvatarRegistryUtils, Pausable, KeeperCompatibleInterf
     ////////////////////////////////////////////////////////////////////////////
 
     event NewAvatar(address indexed avatarAddress, string name, uint256 gasLimit, uint256 timestamp);
-
     event RemoveAvatar(address indexed avatarAddress, uint256 upKeepId, uint256 timestamp);
 
     event UpdateAvatarStatus(
@@ -105,9 +99,17 @@ contract AvatarRegistry is AvatarRegistryUtils, Pausable, KeeperCompatibleInterf
     );
 
     event SweepLinkToTechops(uint256 amount, uint256 timestamp);
+    event SweepEth(address recipient, uint256 amount);
     event EthSwappedForLink(uint256 amountEthOut, uint256 amountLinkIn, uint256 timestamp);
 
     event RegistryEthReceived(address indexed sender, uint256 value);
+
+    constructor(address _governance) {
+        if (_governance == address(0)) {
+            revert ZeroAddress();
+        }
+        governance = _governance;
+    }
 
     ////////////////////////////////////////////////////////////////////////////
     // MODIFIERS
@@ -129,13 +131,6 @@ contract AvatarRegistry is AvatarRegistryUtils, Pausable, KeeperCompatibleInterf
         _;
     }
 
-    constructor(address _governance) {
-        if (_governance == address(0)) {
-            revert ZeroAddress();
-        }
-        governance = _governance;
-    }
-
     /// @dev Fallback function accepts Ether transactions.
     receive() external payable {
         emit RegistryEthReceived(msg.sender, msg.value);
@@ -148,7 +143,7 @@ contract AvatarRegistry is AvatarRegistryUtils, Pausable, KeeperCompatibleInterf
     /// @dev It will initiate the upKeep job for monitoring avatars
     /// @notice only callable via governance
     /// @param gasLimit gas limit for the avatar monitoring upkeep task
-    function avatarMonitoring(uint256 gasLimit) external onlyGovernance {
+    function initializeBaseUpkeep(uint256 gasLimit) external onlyGovernance {
         if (gasLimit == 0) {
             revert ZeroUintValue();
         }
@@ -181,10 +176,17 @@ contract AvatarRegistry is AvatarRegistryUtils, Pausable, KeeperCompatibleInterf
         if (bytes(name).length == 0) {
             revert EmptyString();
         }
+        if (IAvatar(avatarAddress).keeper() != address(CL_REGISTRY)) {
+            revert NotCLKeeperSet();
+        }
 
         _avatars.add(avatarAddress);
-        avatarsInfo[avatarAddress] =
-            AvatarInfo({name: name, gasLimit: gasLimit, status: AvatarStatus.TESTING, upKeepId: 0});
+        avatarsInfo[avatarAddress] = AvatarInfo({
+            name: name,
+            gasLimit: gasLimit,
+            status: AvatarStatus.TESTING,
+            upKeepId: _registerUpKeep(avatarAddress, gasLimit, name)
+        });
 
         emit NewAvatar(avatarAddress, name, gasLimit, block.timestamp);
     }
@@ -252,6 +254,14 @@ contract AvatarRegistry is AvatarRegistryUtils, Pausable, KeeperCompatibleInterf
         emit SweepLinkToTechops(linkBal, block.timestamp);
     }
 
+    /// @dev  Sweep the full ETH balance to recipient
+    /// @param recipient Address receiving eth funds
+    function sweepEthFunds(address payable recipient) external onlyGovernance {
+        uint256 ethBal = address(this).balance;
+        recipient.transfer(ethBal);
+        emit SweepEth(recipient, ethBal);
+    }
+
     ////////////////////////////////////////////////////////////////////////////
     // PUBLIC: Governance - Pausing
     ////////////////////////////////////////////////////////////////////////////
@@ -273,24 +283,9 @@ contract AvatarRegistry is AvatarRegistryUtils, Pausable, KeeperCompatibleInterf
     /// @dev Contains the logic that should be executed on-chain when
     /// `checkUpkeep` returns true.
     function performUpkeep(bytes calldata _performData) external override onlyKeeper whenNotPaused {
-        (address avatarTarget, OperationKeeperType operationType) =
-            abi.decode(_performData, (address, OperationKeeperType));
+        address avatarTarget = abi.decode(_performData, (address));
 
-        if (operationType == OperationKeeperType.REGISTER_UPKEEP) {
-            /// @dev check on-chain that config in avatar is correct
-            if (IAvatar(avatarTarget).keeper() != address(CL_REGISTRY)) {
-                revert NotCLKeeperSet();
-            }
-            if (!_avatars.contains(avatarTarget)) {
-                revert NotAvatarIncluded(avatarTarget);
-            }
-            if (avatarsInfo[avatarTarget].upKeepId != 0) {
-                revert AvatarAlreadyRegister(avatarTarget);
-            }
-            _registerAndRecordId(avatarTarget);
-        } else {
-            _topupUpkeep(avatarTarget);
-        }
+        _topupUpkeep(avatarTarget);
     }
 
     ////////////////////////////////////////////////////////////////////////////
@@ -326,14 +321,6 @@ contract AvatarRegistry is AvatarRegistryUtils, Pausable, KeeperCompatibleInterf
         linkAmount =
         // From Wei to Eth * Premium / Ratio
          ((weiForGas * (1e9) * (premium)) / (linkEth)) + (uint256(_c.flatFeeMicroLink) * (1e12));
-    }
-
-    /// @dev registers target avatar into the CL registry and saves
-    /// `upKeepId` into the mapping
-    /// @notice only callable from `performUpKeep` method via keepers
-    /// @param avatar contract avatar target to register
-    function _registerAndRecordId(address avatar) internal {
-        avatarsInfo[avatar].upKeepId = _registerUpKeep(avatar, avatarsInfo[avatar].gasLimit, avatarsInfo[avatar].name);
     }
 
     /// @dev checks if an avatar upKeepId is under-funded, helper in `checkUpKeep`
@@ -373,8 +360,9 @@ contract AvatarRegistry is AvatarRegistryUtils, Pausable, KeeperCompatibleInterf
 
         uint96 topupAmount = minUpKeepBal * uint96(ROUNDS_TOP_UP);
 
-        if (LINK.balanceOf(address(this)) < topupAmount) {
-            _swapEthForLink(topupAmount);
+        uint256 linkRegistryBal = LINK.balanceOf(address(this));
+        if (linkRegistryBal < topupAmount) {
+            _swapEthForLink(topupAmount - linkRegistryBal);
         }
 
         CL_REGISTRY.addFunds(upKeepId, topupAmount);
@@ -383,7 +371,7 @@ contract AvatarRegistry is AvatarRegistryUtils, Pausable, KeeperCompatibleInterf
     /// @dev executes the swap from ETH to LINK, for the amount of link required
     /// @param linkRequired amount of link required for handling the `performUpKeep` task
     function _swapEthForLink(uint256 linkRequired) internal {
-        uint256 maxEth = (getLinkAmountInEth(linkRequired) / MAX_BPS) * BUMP_UP_BPS;
+        uint256 maxEth = (getLinkAmountInEth(linkRequired) * MAX_IN_BPS) / MAX_BPS;
         uint256 ethSpent = UNIV3_ROUTER.exactOutputSingle{value: maxEth}(
             IUniswapRouterV3.ExactOutputSingleParams({
                 tokenIn: WETH,
@@ -415,8 +403,9 @@ contract AvatarRegistry is AvatarRegistryUtils, Pausable, KeeperCompatibleInterf
         if (linkAmount < MIN_FUNDING_UPKEEP) {
             revert NotMinLinkFundedUpKeep();
         }
-        if (LINK.balanceOf(address(this)) < linkAmount) {
-            _swapEthForLink(linkAmount);
+        uint256 linkRegistryBal = LINK.balanceOf(address(this));
+        if (linkRegistryBal < linkAmount) {
+            _swapEthForLink(linkAmount - linkRegistryBal);
         }
 
         /// @dev check registry state before registering
@@ -465,30 +454,23 @@ contract AvatarRegistry is AvatarRegistryUtils, Pausable, KeeperCompatibleInterf
         whenNotPaused
         returns (bool upkeepNeeded_, bytes memory performData_)
     {
-        address[] memory avatarsInTestStatus = getAvatarsByStatus(AvatarStatus.TESTING);
+        address[] memory avatars = getAvatars();
         bool underFunded;
 
-        uint256 avatarsTestLength = avatarsInTestStatus.length;
-        if (avatarsTestLength > 0) {
+        uint256 avatarsLength = avatars.length;
+        if (avatarsLength > 0) {
             /// @dev loop thru avatar in test status for register or topup if required
-            for (uint256 i = 0; i < avatarsTestLength; i++) {
+            for (uint256 i; i < avatarsLength; i++) {
                 /// @dev requires that CL keeper is config properly
-                if (IAvatar(avatarsInTestStatus[i]).keeper() != address(CL_REGISTRY)) {
+                if (IAvatar(avatars[i]).keeper() != address(CL_REGISTRY)) {
                     continue;
                 }
 
-                /// @dev prio `test` avatar unregister
-                if (avatarsInfo[avatarsInTestStatus[i]].upKeepId == 0) {
-                    upkeepNeeded_ = true;
-                    performData_ = abi.encode(avatarsInTestStatus[i], OperationKeeperType.REGISTER_UPKEEP);
-                    break;
-                }
-
                 /// @dev check for under funded avatar upkeeps
-                (,, underFunded) = _isAvatarUpKeepUnderFunded(avatarsInTestStatus[i]);
+                (,, underFunded) = _isAvatarUpKeepUnderFunded(avatars[i]);
                 if (underFunded) {
                     upkeepNeeded_ = true;
-                    performData_ = abi.encode(avatarsInTestStatus[i], OperationKeeperType.TOPUP_UPKEEP);
+                    performData_ = abi.encode(avatars[i]);
                     break;
                 }
             }
@@ -500,7 +482,7 @@ contract AvatarRegistry is AvatarRegistryUtils, Pausable, KeeperCompatibleInterf
             (,, underFunded) = _isAvatarUpKeepUnderFunded(address(this));
             if (underFunded) {
                 upkeepNeeded_ = true;
-                performData_ = abi.encode(address(this), OperationKeeperType.TOPUP_UPKEEP);
+                performData_ = abi.encode(address(this));
             }
         }
     }
@@ -516,7 +498,7 @@ contract AvatarRegistry is AvatarRegistryUtils, Pausable, KeeperCompatibleInterf
         address[] memory avatarInTestStatusHelper = new address[](length);
         uint256 avatarStatusLength;
 
-        for (uint256 i = 0; i < length;) {
+        for (uint256 i; i < length;) {
             address avatar = _avatars.at(i);
             if (avatarsInfo[avatar].status == status) {
                 avatarInTestStatusHelper[avatarStatusLength] = avatar;

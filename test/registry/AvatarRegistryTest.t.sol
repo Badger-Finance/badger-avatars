@@ -39,7 +39,7 @@ contract AvatarRegistryTest is Test {
         deal(address(LINK), address(registry), 1000e18);
 
         vm.startPrank(admin);
-        registry.avatarMonitoring(MONITORING_AVATAR_GAS_LIMIT);
+        registry.initializeBaseUpkeep(MONITORING_AVATAR_GAS_LIMIT);
         vm.stopPrank();
     }
 
