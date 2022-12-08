@@ -62,26 +62,41 @@ contract AvatarRegistryTest is Test {
         vm.expectRevert(AvatarRegistry.ZeroAddress.selector);
         registry.addAvatar(address(0), "randomAvatar", 500000);
 
+        vm.expectRevert(AvatarRegistry.NotCLKeeperSet.selector);
         registry.addAvatar(dummy_avatar, "randomAvatar", 500000);
 
-        vm.expectRevert(abi.encodeWithSelector(AvatarRegistry.AvatarAlreadyRegister.selector, dummy_avatar));
-        registry.addAvatar(dummy_avatar, "randomAvatar", 500000);
+        registry.addAvatar(address(avatar), "randomAvatar", 500000);
+
+        vm.expectRevert(abi.encodeWithSelector(AvatarRegistry.AvatarAlreadyRegister.selector, address(avatar)));
+        registry.addAvatar(address(avatar), "randomAvatar", 500000);
     }
 
     function test_addAvatar() public {
+        uint256 linkBalBefore = LINK.balanceOf(address(registry));
         vm.startPrank(admin);
-        registry.addAvatar(dummy_avatar, "randomAvatar", 500000);
+        registry.addAvatar(address(avatar), "randomAvatar", 500000);
 
         (string memory name, uint256 gasLimit, AvatarRegistry.AvatarStatus status, uint256 upKeepId) =
-            registry.avatarsInfo(dummy_avatar);
+            registry.avatarsInfo(address(avatar));
 
         assertEq(name, "randomAvatar");
         assertEqUint(gasLimit, 500000);
         assertTrue(status == AvatarRegistry.AvatarStatus.TESTING);
-        assertEqUint(upKeepId, 0);
+        assertTrue(upKeepId > 0);
 
         address[] memory avatarBook = registry.getAvatars();
-        assertEq(avatarBook[0], dummy_avatar);
+        assertEq(avatarBook[0], address(avatar));
+
+        assertLt(LINK.balanceOf(address(registry)), linkBalBefore);
+
+        (address target, uint32 executeGas, bytes memory checkData, uint96 balance,, address keeperJobAdmin,,) =
+            CL_REGISTRY.getUpkeep(upKeepId);
+
+        assertEq(target, address(avatar));
+        assertEq(executeGas, 500000);
+        assertEq(checkData, new bytes(0));
+        assertTrue(balance > 0);
+        assertEq(keeperJobAdmin, address(registry));
     }
 
     function test_cancelAvatarUpKeep_permissions() public {
@@ -101,13 +116,6 @@ contract AvatarRegistryTest is Test {
         registry.addAvatar(address(avatar), "randomAvatar", 500000);
         vm.stopPrank();
 
-        // register on registry to enable cancelling
-        (bool upkeepNeeded, bytes memory performData) = registry.checkUpkeep(new bytes(0));
-        assertTrue(upkeepNeeded);
-        vm.prank(KEEPER_REGISTRY);
-        registry.performUpkeep(performData);
-        vm.stopPrank();
-
         vm.startPrank(admin);
         uint256 currentBlock = block.number;
         registry.cancelAvatarUpKeep(address(avatar));
@@ -118,7 +126,7 @@ contract AvatarRegistryTest is Test {
         registry.withdrawLinkFundsAndRemoveAvatar(address(avatar));
 
         (string memory name, uint256 gasLimit, AvatarRegistry.AvatarStatus status, uint256 upKeepId) =
-            registry.avatarsInfo(dummy_avatar);
+            registry.avatarsInfo(address(avatar));
 
         assertEq(name, "");
         assertEqUint(gasLimit, 0);
@@ -134,20 +142,20 @@ contract AvatarRegistryTest is Test {
 
     function test_updateStatus_requires() public {
         vm.prank(admin);
-        registry.addAvatar(dummy_avatar, "randomAvatar", 500000);
+        registry.addAvatar(address(avatar), "randomAvatar", 500000);
 
         vm.prank(admin);
         vm.expectRevert(AvatarRegistry.UpdateSameStatus.selector);
-        registry.updateStatus(dummy_avatar, AvatarRegistry.AvatarStatus.TESTING);
+        registry.updateStatus(address(avatar), AvatarRegistry.AvatarStatus.TESTING);
     }
 
     function test_updateStatus() public {
         vm.prank(admin);
-        registry.addAvatar(dummy_avatar, "randomAvatar", 500000);
+        registry.addAvatar(address(avatar), "randomAvatar", 500000);
         vm.prank(admin);
-        registry.updateStatus(dummy_avatar, AvatarRegistry.AvatarStatus.SEEDED);
+        registry.updateStatus(address(avatar), AvatarRegistry.AvatarStatus.SEEDED);
 
-        (,, AvatarRegistry.AvatarStatus status,) = registry.avatarsInfo(dummy_avatar);
+        (,, AvatarRegistry.AvatarStatus status,) = registry.avatarsInfo(address(avatar));
         assertTrue(status == AvatarRegistry.AvatarStatus.SEEDED);
     }
 
@@ -226,14 +234,22 @@ contract AvatarRegistryTest is Test {
             console.log(testA[i]);
         }
 
+        (,,, uint256 upKeepId) = registry.avatarsInfo(address(avatar));
+
+        uint96 enforceUpKeepBal = 1 ether;
+        // https://book.getfoundry.sh/cheatcodes/mock-call#mockcall
+        vm.mockCall(
+            KEEPER_REGISTRY,
+            abi.encodeWithSelector(IKeeperRegistry.getUpkeep.selector, upKeepId),
+            // getUpKeep mock
+            abi.encode(address(avatar), 500000, new bytes(0), enforceUpKeepBal, address(0), TECHOPS, 2 ** 64 - 1, 0)
+        );
         (bool upkeepNeeded, bytes memory performData) = registry.checkUpkeep(new bytes(0));
         assertTrue(upkeepNeeded);
 
-        (address avatarTarget, AvatarRegistry.OperationKeeperType operationType) =
-            abi.decode(performData, (address, AvatarRegistry.OperationKeeperType));
+        address avatarTarget = abi.decode(performData, (address));
 
         assertEq(avatarTarget, address(avatar));
-        assertTrue(operationType == AvatarRegistry.OperationKeeperType.REGISTER_UPKEEP);
     }
 
     function test_checkUpKeep_not_required() public {
@@ -256,51 +272,9 @@ contract AvatarRegistryTest is Test {
         assertFalse(upkeepNeeded);
     }
 
-    function test_performUpKeep_avatar_registration() public {
-        vm.prank(admin);
-        registry.addAvatar(address(avatar), "randomAvatar", 500000);
-
-        (bool upkeepNeeded, bytes memory performData) = registry.checkUpkeep(new bytes(0));
-        assertTrue(upkeepNeeded);
-
-        (address avatarTarget, AvatarRegistry.OperationKeeperType operationType) =
-            abi.decode(performData, (address, AvatarRegistry.OperationKeeperType));
-
-        assertEq(avatarTarget, address(avatar));
-        assertTrue(operationType == AvatarRegistry.OperationKeeperType.REGISTER_UPKEEP);
-
-        uint256 linkBalBefore = LINK.balanceOf(address(registry));
-        vm.prank(KEEPER_REGISTRY);
-        registry.performUpkeep(performData);
-
-        assertLt(LINK.balanceOf(address(registry)), linkBalBefore);
-
-        (,,, uint256 upKeepId) = registry.avatarsInfo(address(avatar));
-        assertTrue(upKeepId > 0);
-
-        (address target, uint32 executeGas, bytes memory checkData, uint96 balance,, address keeperJobAdmin,,) =
-            CL_REGISTRY.getUpkeep(upKeepId);
-
-        assertEq(target, address(avatar));
-        assertEq(executeGas, 500000);
-        assertEq(checkData, new bytes(0));
-        assertTrue(balance > 0);
-        assertEq(keeperJobAdmin, address(registry));
-    }
-
     function test_performUpKeep_avatar_topup() public {
         vm.prank(admin);
         registry.addAvatar(address(avatar), "randomAvatar", 500000);
-
-        bool upkeepNeeded;
-        bytes memory performData;
-
-        (upkeepNeeded, performData) = registry.checkUpkeep(new bytes(0));
-        assertTrue(upkeepNeeded);
-
-        // simply first register and then dry link funds
-        vm.prank(KEEPER_REGISTRY);
-        registry.performUpkeep(performData);
 
         (,,, uint256 upKeepId) = registry.avatarsInfo(address(avatar));
 
@@ -313,12 +287,9 @@ contract AvatarRegistryTest is Test {
             abi.encode(address(avatar), 500000, new bytes(0), enforceUpKeepBal, address(0), TECHOPS, 2 ** 64 - 1, 0)
         );
 
-        (upkeepNeeded, performData) = registry.checkUpkeep(new bytes(0));
-        (, AvatarRegistry.OperationKeeperType operationType) =
-            abi.decode(performData, (address, AvatarRegistry.OperationKeeperType));
+        (bool upkeepNeeded, bytes memory performData) = registry.checkUpkeep(new bytes(0));
 
         assertTrue(upkeepNeeded);
-        assertTrue(operationType == AvatarRegistry.OperationKeeperType.TOPUP_UPKEEP);
 
         uint256 linkBalBefore = LINK.balanceOf(address(registry));
         vm.prank(KEEPER_REGISTRY);
@@ -353,11 +324,9 @@ contract AvatarRegistryTest is Test {
         (bool upkeepNeeded, bytes memory performData) = registry.checkUpkeep(new bytes(0));
         assertTrue(upkeepNeeded);
 
-        (address target, AvatarRegistry.OperationKeeperType operationType) =
-            abi.decode(performData, (address, AvatarRegistry.OperationKeeperType));
+        address target = abi.decode(performData, (address));
 
         assertEq(target, address(registry));
-        assertTrue(operationType == AvatarRegistry.OperationKeeperType.TOPUP_UPKEEP);
 
         uint256 linkBalBefore = LINK.balanceOf(address(registry));
         vm.prank(KEEPER_REGISTRY);
@@ -372,10 +341,21 @@ contract AvatarRegistryTest is Test {
     function test_performUpKeep_swap_involved() public {
         vm.prank(admin);
         registry.addAvatar(address(avatar), "randomAvatar", 500000);
+        (,,, uint256 upKeepIdTarget) = registry.avatarsInfo(address(avatar));
 
         bool upkeepNeeded;
         bytes memory performData;
 
+        uint96 enforceUpKeepBal = 1 ether;
+        // https://book.getfoundry.sh/cheatcodes/mock-call#mockcall
+        vm.mockCall(
+            KEEPER_REGISTRY,
+            abi.encodeWithSelector(IKeeperRegistry.getUpkeep.selector, upKeepIdTarget),
+            // getUpKeep mock
+            abi.encode(
+                address(avatar), 500000, new bytes(0), enforceUpKeepBal, address(0), address(registry), 2 ** 64 - 1, 0
+            )
+        );
         (upkeepNeeded, performData) = registry.checkUpkeep(new bytes(0));
         assertTrue(upkeepNeeded);
 
