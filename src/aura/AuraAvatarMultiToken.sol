@@ -37,7 +37,7 @@ contract AuraAvatarMultiToken is BaseAvatar, PausableUpgradeable, AuraAvatarUtil
     using EnumerableSetUpgradeable for EnumerableSetUpgradeable.UintSet;
 
     ////////////////////////////////////////////////////////////////////////////
-    // IMMUTABLES
+    // STORAGE
     ////////////////////////////////////////////////////////////////////////////
 
     /// @notice Pool IDS (in AURA Booster) of strategy tokens.
@@ -48,10 +48,6 @@ contract AuraAvatarMultiToken is BaseAvatar, PausableUpgradeable, AuraAvatarUtil
 
     /// @notice Address of the staking rewards contracts
     EnumerableSetUpgradeable.AddressSet internal baseRewardPools;
-
-    ////////////////////////////////////////////////////////////////////////////
-    // STORAGE
-    ////////////////////////////////////////////////////////////////////////////
 
     /// @notice Address of the manager of the avatar. Manager has limited permissions and can harvest rewards or
     ///         fine-tune operational settings.
@@ -354,7 +350,7 @@ contract AuraAvatarMultiToken is BaseAvatar, PausableUpgradeable, AuraAvatarUtil
     /// @param _pids Pids target to stake into
     /// @param _amountAssets Amount of assets to be staked.
     function deposit(uint256[] memory _pids, uint256[] memory _amountAssets) external onlyOwner {
-        for (uint256 i; i < _pids.length; i++) {
+        for (uint256 i; i < _pids.length;) {
             /// @dev verify if pid is in storage and amount is > 0
             if (!pids.contains(_pids[i])) {
                 revert PidNotIncluded(_pids[i]);
@@ -369,6 +365,10 @@ contract AuraAvatarMultiToken is BaseAvatar, PausableUpgradeable, AuraAvatarUtil
             AURA_BOOSTER.deposit(_pids[i], _amountAssets[i], true);
 
             emit Deposit(lpToken, _amountAssets[i], block.timestamp);
+
+            unchecked {
+                ++i;
+            }
         }
     }
 
@@ -478,6 +478,21 @@ contract AuraAvatarMultiToken is BaseAvatar, PausableUpgradeable, AuraAvatarUtil
     // PUBLIC VIEW
     ////////////////////////////////////////////////////////////////////////////
 
+    /// @notice All PID values
+    function getPids() public view returns (uint256[] memory) {
+        return pids.values();
+    }
+
+    /// @notice All assets addresses
+    function getAssets() public view returns (address[] memory) {
+        return assets.values();
+    }
+
+    /// @notice All rewards pool addresses.
+    function getbaseRewardPools() public view returns (address[] memory) {
+        return baseRewardPools.values();
+    }
+
     /// @notice The total amounts of both BPT tokens that the avatar is handling.
     function totalAssets() external view returns (uint256[] memory) {
         uint256 length = baseRewardPools.length();
@@ -549,7 +564,7 @@ contract AuraAvatarMultiToken is BaseAvatar, PausableUpgradeable, AuraAvatarUtil
     /// @param _pids Pids to be targetted to unstake from.
     /// @param _bptsDeposited Amount of assets to be unstaked.
     function _withdraw(uint256[] memory _pids, uint256[] memory _bptsDeposited) internal {
-        for (uint256 i; i < _pids.length; i++) {
+        for (uint256 i; i < _pids.length;) {
             if (_bptsDeposited[i] == 0) {
                 revert NothingToWithdraw();
             }
@@ -559,6 +574,9 @@ contract AuraAvatarMultiToken is BaseAvatar, PausableUpgradeable, AuraAvatarUtil
             IERC20MetadataUpgradeable(lpToken).safeTransfer(msg.sender, _bptsDeposited[i]);
 
             emit Withdraw(lpToken, _bptsDeposited[i], block.timestamp);
+            unchecked {
+                ++i;
+            }
         }
     }
 
@@ -745,20 +763,5 @@ contract AuraAvatarMultiToken is BaseAvatar, PausableUpgradeable, AuraAvatarUtil
         );
 
         usdcEarned_ = uint256(-assetBalances[assetBalances.length - 1]);
-    }
-
-    /// @dev Returns all pids values
-    function getPids() public view returns (uint256[] memory) {
-        return pids.values();
-    }
-
-    /// @dev Returns all assets addresses
-    function getAssets() public view returns (address[] memory) {
-        return assets.values();
-    }
-
-    /// @dev Returns all rewards pool addresses
-    function getbaseRewardPools() public view returns (address[] memory) {
-        return baseRewardPools.values();
     }
 }
