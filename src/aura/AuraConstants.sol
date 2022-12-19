@@ -17,7 +17,7 @@ import {IAggregatorV3} from "../interfaces/chainlink/IAggregatorV3.sol";
 abstract contract AuraConstants {
     IBalancerVault internal constant BALANCER_VAULT = IBalancerVault(0xBA12222222228d8Ba445958a75a0704d566BF2C8);
 
-    IBooster internal constant AURA_BOOSTER = IBooster(0x7818A1DA7BD1E64c199029E86Ba244a9798eEE10);
+    IBooster internal constant AURA_BOOSTER = IBooster(0xA57b8d98dAE62B26Ec3bcC4a365338157060B234);
     IAuraLocker internal constant AURA_LOCKER = IAuraLocker(0x3Fa73f1E5d8A792C80F426fc8F84FBF7Ce9bBCAC);
 
     address internal constant BADGER_VOTER = 0xA9ed98B5Fb8428d68664f3C5027c62A10d45826b;

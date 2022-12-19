@@ -564,6 +564,7 @@ contract AuraAvatarMultiToken is BaseAvatar, PausableUpgradeable, AuraAvatarUtil
     /// @param _pids Pids to be targetted to unstake from.
     /// @param _bptsDeposited Amount of assets to be unstaked.
     function _withdraw(uint256[] memory _pids, uint256[] memory _bptsDeposited) internal {
+        // TODO: Length checks
         for (uint256 i; i < _pids.length;) {
             if (_bptsDeposited[i] == 0) {
                 revert NothingToWithdraw();
