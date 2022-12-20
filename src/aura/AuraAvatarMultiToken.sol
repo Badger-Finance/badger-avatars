@@ -154,7 +154,7 @@ contract AuraAvatarMultiToken is BaseAvatar, PausableUpgradeable, AuraAvatarUtil
             assets.add(lpToken);
             baseRewardPools.add(crvRewards);
             // Boster approval for bpts
-            IERC20MetadataUpgradeable(assets.at(i)).safeApprove(address(AURA_BOOSTER), type(uint256).max);
+            IERC20MetadataUpgradeable(lpToken).safeApprove(address(AURA_BOOSTER), type(uint256).max);
             unchecked {
                 ++i;
             }
