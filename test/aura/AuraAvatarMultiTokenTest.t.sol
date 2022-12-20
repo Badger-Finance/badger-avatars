@@ -48,11 +48,8 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
 
     uint256[3] PIDS = [PID_80BADGER_20WBTC, PID_40WBTC_40DIGG_20GRAVIAURA, PID_50BADGER_50RETH];
     IERC20MetadataUpgradeable[3] BPTS = [BPT_80BADGER_20WBTC, BPT_40WBTC_40DIGG_20GRAVIAURA, BPT_50BADGER_50RETH];
-    IBaseRewardPool[3] BASE_REWARD_POOLS = [
-        BASE_REWARD_POOL_80BADGER_20WBTC,
-        BASE_REWARD_POOL_40WBTC_40DIGG_20GRAVIAURA,
-        BASE_REWARD_POOL_50BADGER_50RETH
-    ];
+    IBaseRewardPool[3] BASE_REWARD_POOLS =
+        [BASE_REWARD_POOL_80BADGER_20WBTC, BASE_REWARD_POOL_40WBTC_40DIGG_20GRAVIAURA, BASE_REWARD_POOL_50BADGER_50RETH];
 
     ////////////////////////////////////////////////////////////////////////////
     // EVENTS
@@ -175,7 +172,7 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
         uint256[] memory amountsDeposit = new uint256[](PIDS.length);
         amountsDeposit[0] = 20 ether;
         amountsDeposit[1] = 10 ether;
-        amountsDeposit[2] = 10 ether;
+        amountsDeposit[2] = 5 ether;
 
         uint256[] memory pidsInit = new uint256[](PIDS.length);
         pidsInit[0] = PIDS[0];
@@ -192,7 +189,6 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
         uint256 totalBal = BAL.balanceOf(address(avatar));
         for (uint256 i; i < PIDS.length; ++i) {
             totalBal += IBaseRewardPool(BASE_REWARD_POOLS[i]).earned(address(avatar));
-
         }
         uint256 totalAura = AURA.balanceOf(address(avatar)) + getMintableAuraForBalAmount(totalBal);
 
@@ -521,8 +517,8 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
     function test_deposit_permissions() public {
         uint256[] memory amountsDeposit = new uint256[](PIDS.length);
         amountsDeposit[0] = 20 ether;
-        amountsDeposit[1] = 20 ether;
-        amountsDeposit[2] = 20 ether;
+        amountsDeposit[1] = 10 ether;
+        amountsDeposit[2] = 5 ether;
         uint256[] memory pidsInit = new uint256[](PIDS.length);
         pidsInit[0] = PIDS[0];
         pidsInit[1] = PIDS[1];
@@ -654,8 +650,8 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
     function test_withdraw_permissions() public {
         uint256[] memory amountsWithdraw = new uint256[](PIDS.length);
         amountsWithdraw[0] = 20 ether;
-        amountsWithdraw[1] = 20 ether;
-        amountsWithdraw[1] = 20 ether;
+        amountsWithdraw[1] = 10 ether;
+        amountsWithdraw[1] = 5 ether;
         uint256[] memory pidsInit = new uint256[](PIDS.length);
         pidsInit[0] = PIDS[0];
         pidsInit[1] = PIDS[1];
@@ -668,8 +664,8 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
     function test_claimRewardsAndSendToOwner() public {
         uint256[] memory amountsDeposit = new uint256[](PIDS.length);
         amountsDeposit[0] = 20 ether;
-        amountsDeposit[1] = 20 ether;
-        amountsDeposit[2] = 20 ether;
+        amountsDeposit[1] = 10 ether;
+        amountsDeposit[2] = 5 ether;
         uint256[] memory pidsInit = new uint256[](PIDS.length);
         pidsInit[0] = PIDS[0];
         pidsInit[1] = PIDS[1];
@@ -683,29 +679,32 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
 
         skip(1 hours);
 
-        uint256 balReward1 = BASE_REWARD_POOL_80BADGER_20WBTC.earned(address(avatar));
-        uint256 balReward2 = BASE_REWARD_POOL_40WBTC_40DIGG_20GRAVIAURA.earned(address(avatar));
+        uint256 totalBalReward;
+        for (uint256 i; i < PIDS.length; ++i) {
+            uint256 balReward = BASE_REWARD_POOLS[i].earned(address(avatar));
+            assertGt(balReward, 0);
 
-        uint256 auraReward = getMintableAuraForBalAmount(balReward1 + balReward2);
+            totalBalReward += balReward;
+        }
 
-        assertGt(balReward1, 0);
-        assertGt(balReward2, 0);
+        uint256 totalAuraReward = getMintableAuraForBalAmount(totalBalReward);
 
         vm.prank(owner);
         vm.expectEmit(true, false, false, true);
-        emit RewardClaimed(address(BAL), balReward1 + balReward2, block.timestamp);
+        emit RewardClaimed(address(BAL), totalBalReward, block.timestamp);
         vm.expectEmit(true, false, false, true);
-        emit RewardClaimed(address(AURA), auraReward, block.timestamp);
+        emit RewardClaimed(address(AURA), totalAuraReward, block.timestamp);
         avatar.claimRewardsAndSendToOwner();
 
-        assertEq(BASE_REWARD_POOL_80BADGER_20WBTC.earned(address(avatar)), 0);
-        assertEq(BASE_REWARD_POOL_40WBTC_40DIGG_20GRAVIAURA.earned(address(avatar)), 0);
+        for (uint256 i; i < PIDS.length; ++i) {
+            assertEq(BASE_REWARD_POOLS[i].earned(address(avatar)), 0);
+        }
 
         assertEq(BAL.balanceOf(address(avatar)), 0);
         assertEq(AURA.balanceOf(address(avatar)), 0);
 
-        assertEq(BAL.balanceOf(owner) - initialOwnerBal, balReward1 + balReward2);
-        assertEq(AURA.balanceOf(owner) - initialOwnerAura, auraReward);
+        assertEq(BAL.balanceOf(owner) - initialOwnerBal, totalBalReward);
+        assertEq(AURA.balanceOf(owner) - initialOwnerAura, totalAuraReward);
     }
 
     function test_claimRewardsAndSendToOwner_permissions() public {
@@ -739,9 +738,10 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
         uint256[] memory avatarPids = avatar.getPids();
         bool pidIsAdded;
 
-        for (uint256 i = 0; i < avatarPids.length; i++) {
+        for (uint256 i; i < avatarPids.length; ++i) {
             if (avatarPids[i] == 21) {
                 pidIsAdded = true;
+                break;
             }
         }
 
@@ -762,13 +762,14 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
     function test_removeBptPositionInfo_stillStaked() public {
         uint256[] memory amountsDeposit = new uint256[](PIDS.length);
         amountsDeposit[0] = 20 ether;
-        amountsDeposit[1] = 20 ether;
-        amountsDeposit[2] = 20 ether;
+        amountsDeposit[1] = 10 ether;
+        amountsDeposit[2] = 5 ether;
         uint256[] memory pidsInit = new uint256[](PIDS.length);
         pidsInit[0] = PIDS[0];
         pidsInit[1] = PIDS[1];
         pidsInit[2] = PIDS[2];
-        vm.prank(owner);
+
+        vm.startPrank(owner);
         avatar.deposit(pidsInit, amountsDeposit);
 
         vm.expectRevert(
@@ -779,7 +780,6 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
                 20 ether
             )
         );
-        vm.prank(owner);
         avatar.removeBptPositionInfo(PID_80BADGER_20WBTC);
     }
 
@@ -790,10 +790,10 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
         uint256[] memory avatarPids = avatar.getPids();
 
         bool pidIsPresent;
-
         for (uint256 i = 0; i < avatarPids.length; i++) {
             if (avatarPids[i] == 21) {
                 pidIsPresent = true;
+                break;
             }
         }
 
@@ -808,8 +808,9 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
         (,, uint256 voterBalanceBefore,) = AURA_LOCKER.lockedBalances(BADGER_VOTER);
         uint256 usdcBalanceBefore = USDC.balanceOf(owner);
 
-        assertGt(BASE_REWARD_POOL_80BADGER_20WBTC.earned(address(avatar)), 0);
-        assertGt(BASE_REWARD_POOL_40WBTC_40DIGG_20GRAVIAURA.earned(address(avatar)), 0);
+        for (uint256 i; i < PIDS.length; ++i) {
+            assertGt(BASE_REWARD_POOLS[i].earned(address(avatar)), 0);
+        }
 
         address[2] memory actors = [owner, manager];
         for (uint256 i; i < actors.length; ++i) {
@@ -828,8 +829,9 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
             assertGt(processed[0].amount, 0);
             assertGt(processed[1].amount, 0);
 
-            assertEq(BASE_REWARD_POOL_80BADGER_20WBTC.earned(address(avatar)), 0);
-            assertEq(BASE_REWARD_POOL_40WBTC_40DIGG_20GRAVIAURA.earned(address(avatar)), 0);
+            for (uint256 j; j < PIDS.length; ++j) {
+                assertEq(BASE_REWARD_POOLS[j].earned(address(avatar)), 0);
+            }
 
             assertEq(BAL.balanceOf(address(avatar)), 0);
             assertEq(AURA.balanceOf(address(avatar)), 0);
@@ -842,15 +844,16 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
     }
 
     function test_processRewards() public {
-        vm.prank(owner);
         uint256[] memory amountsDeposit = new uint256[](PIDS.length);
         amountsDeposit[0] = 20 ether;
-        amountsDeposit[1] = 20 ether;
-        amountsDeposit[2] = 20 ether;
+        amountsDeposit[1] = 10 ether;
+        amountsDeposit[2] = 5 ether;
         uint256[] memory pidsInit = new uint256[](PIDS.length);
         pidsInit[0] = PIDS[0];
         pidsInit[1] = PIDS[1];
         pidsInit[2] = PIDS[2];
+
+        vm.prank(owner);
         avatar.deposit(pidsInit, amountsDeposit);
 
         skipAndForwardFeeds(1 hours);
@@ -862,12 +865,13 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
     function test_processRewards_noAuraPrice() public {
         uint256[] memory amountsDeposit = new uint256[](PIDS.length);
         amountsDeposit[0] = 20 ether;
-        amountsDeposit[1] = 20 ether;
-        amountsDeposit[2] = 20 ether;
+        amountsDeposit[1] = 10 ether;
+        amountsDeposit[2] = 5 ether;
         uint256[] memory pidsInit = new uint256[](PIDS.length);
         pidsInit[0] = PIDS[0];
         pidsInit[1] = PIDS[1];
         pidsInit[2] = PIDS[2];
+
         vm.prank(owner);
         avatar.deposit(pidsInit, amountsDeposit);
 
@@ -882,8 +886,8 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
     }
 
     function test_processRewards_noRewards() public {
-        vm.expectRevert(AuraAvatarMultiToken.NoRewards.selector);
         vm.prank(owner);
+        vm.expectRevert(AuraAvatarMultiToken.NoRewards.selector);
         avatar.processRewards(0);
     }
 
@@ -892,33 +896,35 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
     ////////////////////////////////////////////////////////////////////////////
 
     function test_checkUpkeep() public {
-        vm.prank(owner);
         uint256[] memory amountsDeposit = new uint256[](PIDS.length);
         amountsDeposit[0] = 20 ether;
-        amountsDeposit[1] = 20 ether;
-        amountsDeposit[2] = 20 ether;
+        amountsDeposit[1] = 10 ether;
+        amountsDeposit[2] = 5 ether;
         uint256[] memory pidsInit = new uint256[](PIDS.length);
         pidsInit[0] = PIDS[0];
         pidsInit[1] = PIDS[1];
         pidsInit[2] = PIDS[2];
+
+        vm.prank(owner);
         avatar.deposit(pidsInit, amountsDeposit);
 
         skip(1 weeks);
 
-        (bool upkeepNeeded, bytes memory performData) = avatar.checkUpkeep(new bytes(0));
+        (bool upkeepNeeded,) = avatar.checkUpkeep(new bytes(0));
         assertTrue(upkeepNeeded);
     }
 
     function test_checkUpkeep_premature() public {
-        vm.prank(owner);
         uint256[] memory amountsDeposit = new uint256[](PIDS.length);
         amountsDeposit[0] = 20 ether;
-        amountsDeposit[1] = 20 ether;
-        amountsDeposit[2] = 20 ether;
+        amountsDeposit[1] = 10 ether;
+        amountsDeposit[2] = 5 ether;
         uint256[] memory pidsInit = new uint256[](PIDS.length);
         pidsInit[0] = PIDS[0];
         pidsInit[1] = PIDS[1];
         pidsInit[2] = PIDS[2];
+
+        vm.prank(owner);
         avatar.deposit(pidsInit, amountsDeposit);
         skipAndForwardFeeds(1 weeks);
 
@@ -937,21 +943,25 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
     }
 
     function test_performUpkeep() public {
-        vm.prank(owner);
         uint256[] memory amountsDeposit = new uint256[](PIDS.length);
         amountsDeposit[0] = 20 ether;
-        amountsDeposit[1] = 20 ether;
-        amountsDeposit[2] = 20 ether;
+        amountsDeposit[1] = 10 ether;
+        amountsDeposit[2] = 5 ether;
         uint256[] memory pidsInit = new uint256[](PIDS.length);
         pidsInit[0] = PIDS[0];
         pidsInit[1] = PIDS[1];
         pidsInit[2] = PIDS[2];
+
+        vm.prank(owner);
         avatar.deposit(pidsInit, amountsDeposit);
 
         (,, uint256 voterBalanceBefore,) = AURA_LOCKER.lockedBalances(BADGER_VOTER);
         uint256 usdcBalanceBefore = USDC.balanceOf(owner);
 
         skipAndForwardFeeds(1 weeks);
+
+        vm.prank(BADGER_VOTER);
+        AURA_LOCKER.processExpiredLocks(true);
 
         bool upkeepNeeded;
         (upkeepNeeded,) = avatar.checkUpkeep(new bytes(0));
@@ -963,8 +973,9 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
         avatar.performUpkeep(abi.encodeCall(AuraAvatarMultiToken.processRewardsKeeper, uint256(0)));
 
         // Ensure that rewards were processed properly
-        assertEq(BASE_REWARD_POOL_80BADGER_20WBTC.earned(address(avatar)), 0);
-        assertEq(BASE_REWARD_POOL_40WBTC_40DIGG_20GRAVIAURA.earned(address(avatar)), 0);
+        for (uint256 i; i < PIDS.length; ++i) {
+            assertEq(BASE_REWARD_POOLS[i].earned(address(avatar)), 0);
+        }
 
         assertEq(BAL.balanceOf(address(avatar)), 0);
         assertEq(AURA.balanceOf(address(avatar)), 0);
@@ -979,23 +990,24 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
     }
 
     function test_performUpkeep_permissions() public {
-        vm.prank(owner);
         uint256[] memory amountsDeposit = new uint256[](PIDS.length);
         amountsDeposit[0] = 20 ether;
-        amountsDeposit[1] = 20 ether;
-        amountsDeposit[2] = 20 ether;
+        amountsDeposit[1] = 10 ether;
+        amountsDeposit[2] = 5 ether;
         uint256[] memory pidsInit = new uint256[](PIDS.length);
         pidsInit[0] = PIDS[0];
         pidsInit[1] = PIDS[1];
         pidsInit[2] = PIDS[2];
+
+        vm.prank(owner);
         avatar.deposit(pidsInit, amountsDeposit);
 
         address[3] memory actors = [address(this), owner, manager];
         for (uint256 i; i < actors.length; ++i) {
             uint256 snapId = vm.snapshot();
 
-            vm.expectRevert(abi.encodeWithSelector(AuraAvatarMultiToken.NotKeeper.selector, actors[i]));
             vm.prank(actors[i]);
+            vm.expectRevert(abi.encodeWithSelector(AuraAvatarMultiToken.NotKeeper.selector, actors[i]));
             avatar.performUpkeep(new bytes(0));
 
             vm.revertTo(snapId);
@@ -1003,18 +1015,22 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
     }
 
     function test_performUpkeep_premature() public {
-        vm.prank(owner);
         uint256[] memory amountsDeposit = new uint256[](PIDS.length);
         amountsDeposit[0] = 20 ether;
-        amountsDeposit[1] = 20 ether;
-        amountsDeposit[2] = 20 ether;
+        amountsDeposit[1] = 10 ether;
+        amountsDeposit[2] = 5 ether;
         uint256[] memory pidsInit = new uint256[](PIDS.length);
         pidsInit[0] = PIDS[0];
         pidsInit[1] = PIDS[1];
         pidsInit[2] = PIDS[2];
+
+        vm.prank(owner);
         avatar.deposit(pidsInit, amountsDeposit);
 
         skipAndForwardFeeds(1 weeks);
+
+        vm.prank(BADGER_VOTER);
+        AURA_LOCKER.processExpiredLocks(true);
 
         (bool upkeepNeeded,) = avatar.checkUpkeep(new bytes(0));
         assertTrue(upkeepNeeded);
@@ -1036,18 +1052,23 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
     }
 
     function test_performUpkeep_staleFeed() public {
-        vm.prank(owner);
         uint256[] memory amountsDeposit = new uint256[](PIDS.length);
         amountsDeposit[0] = 20 ether;
-        amountsDeposit[1] = 20 ether;
-        amountsDeposit[2] = 20 ether;
+        amountsDeposit[1] = 10 ether;
+        amountsDeposit[2] = 5 ether;
         uint256[] memory pidsInit = new uint256[](PIDS.length);
         pidsInit[0] = PIDS[0];
         pidsInit[1] = PIDS[1];
         pidsInit[2] = PIDS[2];
+
+        vm.prank(owner);
         avatar.deposit(pidsInit, amountsDeposit);
 
         skip(1 weeks);
+
+        vm.prank(BADGER_VOTER);
+        AURA_LOCKER.processExpiredLocks(true);
+
         vm.expectRevert(
             abi.encodeWithSelector(
                 AuraAvatarUtils.StalePriceFeed.selector, block.timestamp, BAL_USD_FEED.latestTimestamp(), 24 hours
@@ -1058,15 +1079,16 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
     }
 
     function test_processRewardsKeeper_permissions() public {
-        vm.prank(owner);
         uint256[] memory amountsDeposit = new uint256[](PIDS.length);
         amountsDeposit[0] = 20 ether;
-        amountsDeposit[1] = 20 ether;
-        amountsDeposit[2] = 20 ether;
+        amountsDeposit[1] = 10 ether;
+        amountsDeposit[2] = 5 ether;
         uint256[] memory pidsInit = new uint256[](PIDS.length);
         pidsInit[0] = PIDS[0];
         pidsInit[1] = PIDS[1];
         pidsInit[2] = PIDS[2];
+
+        vm.prank(owner);
         avatar.deposit(pidsInit, amountsDeposit);
 
         address[3] memory actors = [address(this), owner, manager];
@@ -1086,15 +1108,16 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
     ////////////////////////////////////////////////////////////////////////////
 
     function test_getAuraPriceInUsdSpot() public {
-        vm.startPrank(owner);
         uint256[] memory amountsDeposit = new uint256[](PIDS.length);
         amountsDeposit[0] = 20 ether;
-        amountsDeposit[1] = 20 ether;
-        amountsDeposit[2] = 20 ether;
+        amountsDeposit[1] = 10 ether;
+        amountsDeposit[2] = 5 ether;
         uint256[] memory pidsInit = new uint256[](PIDS.length);
         pidsInit[0] = PIDS[0];
         pidsInit[1] = PIDS[1];
         pidsInit[2] = PIDS[2];
+
+        vm.startPrank(owner);
         avatar.deposit(pidsInit, amountsDeposit);
 
         skipAndForwardFeeds(1 hours);
@@ -1109,15 +1132,16 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
     }
 
     function test_checkUpkeep_price() public {
-        vm.startPrank(owner);
         uint256[] memory amountsDeposit = new uint256[](PIDS.length);
         amountsDeposit[0] = 20 ether;
-        amountsDeposit[1] = 20 ether;
-        amountsDeposit[2] = 20 ether;
+        amountsDeposit[1] = 10 ether;
+        amountsDeposit[2] = 5 ether;
         uint256[] memory pidsInit = new uint256[](PIDS.length);
         pidsInit[0] = PIDS[0];
         pidsInit[1] = PIDS[1];
         pidsInit[2] = PIDS[2];
+
+        vm.startPrank(owner);
         avatar.deposit(pidsInit, amountsDeposit);
 
         skip(1 weeks);
@@ -1136,15 +1160,16 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
         console.log(getBalAmountInUsdc(1e18));
         console.log(getAuraAmountInUsdc(1e18, avatar.twapPeriod()));
 
-        vm.startPrank(owner);
         uint256[] memory amountsDeposit = new uint256[](PIDS.length);
         amountsDeposit[0] = 20 ether;
-        amountsDeposit[1] = 20 ether;
-        amountsDeposit[2] = 20 ether;
+        amountsDeposit[1] = 10 ether;
+        amountsDeposit[2] = 5 ether;
         uint256[] memory pidsInit = new uint256[](PIDS.length);
         pidsInit[0] = PIDS[0];
         pidsInit[1] = PIDS[1];
         pidsInit[2] = PIDS[2];
+
+        vm.startPrank(owner);
         avatar.deposit(pidsInit, amountsDeposit);
 
         skip(1 weeks);
@@ -1157,15 +1182,16 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
     }
 
     function test_processRewards_highBalMinBps() public {
-        vm.startPrank(owner);
         uint256[] memory amountsDeposit = new uint256[](PIDS.length);
         amountsDeposit[0] = 20 ether;
-        amountsDeposit[1] = 20 ether;
-        amountsDeposit[2] = 20 ether;
+        amountsDeposit[1] = 10 ether;
+        amountsDeposit[2] = 5 ether;
         uint256[] memory pidsInit = new uint256[](PIDS.length);
         pidsInit[0] = PIDS[0];
         pidsInit[1] = PIDS[1];
         pidsInit[2] = PIDS[2];
+
+        vm.startPrank(owner);
         avatar.deposit(pidsInit, amountsDeposit);
 
         skip(1 hours);
@@ -1177,15 +1203,16 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
     }
 
     function test_upkeep() public {
-        vm.prank(owner);
         uint256[] memory amountsDeposit = new uint256[](PIDS.length);
         amountsDeposit[0] = 20 ether;
-        amountsDeposit[1] = 20 ether;
-        amountsDeposit[2] = 20 ether;
+        amountsDeposit[1] = 10 ether;
+        amountsDeposit[2] = 5 ether;
         uint256[] memory pidsInit = new uint256[](PIDS.length);
         pidsInit[0] = PIDS[0];
         pidsInit[1] = PIDS[1];
         pidsInit[2] = PIDS[2];
+
+        vm.prank(owner);
         avatar.deposit(pidsInit, amountsDeposit);
 
         skipAndForwardFeeds(1 weeks);
@@ -1199,15 +1226,16 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
     }
 
     function test_processRewardsKeeper() public {
-        vm.prank(owner);
         uint256[] memory amountsDeposit = new uint256[](PIDS.length);
         amountsDeposit[0] = 20 ether;
-        amountsDeposit[1] = 20 ether;
-        amountsDeposit[2] = 20 ether;
+        amountsDeposit[1] = 10 ether;
+        amountsDeposit[2] = 5 ether;
         uint256[] memory pidsInit = new uint256[](PIDS.length);
         pidsInit[0] = PIDS[0];
         pidsInit[1] = PIDS[1];
         pidsInit[2] = PIDS[2];
+
+        vm.prank(owner);
         avatar.deposit(pidsInit, amountsDeposit);
 
         skipAndForwardFeeds(1 weeks);
@@ -1231,8 +1259,8 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
     function test_upkeep_allUsdc() public {
         uint256[] memory amountsDeposit = new uint256[](PIDS.length);
         amountsDeposit[0] = 20 ether;
-        amountsDeposit[1] = 20 ether;
-        amountsDeposit[2] = 20 ether;
+        amountsDeposit[1] = 10 ether;
+        amountsDeposit[2] = 5 ether;
         uint256[] memory pidsInit = new uint256[](PIDS.length);
         pidsInit[0] = PIDS[0];
         pidsInit[1] = PIDS[1];
