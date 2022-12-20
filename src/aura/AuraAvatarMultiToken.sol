@@ -347,11 +347,12 @@ contract AuraAvatarMultiToken is BaseAvatar, PausableUpgradeable, AuraAvatarUtil
 
     /// @notice Takes a given amount of assets from the owner and stakes them on the AURA Booster. Can only be called by owner.
     /// @dev This also initializes the lastClaimTimestamp variable if there are no other deposits.
-    /// @param _pids Pids target to stake into
+    /// @param _pids PIDs target to stake into
     /// @param _amountAssets Amount of assets to be staked.
     function deposit(uint256[] memory _pids, uint256[] memory _amountAssets) external onlyOwner {
+        // TODO: Verify length
         for (uint256 i; i < _pids.length;) {
-            /// @dev verify if pid is in storage and amount is > 0
+            // Verify if PID is in storage and amount is > 0
             if (!pids.contains(_pids[i])) {
                 revert PidNotIncluded(_pids[i]);
             }
@@ -359,7 +360,10 @@ contract AuraAvatarMultiToken is BaseAvatar, PausableUpgradeable, AuraAvatarUtil
                 revert NothingToDeposit();
             }
 
+            // TODO: Cache this value somewhere and avoid call
             (address lpToken,,,,,) = AURA_BOOSTER.poolInfo(_pids[i]);
+            // NOTE: Using msg.sender since this function is only callable by owner.
+            //       Keep in mind if access control is changed.
             IERC20MetadataUpgradeable(lpToken).safeTransferFrom(msg.sender, address(this), _amountAssets[i]);
 
             AURA_BOOSTER.deposit(_pids[i], _amountAssets[i], true);
@@ -389,9 +393,10 @@ contract AuraAvatarMultiToken is BaseAvatar, PausableUpgradeable, AuraAvatarUtil
 
     /// @notice Unstakes the given amount of assets and transfers them back to owner. Can only be called by owner.
     /// @dev This function doesn't claim any rewards.
-    /// @param _pids Pids targetted to withdraw from
+    /// @param _pids PIDs targetted to withdraw from
     /// @param _amountAssets Amount of assets to be unstaked.
     function withdraw(uint256[] memory _pids, uint256[] memory _amountAssets) external onlyOwner {
+        // TODO: Verify length
         _withdraw(_pids, _amountAssets);
     }
 
@@ -411,6 +416,7 @@ contract AuraAvatarMultiToken is BaseAvatar, PausableUpgradeable, AuraAvatarUtil
     /// @dev given a target PID, it will add the details in the `EnumerableSet`: pids, assets & baseRewardPools
     /// @param _newPid target pid numeric value to add in contract's storage
     function addBptPositionInfo(uint256 _newPid) external onlyOwner {
+        // TODO: Maybe check if exists?
         pids.add(_newPid);
         (address lpToken,,, address crvRewards,,) = AURA_BOOSTER.poolInfo(_newPid);
         assets.add(lpToken);
@@ -424,6 +430,7 @@ contract AuraAvatarMultiToken is BaseAvatar, PausableUpgradeable, AuraAvatarUtil
             revert PidNotIncluded(_removePid);
         }
 
+        // TODO: Cache this somewhere?
         (address lpToken,,, address crvRewards,,) = AURA_BOOSTER.poolInfo(_removePid);
         uint256 stakedAmount = IBaseRewardPool(crvRewards).balanceOf(address(this));
         if (stakedAmount > 0) {
@@ -533,19 +540,19 @@ contract AuraAvatarMultiToken is BaseAvatar, PausableUpgradeable, AuraAvatarUtil
     /// @return upkeepNeeded_ A boolean indicating whether an upkeep is to be performed.
     /// @return performData_ The calldata to be passed to the upkeep function.
     function checkUpkeep(bytes calldata) external override returns (bool upkeepNeeded_, bytes memory performData_) {
-        uint256 balPending;
-        uint256 length = baseRewardPools.length();
-
-        for (uint256 i; i < length;) {
-            balPending += IBaseRewardPool(baseRewardPools.at(i)).earned(address(this));
-            unchecked {
-                ++i;
-            }
-        }
-
-        uint256 balBalance = BAL.balanceOf(address(this));
-
         if ((block.timestamp - lastClaimTimestamp) >= claimFrequency) {
+            uint256 balPending;
+            uint256 length = baseRewardPools.length();
+
+            for (uint256 i; i < length;) {
+                balPending += IBaseRewardPool(baseRewardPools.at(i)).earned(address(this));
+                unchecked {
+                    ++i;
+                }
+            }
+
+            uint256 balBalance = BAL.balanceOf(address(this));
+
             if (balPending > 0 || balBalance > 0) {
                 upkeepNeeded_ = true;
 
@@ -561,20 +568,23 @@ contract AuraAvatarMultiToken is BaseAvatar, PausableUpgradeable, AuraAvatarUtil
 
     /// @notice Unstakes the given amount of assets and transfers them back to owner.
     /// @dev This function doesn't claim any rewards. Caller can only be owner.
-    /// @param _pids Pids to be targetted to unstake from.
-    /// @param _bptsDeposited Amount of assets to be unstaked.
-    function _withdraw(uint256[] memory _pids, uint256[] memory _bptsDeposited) internal {
+    /// @param _pids PIDs to be targetted to unstake from.
+    /// @param _amountAssets Amount of assets to be unstaked.
+    function _withdraw(uint256[] memory _pids, uint256[] memory _amountAssets) internal {
         // TODO: Length checks
         for (uint256 i; i < _pids.length;) {
-            if (_bptsDeposited[i] == 0) {
+            if (_amountAssets[i] == 0) {
                 revert NothingToWithdraw();
             }
+            // TODO: Cache
             (address lpToken,,, address crvRewards,,) = AURA_BOOSTER.poolInfo(_pids[i]);
 
-            IBaseRewardPool(crvRewards).withdrawAndUnwrap(_bptsDeposited[i], false);
-            IERC20MetadataUpgradeable(lpToken).safeTransfer(msg.sender, _bptsDeposited[i]);
+            IBaseRewardPool(crvRewards).withdrawAndUnwrap(_amountAssets[i], false);
+            // NOTE: Using msg.sender since this function is only callable by owner.
+            //       Keep in mind if access control is changed.
+            IERC20MetadataUpgradeable(lpToken).safeTransfer(msg.sender, _amountAssets[i]);
 
-            emit Withdraw(lpToken, _bptsDeposited[i], block.timestamp);
+            emit Withdraw(lpToken, _amountAssets[i], block.timestamp);
             unchecked {
                 ++i;
             }
