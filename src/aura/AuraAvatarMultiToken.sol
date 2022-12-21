@@ -129,7 +129,10 @@ contract AuraAvatarMultiToken is BaseAvatar, PausableUpgradeable, AuraAvatarUtil
     /// @param _manager Address of the initial manager.
     /// @param _keeper Address of the initial keeper.
     /// @param _pids Pool ID of tokens involved in the avatar
-    function initialize(address _owner, address _manager, address _keeper, uint256[] memory _pids) public initializer {
+    function initialize(address _owner, address _manager, address _keeper, uint256[] calldata _pids)
+        public
+        initializer
+    {
         __BaseAvatar_init(_owner);
         __Pausable_init();
 
@@ -349,7 +352,7 @@ contract AuraAvatarMultiToken is BaseAvatar, PausableUpgradeable, AuraAvatarUtil
     /// @dev This also initializes the lastClaimTimestamp variable if there are no other deposits.
     /// @param _pids PIDs target to stake into
     /// @param _amountAssets Amount of assets to be staked.
-    function deposit(uint256[] memory _pids, uint256[] memory _amountAssets) external onlyOwner {
+    function deposit(uint256[] calldata _pids, uint256[] calldata _amountAssets) external onlyOwner {
         // TODO: Verify length
         for (uint256 i; i < _pids.length;) {
             // Verify if PID is in storage and amount is > 0
@@ -395,7 +398,7 @@ contract AuraAvatarMultiToken is BaseAvatar, PausableUpgradeable, AuraAvatarUtil
     /// @dev This function doesn't claim any rewards.
     /// @param _pids PIDs targetted to withdraw from
     /// @param _amountAssets Amount of assets to be unstaked.
-    function withdraw(uint256[] memory _pids, uint256[] memory _amountAssets) external onlyOwner {
+    function withdraw(uint256[] calldata _pids, uint256[] calldata _amountAssets) external onlyOwner {
         // TODO: Verify length
         _withdraw(_pids, _amountAssets);
     }
@@ -570,8 +573,7 @@ contract AuraAvatarMultiToken is BaseAvatar, PausableUpgradeable, AuraAvatarUtil
     /// @dev This function doesn't claim any rewards. Caller can only be owner.
     /// @param _pids PIDs to be targetted to unstake from.
     /// @param _amountAssets Amount of assets to be unstaked.
-    function _withdraw(uint256[] memory _pids, uint256[] memory _amountAssets) internal {
-        // TODO: Length checks
+    function _withdraw(uint256[] calldata _pids, uint256[] calldata _amountAssets) internal {
         for (uint256 i; i < _pids.length;) {
             if (_amountAssets[i] == 0) {
                 revert NothingToWithdraw();
