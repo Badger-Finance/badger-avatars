@@ -1,3 +1,6 @@
+AvatarTemplateTest:test_doCall() (gas: 724819)
+AvatarTemplateTest:test_doCall_permissions() (gas: 11315)
+AvatarTemplateTest:test_initialize() (gas: 7580)
 AuraAvatarMultiTokenTest:test_addBptPositionInfo() (gas: 186478)
 AuraAvatarMultiTokenTest:test_addBptPositionInfo__permissions() (gas: 10803)
 AuraAvatarMultiTokenTest:test_checkUpkeep() (gas: 1368168)
