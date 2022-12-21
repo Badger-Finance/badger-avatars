@@ -426,7 +426,7 @@ contract AuraAvatarMultiToken is BaseAvatar, PausableUpgradeable, AuraAvatarUtil
     /// @dev given a target PID, it will add the details in the `EnumerableSet`: pids, assets & baseRewardPools
     /// @param _newPid target pid numeric value to add in contract's storage
     function addBptPositionInfo(uint256 _newPid) external onlyOwner {
-        if (pid.contains(_newPid)) {
+        if (pids.contains(_newPid)) {
             revert PidAlreadyExist(_newPid);
         }
         pids.add(_newPid);
@@ -582,7 +582,7 @@ contract AuraAvatarMultiToken is BaseAvatar, PausableUpgradeable, AuraAvatarUtil
     /// @dev This function doesn't claim any rewards. Caller can only be owner.
     /// @param _pids PIDs to be targetted to unstake from.
     /// @param _amountAssets Amount of assets to be unstaked.
-    function _withdraw(uint256[] calldata _pids, uint256[] calldata _amountAssets) internal {
+    function _withdraw(uint256[] memory _pids, uint256[] memory _amountAssets) internal {
         for (uint256 i; i < _pids.length;) {
             if (_amountAssets[i] == 0) {
                 revert NothingToWithdraw();
