@@ -379,9 +379,9 @@ contract AuraAvatarMultiToken is BaseAvatar, PausableUpgradeable, AuraAvatarUtil
         }
     }
 
-    /// @notice Unstakes all staked assets and transfers them back to owner. Can only be called by owner.
+    /// @notice Unstakes all staked assets and transfers them back to owner. Can only be called by owner and manager.
     /// @dev This function doesn't claim any rewards.
-    function withdrawAll() external onlyOwner {
+    function withdrawAll() external onlyOwnerOrManager {
         uint256 length = baseRewardPools.length();
         uint256[] memory bptsDeposited = new uint256[](length);
         for (uint256 i; i < length;) {
@@ -394,11 +394,11 @@ contract AuraAvatarMultiToken is BaseAvatar, PausableUpgradeable, AuraAvatarUtil
         _withdraw(pids.values(), bptsDeposited);
     }
 
-    /// @notice Unstakes the given amount of assets and transfers them back to owner. Can only be called by owner.
+    /// @notice Unstakes the given amount of assets and transfers them back to owner. Can only be called by owner and manager.
     /// @dev This function doesn't claim any rewards.
     /// @param _pids PIDs targetted to withdraw from
     /// @param _amountAssets Amount of assets to be unstaked.
-    function withdraw(uint256[] calldata _pids, uint256[] calldata _amountAssets) external onlyOwner {
+    function withdraw(uint256[] calldata _pids, uint256[] calldata _amountAssets) external onlyOwnerOrManager {
         // TODO: Verify length
         _withdraw(_pids, _amountAssets);
     }
@@ -582,9 +582,7 @@ contract AuraAvatarMultiToken is BaseAvatar, PausableUpgradeable, AuraAvatarUtil
             (address lpToken,,, address crvRewards,,) = AURA_BOOSTER.poolInfo(_pids[i]);
 
             IBaseRewardPool(crvRewards).withdrawAndUnwrap(_amountAssets[i], false);
-            // NOTE: Using msg.sender since this function is only callable by owner.
-            //       Keep in mind if access control is changed.
-            IERC20MetadataUpgradeable(lpToken).safeTransfer(msg.sender, _amountAssets[i]);
+            IERC20MetadataUpgradeable(lpToken).safeTransfer(owner(), _amountAssets[i]);
 
             emit Withdraw(lpToken, _amountAssets[i], block.timestamp);
             unchecked {
