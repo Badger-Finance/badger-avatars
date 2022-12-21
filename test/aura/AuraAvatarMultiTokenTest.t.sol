@@ -603,7 +603,8 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
     }
 
     function test_withdrawAll_permissions() public {
-        vm.expectRevert("Ownable: caller is not the owner");
+        vm.expectRevert(abi.encodeWithSelector(AuraAvatarMultiToken.NotOwnerOrManager.selector, keeper));
+        vm.prank(keeper);
         avatar.withdrawAll();
     }
 
@@ -657,7 +658,8 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
         pidsInit[1] = PIDS[1];
         pidsInit[2] = PIDS[2];
 
-        vm.expectRevert("Ownable: caller is not the owner");
+        vm.expectRevert(abi.encodeWithSelector(AuraAvatarMultiToken.NotOwnerOrManager.selector, keeper));
+        vm.prank(keeper);
         avatar.withdraw(pidsInit, amountsWithdraw);
     }
 
