@@ -94,6 +94,7 @@ contract AuraAvatarMultiToken is BaseAvatar, PausableUpgradeable, AuraAvatarUtil
 
     error BptStillStaked(address bpt, address basePool, uint256 stakingBalance);
     error PidNotIncluded(uint256 pid);
+    error PidAlreadyExist(uint256 pid);
 
     ////////////////////////////////////////////////////////////////////////////
     // EVENTS
@@ -419,7 +420,9 @@ contract AuraAvatarMultiToken is BaseAvatar, PausableUpgradeable, AuraAvatarUtil
     /// @dev given a target PID, it will add the details in the `EnumerableSet`: pids, assets & baseRewardPools
     /// @param _newPid target pid numeric value to add in contract's storage
     function addBptPositionInfo(uint256 _newPid) external onlyOwner {
-        // TODO: Maybe check if exists?
+        if (pid.contains(_newPid)) {
+            revert PidAlreadyExist(_newPid);
+        }
         pids.add(_newPid);
         (address lpToken,,, address crvRewards,,) = AURA_BOOSTER.poolInfo(_newPid);
         assets.add(lpToken);
