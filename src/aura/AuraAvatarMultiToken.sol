@@ -96,6 +96,8 @@ contract AuraAvatarMultiToken is BaseAvatar, PausableUpgradeable, AuraAvatarUtil
     error PidNotIncluded(uint256 pid);
     error PidAlreadyExist(uint256 pid);
 
+    error LengthMismatch();
+
     ////////////////////////////////////////////////////////////////////////////
     // EVENTS
     ////////////////////////////////////////////////////////////////////////////
@@ -354,7 +356,9 @@ contract AuraAvatarMultiToken is BaseAvatar, PausableUpgradeable, AuraAvatarUtil
     /// @param _pids PIDs target to stake into
     /// @param _amountAssets Amount of assets to be staked.
     function deposit(uint256[] calldata _pids, uint256[] calldata _amountAssets) external onlyOwner {
-        // TODO: Verify length
+        if (_pids.length != _amountAssets.length) {
+            revert LengthMismatch();
+        }
         for (uint256 i; i < _pids.length;) {
             // Verify if PID is in storage and amount is > 0
             if (!pids.contains(_pids[i])) {
@@ -400,7 +404,9 @@ contract AuraAvatarMultiToken is BaseAvatar, PausableUpgradeable, AuraAvatarUtil
     /// @param _pids PIDs targetted to withdraw from
     /// @param _amountAssets Amount of assets to be unstaked.
     function withdraw(uint256[] calldata _pids, uint256[] calldata _amountAssets) external onlyOwnerOrManager {
-        // TODO: Verify length
+        if (_pids.length != _amountAssets.length) {
+            revert LengthMismatch();
+        }
         _withdraw(_pids, _amountAssets);
     }
 
