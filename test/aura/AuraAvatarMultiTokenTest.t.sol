@@ -61,21 +61,19 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
     event TwapPeriodUpdated(uint256 newTwapPeriod, uint256 oldTwapPeriod);
     event ClaimFrequencyUpdated(uint256 oldClaimFrequency, uint256 newClaimFrequency);
 
+    event SellBpsAuraToUsdcUpdated(uint256 newValue, uint256 oldValue);
+
     event MinOutBpsBalToUsdcMinUpdated(uint256 oldValue, uint256 newValue);
     event MinOutBpsAuraToUsdcMinUpdated(uint256 oldValue, uint256 newValue);
-    event MinOutBpsBalToBptMinUpdated(uint256 oldValue, uint256 newValue);
 
     event MinOutBpsBalToUsdcValUpdated(uint256 oldValue, uint256 newValue);
     event MinOutBpsAuraToUsdcValUpdated(uint256 oldValue, uint256 newValue);
-    event MinOutBpsBalToBptValUpdated(uint256 oldValue, uint256 newValue);
 
     event Deposit(address indexed token, uint256 amount, uint256 timestamp);
     event Withdraw(address indexed token, uint256 amount, uint256 timestamp);
 
     event RewardClaimed(address indexed token, uint256 amount, uint256 timestamp);
     event RewardsToStable(address indexed token, uint256 amount, uint256 timestamp);
-
-    event Transfer(address indexed from, address indexed to, uint256 value);
 
     function setUp() public {
         // TODO: Remove hardcoded block
@@ -345,6 +343,26 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
         avatar.setClaimFrequency(2 weeks);
     }
 
+    function test_setSellBpsAuraToUsdc() public {
+        vm.prank(owner);
+        vm.expectEmit(false, false, false, true);
+        emit SellBpsAuraToUsdcUpdated(5000, 0);
+        avatar.setSellBpsAuraToUsdc(5000);
+
+        assertEq(avatar.sellBpsAuraToUsdc(), 5000);
+    }
+
+    function test_setSellBpsAuraToUsd_invalidValues() external {
+        vm.prank(owner);
+        vm.expectRevert(abi.encodeWithSelector(AuraAvatarMultiToken.InvalidBps.selector, 1000000));
+        avatar.setSellBpsAuraToUsdc(1000000);
+    }
+
+    function test_setSellBpsAuraToUsd_permissions() public {
+        vm.expectRevert("Ownable: caller is not the owner");
+        avatar.setSellBpsAuraToUsdc(5000);
+    }
+
     function test_setMinOutBpsBalToUsdcMin() public {
         vm.prank(owner);
         vm.expectEmit(false, false, false, true);
@@ -558,6 +576,15 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
         avatar.deposit(pidsInit, amountsDeposit);
     }
 
+    function test_deposit_lengthMismatch() public {
+        uint256[] memory amountsDeposit = new uint256[](1);
+        uint256[] memory pidsInit = new uint256[](2);
+
+        vm.prank(owner);
+        vm.expectRevert(abi.encodeWithSelector(AuraAvatarMultiToken.LengthMismatch.selector));
+        avatar.deposit(pidsInit, amountsDeposit);
+    }
+
     function test_totalAssets() public {
         uint256[] memory amountsDeposit = new uint256[](PIDS.length);
         amountsDeposit[0] = 20 ether;
@@ -670,6 +697,15 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
         avatar.withdraw(pidsInit, amountsWithdraw);
     }
 
+    function test_withdraw_lengthMismatch() public {
+        uint256[] memory amountsWithdraw = new uint256[](1);
+        uint256[] memory pidsInit = new uint256[](2);
+
+        vm.prank(owner);
+        vm.expectRevert(abi.encodeWithSelector(AuraAvatarMultiToken.LengthMismatch.selector));
+        avatar.withdraw(pidsInit, amountsWithdraw);
+    }
+
     function test_claimRewardsAndSendToOwner() public {
         uint256[] memory amountsDeposit = new uint256[](PIDS.length);
         amountsDeposit[0] = 20 ether;
@@ -755,6 +791,15 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
         }
 
         assertTrue(pidIsAdded);
+    }
+
+    function test_addBptPositionInfo_alreadyExists() public {
+        vm.prank(owner);
+        avatar.addBptPositionInfo(21);
+
+        vm.prank(owner);
+        vm.expectRevert(abi.encodeWithSelector(AuraAvatarMultiToken.PidAlreadyExist.selector, 21));
+        avatar.addBptPositionInfo(21);
     }
 
     function test_removeBptPositionInfo_permissions() public {
@@ -1257,8 +1302,19 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
 
         assertTrue(upkeepNeeded);
 
+        uint256 snapId = vm.snapshot();
+
         vm.prank(keeper);
         avatar.performUpkeep(performData);
+
+        // Upkeep is not needed anymore
+        (upkeepNeeded,) = avatar.checkUpkeep(new bytes(0));
+        assertFalse(upkeepNeeded);
+
+        vm.revertTo(snapId);
+
+        vm.prank(keeper);
+        avatar.processRewardsKeeper(auraPriceInUsd);
 
         // Upkeep is not needed anymore
         (upkeepNeeded,) = avatar.checkUpkeep(new bytes(0));
