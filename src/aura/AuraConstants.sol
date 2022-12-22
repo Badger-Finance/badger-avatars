@@ -48,4 +48,5 @@ abstract contract AuraConstants {
     uint256 internal constant AURA_USD_TWAP_DIVISOR = 1e38;
 
     uint256 internal constant AURA_USD_SPOT_FACTOR = 1e20;
+    uint256 internal constant AURA_REWARD_MULTIPLIER_DENOMINATOR = 10000;
 }

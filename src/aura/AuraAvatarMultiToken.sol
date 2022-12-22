@@ -532,18 +532,24 @@ contract AuraAvatarMultiToken is BaseAvatar, PausableUpgradeable, AuraAvatarUtil
     /// @return totalBal_ Pending BAL rewards.
     /// @return totalAura_ Pending AURA rewards.
     function pendingRewards() public view returns (uint256 totalBal_, uint256 totalAura_) {
-        uint256 balEarned;
-        uint256 length = baseRewardPools.length();
+        totalBal_ = BAL.balanceOf(address(this));
+        totalAura_ = AURA.balanceOf(address(this));
 
+        uint256 length = baseRewardPools.length();
         for (uint256 i; i < length;) {
-            balEarned += IBaseRewardPool(baseRewardPools.at(i)).earned(address(this));
+            IBaseRewardPool baseRewardPool = IBaseRewardPool(baseRewardPools.at(i));
+
+            uint256 balEarned = baseRewardPool.earned(address(this));
+            uint256 balEarnedAdjusted = (balEarned * AURA_BOOSTER.getRewardMultipliers(address(baseRewardPool)))
+                / AURA_REWARD_MULTIPLIER_DENOMINATOR;
+
+            totalBal_ += balEarned;
+            totalAura_ += getMintableAuraForBalAmount(balEarnedAdjusted);
+
             unchecked {
                 ++i;
             }
         }
-
-        totalBal_ = balEarned + BAL.balanceOf(address(this));
-        totalAura_ = getMintableAuraForBalAmount(balEarned) + AURA.balanceOf(address(this));
     }
 
     /// @notice Checks whether an upkeep is to be performed.

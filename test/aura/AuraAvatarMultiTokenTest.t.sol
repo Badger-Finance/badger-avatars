@@ -187,10 +187,17 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
         (uint256 pendingBal, uint256 pendingAura) = avatar.pendingRewards();
 
         uint256 totalBal = BAL.balanceOf(address(avatar));
+        uint256 totalAura = AURA.balanceOf(address(avatar));
         for (uint256 i; i < PIDS.length; ++i) {
-            totalBal += IBaseRewardPool(BASE_REWARD_POOLS[i]).earned(address(avatar));
+            IBaseRewardPool baseRewardPool = IBaseRewardPool(BASE_REWARD_POOLS[i]);
+
+            uint256 balEarned = baseRewardPool.earned(address(avatar));
+            uint256 balEarnedAdjusted = (balEarned * AURA_BOOSTER.getRewardMultipliers(address(baseRewardPool)))
+                / AURA_REWARD_MULTIPLIER_DENOMINATOR;
+
+            totalBal += balEarned;
+            totalAura += getMintableAuraForBalAmount(balEarnedAdjusted);
         }
-        uint256 totalAura = AURA.balanceOf(address(avatar)) + getMintableAuraForBalAmount(totalBal);
 
         assertEq(pendingBal, totalBal);
         assertEq(pendingAura, totalAura);
