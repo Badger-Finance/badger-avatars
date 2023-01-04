@@ -52,8 +52,6 @@ contract AuraAvatarMultiToken is BaseAvatar, PausableUpgradeable, AuraAvatarUtil
     /// @notice Address of the manager of the avatar. Manager has limited permissions and can harvest rewards or
     ///         fine-tune operational settings.
     address public manager;
-    /// @notice Address of the keeper of the avatar. Keeper can only harvest rewards at a predefined frequency.
-    address public keeper;
 
     /// @notice The frequency (in seconds) at which the keeper should harvest rewards.
     uint256 public claimFrequency;
@@ -103,7 +101,6 @@ contract AuraAvatarMultiToken is BaseAvatar, PausableUpgradeable, AuraAvatarUtil
     ////////////////////////////////////////////////////////////////////////////
 
     event ManagerUpdated(address indexed newManager, address indexed oldManager);
-    event KeeperUpdated(address indexed newKeeper, address indexed oldKeeper);
 
     event TwapPeriodUpdated(uint256 newTwapPeriod, uint256 oldTwapPeriod);
     event ClaimFrequencyUpdated(uint256 newClaimFrequency, uint256 oldClaimFrequency);
@@ -130,17 +127,12 @@ contract AuraAvatarMultiToken is BaseAvatar, PausableUpgradeable, AuraAvatarUtil
     ///         Can only be called once.
     /// @param _owner Address of the initial owner.
     /// @param _manager Address of the initial manager.
-    /// @param _keeper Address of the initial keeper.
     /// @param _pids Pool ID of tokens involved in the avatar
-    function initialize(address _owner, address _manager, address _keeper, uint256[] calldata _pids)
-        public
-        initializer
-    {
+    function initialize(address _owner, address _manager, uint256[] calldata _pids) public initializer {
         __BaseAvatar_init(_owner);
         __Pausable_init();
 
         manager = _manager;
-        keeper = _keeper;
 
         claimFrequency = 1 weeks;
         twapPeriod = 1 hours;
@@ -188,7 +180,7 @@ contract AuraAvatarMultiToken is BaseAvatar, PausableUpgradeable, AuraAvatarUtil
 
     /// @notice Checks whether a call is from the keeper.
     modifier onlyKeeper() {
-        if (msg.sender != keeper) {
+        if (msg.sender != CHAINLINK_KEEPER_REGISTRY) {
             revert NotKeeper(msg.sender);
         }
         _;
@@ -219,15 +211,6 @@ contract AuraAvatarMultiToken is BaseAvatar, PausableUpgradeable, AuraAvatarUtil
 
         manager = _manager;
         emit ManagerUpdated(_manager, oldManager);
-    }
-
-    /// @notice Updates the keeper address. Can only be called by owner.
-    /// @param _keeper Address of the new keeper.
-    function setKeeper(address _keeper) external onlyOwner {
-        address oldKeeper = keeper;
-
-        keeper = _keeper;
-        emit KeeperUpdated(_keeper, oldKeeper);
     }
 
     /// @notice Updates the duration for which Balancer TWAPs are calculated. Can only be called by owner.

@@ -19,8 +19,7 @@ contract AuraAvatarMultiTokenDeploy is Script {
         pidsInit[1] = PID_40WBTC_40DIGG_20GRAVIAURA;
         pidsInit[2] = PID_50BADGER_50RETH;
 
-        bytes memory initData =
-            abi.encodeCall(AuraAvatarMultiToken.initialize, (msg.sender, msg.sender, msg.sender, pidsInit));
+        bytes memory initData = abi.encodeCall(AuraAvatarMultiToken.initialize, (msg.sender, msg.sender, pidsInit));
 
         vm.startBroadcast();
         address logic = address(new AuraAvatarMultiToken());

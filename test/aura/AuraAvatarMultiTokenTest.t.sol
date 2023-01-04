@@ -44,7 +44,7 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
 
     address constant owner = address(1);
     address constant manager = address(2);
-    address constant keeper = address(3);
+    address constant keeper = CHAINLINK_KEEPER_REGISTRY;
 
     uint256[3] PIDS = [PID_80BADGER_20WBTC, PID_40WBTC_40DIGG_20GRAVIAURA, PID_50BADGER_50RETH];
     IERC20MetadataUpgradeable[3] BPTS = [BPT_80BADGER_20WBTC, BPT_40WBTC_40DIGG_20GRAVIAURA, BPT_50BADGER_50RETH];
@@ -90,7 +90,7 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
         pidsInit[1] = PIDS[1];
         pidsInit[2] = PIDS[2];
         avatar = new AuraAvatarMultiToken();
-        avatar.initialize(owner, manager, keeper, pidsInit);
+        avatar.initialize(owner, manager, pidsInit);
 
         for (uint256 i; i < PIDS.length; ++i) {
             deal(address(BPTS[i]), owner, 20e18, true);
@@ -121,7 +121,6 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
         assertFalse(avatar.paused());
 
         assertEq(avatar.manager(), manager);
-        assertEq(avatar.keeper(), keeper);
 
         uint256 bpsVal;
         uint256 bpsMin;
@@ -145,7 +144,7 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
 
         address logic = address(new AuraAvatarMultiToken());
 
-        bytes memory initData = abi.encodeCall(AuraAvatarMultiToken.initialize, (owner, manager, keeper, pidsInit));
+        bytes memory initData = abi.encodeCall(AuraAvatarMultiToken.initialize, (owner, manager, pidsInit));
         AuraAvatarMultiToken avatarProxy = AuraAvatarMultiToken(
             address(
                 new TransparentUpgradeableProxy(
@@ -293,20 +292,6 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
     function test_setManager_permissions() public {
         vm.expectRevert("Ownable: caller is not the owner");
         avatar.setManager(address(0));
-    }
-
-    function test_setKeeper() public {
-        vm.prank(owner);
-        vm.expectEmit(true, true, false, false);
-        emit KeeperUpdated(address(this), keeper);
-        avatar.setKeeper(address(this));
-
-        assertEq(avatar.keeper(), address(this));
-    }
-
-    function test_setKeeper_permissions() public {
-        vm.expectRevert("Ownable: caller is not the owner");
-        avatar.setKeeper(address(0));
     }
 
     function test_setTwapPeriod() public {
