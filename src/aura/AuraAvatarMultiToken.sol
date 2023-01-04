@@ -12,7 +12,7 @@ import {EnumerableSetUpgradeable} from
     "../../lib/openzeppelin-contracts-upgradeable/contracts/utils/structs/EnumerableSetUpgradeable.sol";
 
 import {BaseAvatar} from "../lib/BaseAvatar.sol";
-import {MAX_BPS, PRECISION} from "../BaseConstants.sol";
+import {MAX_BPS, PRECISION, CHAINLINK_KEEPER_REGISTRY} from "../BaseConstants.sol";
 import {BpsConfig, TokenAmount} from "../BaseStructs.sol";
 import {AuraAvatarUtils} from "./AuraAvatarUtils.sol";
 import {IBaseRewardPool} from "../interfaces/aura/IBaseRewardPool.sol";
@@ -60,7 +60,7 @@ contract AuraAvatarMultiToken is BaseAvatar, PausableUpgradeable, AuraAvatarUtil
     uint256 public twapPeriod;
 
     /// @notice The proportion of AURA that is sold for USDC.
-    uint256 public sellBpsAuraToUsdc;
+    uint16 public sellBpsAuraToUsdc;
 
     /// @notice The current and minimum value (in bps) controlling the minimum executable price (as proprtion of oracle
     ///         price) for a BAL to USDC swap.
@@ -232,12 +232,12 @@ contract AuraAvatarMultiToken is BaseAvatar, PausableUpgradeable, AuraAvatarUtil
 
     /// @notice Updates the proportion of AURA that is sold for USDC. Can only be called by owner.
     /// @param _sellBpsAuraToUsdc The new proportion in bps.
-    function setSellBpsAuraToUsdc(uint256 _sellBpsAuraToUsdc) external onlyOwner {
+    function setSellBpsAuraToUsdc(uint16 _sellBpsAuraToUsdc) external onlyOwner {
         if (_sellBpsAuraToUsdc > MAX_BPS) {
             revert InvalidBps(_sellBpsAuraToUsdc);
         }
 
-        uint256 oldSellBpsAuraToUsdc = sellBpsAuraToUsdc;
+        uint16 oldSellBpsAuraToUsdc = sellBpsAuraToUsdc;
         sellBpsAuraToUsdc = _sellBpsAuraToUsdc;
 
         emit SellBpsAuraToUsdcUpdated(_sellBpsAuraToUsdc, oldSellBpsAuraToUsdc);
@@ -246,17 +246,17 @@ contract AuraAvatarMultiToken is BaseAvatar, PausableUpgradeable, AuraAvatarUtil
     /// @notice Updates the minimum possible value for the minimum executable price (in bps as proportion of an oracle
     ///         price) for a BAL to USDC swap. Can only be called by owner.
     /// @param _minOutBpsBalToUsdcMin The new minimum value in bps.
-    function setMinOutBpsBalToUsdcMin(uint256 _minOutBpsBalToUsdcMin) external onlyOwner {
+    function setMinOutBpsBalToUsdcMin(uint16 _minOutBpsBalToUsdcMin) external onlyOwner {
         if (_minOutBpsBalToUsdcMin > MAX_BPS) {
             revert InvalidBps(_minOutBpsBalToUsdcMin);
         }
 
-        uint256 minOutBpsBalToUsdcVal = minOutBpsBalToUsdc.val;
+        uint16 minOutBpsBalToUsdcVal = minOutBpsBalToUsdc.val;
         if (_minOutBpsBalToUsdcMin > minOutBpsBalToUsdcVal) {
             revert MoreThanBpsVal(_minOutBpsBalToUsdcMin, minOutBpsBalToUsdcVal);
         }
 
-        uint256 oldMinOutBpsBalToUsdcMin = minOutBpsBalToUsdc.min;
+        uint16 oldMinOutBpsBalToUsdcMin = minOutBpsBalToUsdc.min;
         minOutBpsBalToUsdc.min = _minOutBpsBalToUsdcMin;
 
         emit MinOutBpsBalToUsdcMinUpdated(_minOutBpsBalToUsdcMin, oldMinOutBpsBalToUsdcMin);
@@ -265,17 +265,17 @@ contract AuraAvatarMultiToken is BaseAvatar, PausableUpgradeable, AuraAvatarUtil
     /// @notice Updates the minimum possible value for the minimum executable price (in bps as proportion of an oracle
     ///         price) for an AURA to USDC swap. Can only be called by owner.
     /// @param _minOutBpsAuraToUsdcMin The new minimum value in bps.
-    function setMinOutBpsAuraToUsdcMin(uint256 _minOutBpsAuraToUsdcMin) external onlyOwner {
+    function setMinOutBpsAuraToUsdcMin(uint16 _minOutBpsAuraToUsdcMin) external onlyOwner {
         if (_minOutBpsAuraToUsdcMin > MAX_BPS) {
             revert InvalidBps(_minOutBpsAuraToUsdcMin);
         }
 
-        uint256 minOutBpsAuraToUsdcVal = minOutBpsAuraToUsdc.val;
+        uint16 minOutBpsAuraToUsdcVal = minOutBpsAuraToUsdc.val;
         if (_minOutBpsAuraToUsdcMin > minOutBpsAuraToUsdcVal) {
             revert MoreThanBpsVal(_minOutBpsAuraToUsdcMin, minOutBpsAuraToUsdcVal);
         }
 
-        uint256 oldMinOutBpsAuraToUsdcMin = minOutBpsAuraToUsdc.min;
+        uint16 oldMinOutBpsAuraToUsdcMin = minOutBpsAuraToUsdc.min;
         minOutBpsAuraToUsdc.min = _minOutBpsAuraToUsdcMin;
 
         emit MinOutBpsAuraToUsdcMinUpdated(_minOutBpsAuraToUsdcMin, oldMinOutBpsAuraToUsdcMin);
@@ -289,17 +289,17 @@ contract AuraAvatarMultiToken is BaseAvatar, PausableUpgradeable, AuraAvatarUtil
     ///         for a BAL to USDC swap. The value should be more than the minimum value. Can be called by the owner or
     ///         the manager.
     /// @param _minOutBpsBalToUsdcVal The new value in bps.
-    function setMinOutBpsBalToUsdcVal(uint256 _minOutBpsBalToUsdcVal) external onlyOwnerOrManager {
+    function setMinOutBpsBalToUsdcVal(uint16 _minOutBpsBalToUsdcVal) external onlyOwnerOrManager {
         if (_minOutBpsBalToUsdcVal > MAX_BPS) {
             revert InvalidBps(_minOutBpsBalToUsdcVal);
         }
 
-        uint256 minOutBpsBalToUsdcMin = minOutBpsBalToUsdc.min;
+        uint16 minOutBpsBalToUsdcMin = minOutBpsBalToUsdc.min;
         if (_minOutBpsBalToUsdcVal < minOutBpsBalToUsdcMin) {
             revert LessThanBpsMin(_minOutBpsBalToUsdcVal, minOutBpsBalToUsdcMin);
         }
 
-        uint256 oldMinOutBpsBalToUsdcVal = minOutBpsBalToUsdc.val;
+        uint16 oldMinOutBpsBalToUsdcVal = minOutBpsBalToUsdc.val;
         minOutBpsBalToUsdc.val = _minOutBpsBalToUsdcVal;
 
         emit MinOutBpsBalToUsdcValUpdated(_minOutBpsBalToUsdcVal, oldMinOutBpsBalToUsdcVal);
@@ -309,17 +309,17 @@ contract AuraAvatarMultiToken is BaseAvatar, PausableUpgradeable, AuraAvatarUtil
     ///         for an AURA to USDC swap. The value should be more than the minimum value. Can be called by the owner or
     ///         the manager.
     /// @param _minOutBpsAuraToUsdcVal The new value in bps.
-    function setMinOutBpsAuraToUsdcVal(uint256 _minOutBpsAuraToUsdcVal) external onlyOwnerOrManager {
+    function setMinOutBpsAuraToUsdcVal(uint16 _minOutBpsAuraToUsdcVal) external onlyOwnerOrManager {
         if (_minOutBpsAuraToUsdcVal > MAX_BPS) {
             revert InvalidBps(_minOutBpsAuraToUsdcVal);
         }
 
-        uint256 minOutBpsAuraToUsdcMin = minOutBpsAuraToUsdc.min;
+        uint16 minOutBpsAuraToUsdcMin = minOutBpsAuraToUsdc.min;
         if (_minOutBpsAuraToUsdcVal < minOutBpsAuraToUsdcMin) {
             revert LessThanBpsMin(_minOutBpsAuraToUsdcVal, minOutBpsAuraToUsdcMin);
         }
 
-        uint256 oldMinOutBpsAuraToUsdcVal = minOutBpsAuraToUsdc.val;
+        uint16 oldMinOutBpsAuraToUsdcVal = minOutBpsAuraToUsdc.val;
         minOutBpsAuraToUsdc.val = _minOutBpsAuraToUsdcVal;
 
         emit MinOutBpsAuraToUsdcValUpdated(_minOutBpsAuraToUsdcVal, oldMinOutBpsAuraToUsdcVal);

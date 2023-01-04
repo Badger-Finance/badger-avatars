@@ -10,12 +10,7 @@ import {IERC20MetadataUpgradeable} from
 
 import {AuraAvatarMultiToken, TokenAmount} from "../../src/aura/AuraAvatarMultiToken.sol";
 import {AuraAvatarUtils} from "../../src/aura/AuraAvatarUtils.sol";
-import {
-    MAX_BPS,
-    PID_80BADGER_20WBTC,
-    PID_40WBTC_40DIGG_20GRAVIAURA,
-    PID_50BADGER_50RETH
-} from "../../src/BaseConstants.sol";
+import {MAX_BPS, CHAINLINK_KEEPER_REGISTRY} from "../../src/BaseConstants.sol";
 import {AuraConstants} from "../../src/aura/AuraConstants.sol";
 import {IAsset} from "../../src/interfaces/balancer/IAsset.sol";
 import {IBalancerVault, JoinKind} from "../../src/interfaces/balancer/IBalancerVault.sol";
@@ -27,6 +22,11 @@ import {MockV3Aggregator} from "../mocks/MockV3Aggregator.sol";
 
 contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
     AuraAvatarMultiToken avatar;
+
+    // Aura
+    uint256 constant PID_80BADGER_20WBTC = 18;
+    uint256 constant PID_40WBTC_40DIGG_20GRAVIAURA = 19;
+    uint256 constant PID_50BADGER_50RETH = 11;
 
     IERC20MetadataUpgradeable constant BPT_80BADGER_20WBTC =
         IERC20MetadataUpgradeable(0xb460DAa847c45f1C4a41cb05BFB3b51c92e41B36);
@@ -339,8 +339,8 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
 
     function test_setSellBpsAuraToUsd_invalidValues() external {
         vm.prank(owner);
-        vm.expectRevert(abi.encodeWithSelector(AuraAvatarMultiToken.InvalidBps.selector, 1000000));
-        avatar.setSellBpsAuraToUsdc(1000000);
+        vm.expectRevert(abi.encodeWithSelector(AuraAvatarMultiToken.InvalidBps.selector, 60000));
+        avatar.setSellBpsAuraToUsdc(60000);
     }
 
     function test_setSellBpsAuraToUsd_permissions() public {
@@ -362,8 +362,8 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
         vm.startPrank(owner);
         avatar.setMinOutBpsBalToUsdcVal(9500);
 
-        vm.expectRevert(abi.encodeWithSelector(AuraAvatarMultiToken.InvalidBps.selector, 1000000));
-        avatar.setMinOutBpsBalToUsdcMin(1000000);
+        vm.expectRevert(abi.encodeWithSelector(AuraAvatarMultiToken.InvalidBps.selector, 60000));
+        avatar.setMinOutBpsBalToUsdcMin(60000);
 
         vm.expectRevert(abi.encodeWithSelector(AuraAvatarMultiToken.MoreThanBpsVal.selector, 9600, 9500));
         avatar.setMinOutBpsBalToUsdcMin(9600);
@@ -388,8 +388,8 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
         vm.startPrank(owner);
         avatar.setMinOutBpsAuraToUsdcVal(9500);
 
-        vm.expectRevert(abi.encodeWithSelector(AuraAvatarMultiToken.InvalidBps.selector, 1000000));
-        avatar.setMinOutBpsAuraToUsdcMin(1000000);
+        vm.expectRevert(abi.encodeWithSelector(AuraAvatarMultiToken.InvalidBps.selector, 60000));
+        avatar.setMinOutBpsAuraToUsdcMin(60000);
 
         vm.expectRevert(abi.encodeWithSelector(AuraAvatarMultiToken.MoreThanBpsVal.selector, 9600, 9500));
         avatar.setMinOutBpsAuraToUsdcMin(9600);
@@ -424,8 +424,8 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
         vm.startPrank(owner);
         avatar.setMinOutBpsBalToUsdcMin(9000);
 
-        vm.expectRevert(abi.encodeWithSelector(AuraAvatarMultiToken.InvalidBps.selector, 1000000));
-        avatar.setMinOutBpsBalToUsdcVal(1000000);
+        vm.expectRevert(abi.encodeWithSelector(AuraAvatarMultiToken.InvalidBps.selector, 60000));
+        avatar.setMinOutBpsBalToUsdcVal(60000);
 
         vm.expectRevert(abi.encodeWithSelector(AuraAvatarMultiToken.LessThanBpsMin.selector, 1000, 9000));
         avatar.setMinOutBpsBalToUsdcVal(1000);
@@ -456,8 +456,8 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
         vm.startPrank(owner);
         avatar.setMinOutBpsAuraToUsdcMin(9000);
 
-        vm.expectRevert(abi.encodeWithSelector(AuraAvatarMultiToken.InvalidBps.selector, 1000000));
-        avatar.setMinOutBpsAuraToUsdcVal(1000000);
+        vm.expectRevert(abi.encodeWithSelector(AuraAvatarMultiToken.InvalidBps.selector, 60000));
+        avatar.setMinOutBpsAuraToUsdcVal(60000);
 
         vm.expectRevert(abi.encodeWithSelector(AuraAvatarMultiToken.LessThanBpsMin.selector, 1000, 9000));
         avatar.setMinOutBpsAuraToUsdcVal(1000);

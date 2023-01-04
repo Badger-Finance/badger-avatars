@@ -35,8 +35,6 @@ abstract contract AuraConstants {
     bytes32 internal constant AURA_WETH_POOL_ID = 0xcfca23ca9ca720b6e98e3eb9b6aa0ffc4a5c08b9000200000000000000000274; // 50AURA-50WETH
     bytes32 internal constant USDC_WETH_POOL_ID = 0x96646936b91d6b9d7d0c47c496afbf3d6ec7b6f8000200000000000000000019;
 
-    address internal constant CHAINLINK_KEEPER_REGISTRY = 0x02777053d6764996e594c3E88AF1D58D5363a2e6;
-
     IAggregatorV3 internal constant BAL_USD_FEED = IAggregatorV3(0xdF2917806E30300537aEB49A7663062F4d1F2b5F);
     IAggregatorV3 internal constant BAL_ETH_FEED = IAggregatorV3(0xC1438AA3823A6Ba0C159CfA8D98dF5A994bA120b);
     IAggregatorV3 internal constant ETH_USD_FEED = IAggregatorV3(0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419);
