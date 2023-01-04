@@ -147,12 +147,7 @@ contract AuraAvatarMultiToken is BaseAvatar, PausableUpgradeable, AuraAvatarUtil
         });
 
         for (uint256 i; i < _pids.length;) {
-            pids.add(_pids[i]);
-            (address lpToken,,, address crvRewards,,) = AURA_BOOSTER.poolInfo(_pids[i]);
-            assets.add(lpToken);
-            baseRewardPools.add(crvRewards);
-            // Boster approval for bpts
-            IERC20MetadataUpgradeable(lpToken).safeApprove(address(AURA_BOOSTER), type(uint256).max);
+            _addBptPositionInfo(_pids[i]);
             unchecked {
                 ++i;
             }
@@ -409,13 +404,7 @@ contract AuraAvatarMultiToken is BaseAvatar, PausableUpgradeable, AuraAvatarUtil
     /// @dev given a target PID, it will add the details in the `EnumerableSet`: pids, assets & baseRewardPools
     /// @param _newPid target pid numeric value to add in contract's storage
     function addBptPositionInfo(uint256 _newPid) external onlyOwner {
-        if (pids.contains(_newPid)) {
-            revert PidAlreadyExist(_newPid);
-        }
-        pids.add(_newPid);
-        (address lpToken,,, address crvRewards,,) = AURA_BOOSTER.poolInfo(_newPid);
-        assets.add(lpToken);
-        baseRewardPools.add(crvRewards);
+        _addBptPositionInfo(_newPid);
     }
 
     /// @dev given a target PID, it will remove the details from the `EnumerableSet`: pids, assets & baseRewardPools
@@ -566,6 +555,18 @@ contract AuraAvatarMultiToken is BaseAvatar, PausableUpgradeable, AuraAvatarUtil
     ////////////////////////////////////////////////////////////////////////////
     // INTERNAL
     ////////////////////////////////////////////////////////////////////////////
+
+    function _addBptPositionInfo(uint256 _newPid) internal {
+        if (pids.contains(_newPid)) {
+            revert PidAlreadyExist(_newPid);
+        }
+        pids.add(_newPid);
+        (address lpToken,,, address crvRewards,,) = AURA_BOOSTER.poolInfo(_newPid);
+        assets.add(lpToken);
+        baseRewardPools.add(crvRewards);
+        // Boster approval for bpts
+        IERC20MetadataUpgradeable(lpToken).safeApprove(address(AURA_BOOSTER), type(uint256).max);
+    }
 
     /// @notice Unstakes the given amount of assets and transfers them back to owner.
     /// @dev This function doesn't claim any rewards. Caller can only be owner.
