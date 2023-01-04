@@ -414,11 +414,17 @@ contract AuraAvatarMultiToken is BaseAvatar, PausableUpgradeable, AuraAvatarUtil
             revert PidNotIncluded(_removePid);
         }
 
-        // TODO: Cache this somewhere?
         (address lpToken,,, address crvRewards,,) = AURA_BOOSTER.poolInfo(_removePid);
-        uint256 stakedAmount = IBaseRewardPool(crvRewards).balanceOf(address(this));
+        IBaseRewardPool baseRewardPool = IBaseRewardPool(crvRewards);
+
+        uint256 stakedAmount = baseRewardPool.balanceOf(address(this));
         if (stakedAmount > 0) {
             revert BptStillStaked(lpToken, crvRewards, stakedAmount);
+        }
+
+        // NOTE: verify pending rewards and claim. Processing is done separately
+        if (baseRewardPool.earned(address(this)) > 0) {
+            baseRewardPool.getReward();
         }
 
         // NOTE: indeed if nothing is staked, then remove from storage
