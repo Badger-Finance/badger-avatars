@@ -317,7 +317,7 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
 
     /// @notice Unstakes all staked assets and transfers them back to owner. Can only be called by owner.
     /// It will loop thru all existent keks and withdraw fully from each of them.
-    /// @dev This function doesn't claim any rewards.
+    /// @dev Internally in the unified farm contract calls `getReward` collecting rewards and updating the balances
     /// @param _pid Pid target to withdraw from avatar private vault
     function withdrawFromPrivateVault(uint256 _pid) external onlyOwner {
         address vaultAddr = privateVaults[_pid];
