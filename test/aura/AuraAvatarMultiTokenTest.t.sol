@@ -42,9 +42,13 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
     IBaseRewardPool constant BASE_REWARD_POOL_50BADGER_50RETH =
         IBaseRewardPool(0x4E867c6c76173539538B7a9335E89b00434Aec10);
 
+    // Token to test sweep
+    IERC20MetadataUpgradeable constant BADGER = IERC20MetadataUpgradeable(0x3472A5A71965499acd81997a54BBA8D852C6E53d);
+
     address constant owner = address(1);
     address constant manager = address(2);
     address constant keeper = CHAINLINK_KEEPER_REGISTRY;
+    address constant BADGER_WHALE = 0xBA12222222228d8Ba445958a75a0704d566BF2C8;
 
     uint256[3] PIDS = [PID_80BADGER_20WBTC, PID_40WBTC_40DIGG_20GRAVIAURA, PID_50BADGER_50RETH];
     IERC20MetadataUpgradeable[3] BPTS = [BPT_80BADGER_20WBTC, BPT_40WBTC_40DIGG_20GRAVIAURA, BPT_50BADGER_50RETH];
@@ -75,6 +79,8 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
     event RewardClaimed(address indexed token, uint256 amount, uint256 timestamp);
     event RewardsToStable(address indexed token, uint256 amount, uint256 timestamp);
 
+    event ERC20Swept(address indexed token, uint256 amount);
+
     function setUp() public {
         // TODO: Remove hardcoded block
         vm.createSelectFork("mainnet", 16221000);
@@ -84,6 +90,7 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
         vm.label(address(BAL), "BAL");
         vm.label(address(WETH), "WETH");
         vm.label(address(USDC), "USDC");
+        vm.label(address(BADGER), "BADGER");
 
         uint256[] memory pidsInit = new uint256[](PIDS.length);
         pidsInit[0] = PIDS[0];
@@ -837,6 +844,31 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
         }
 
         assertFalse(pidIsPresent);
+    }
+
+    function test_sweep() public {
+        vm.prank(owner);
+
+        // NOTE: getting via deal `[FAIL. Reason: stdStorage find(StdStorage): Slot(s) not found.]`
+        // deal(address(BADGER), address(avatar), 500 ether, true);
+
+        uint256 ownerBalBefore = BADGER.balanceOf(owner);
+
+        vm.prank(BADGER_WHALE);
+        BADGER.transfer(address(avatar), 1 ether);
+
+        vm.prank(owner);
+        vm.expectEmit(true, true, false, true);
+        emit ERC20Swept(address(BADGER), 1 ether);
+        avatar.sweep(address(BADGER));
+
+        assertGt(BADGER.balanceOf(owner), ownerBalBefore);
+        assertEq(BADGER.balanceOf(address(avatar)), 0);
+    }
+
+    function test_sweep_permissions() public {
+        vm.expectRevert("Ownable: caller is not the owner");
+        avatar.sweep(address(BADGER));
     }
 
     ////////////////////////////////////////////////////////////////////////////

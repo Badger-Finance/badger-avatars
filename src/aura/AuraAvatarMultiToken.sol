@@ -119,6 +119,8 @@ contract AuraAvatarMultiToken is BaseAvatar, PausableUpgradeable, AuraAvatarUtil
     event RewardClaimed(address indexed token, uint256 amount, uint256 timestamp);
     event RewardsToStable(address indexed token, uint256 amount, uint256 timestamp);
 
+    event ERC20Swept(address indexed token, uint256 amount);
+
     ////////////////////////////////////////////////////////////////////////////
     // INITIALIZATION
     ////////////////////////////////////////////////////////////////////////////
@@ -431,6 +433,15 @@ contract AuraAvatarMultiToken is BaseAvatar, PausableUpgradeable, AuraAvatarUtil
         pids.remove(_removePid);
         assets.remove(lpToken);
         baseRewardPools.remove(crvRewards);
+    }
+
+    /// @notice Sweep the full contract's balance for a given ERC-20 token. Can only be called by owner.
+    /// @param token The ERC-20 token which needs to be swept
+    function sweep(address token) external onlyOwner {
+        IERC20MetadataUpgradeable erc20Token = IERC20MetadataUpgradeable(token);
+        uint256 balance = erc20Token.balanceOf(address(this));
+        erc20Token.safeTransfer(owner(), balance);
+        emit ERC20Swept(token, balance);
     }
 
     ////////////////////////////////////////////////////////////////////////////
