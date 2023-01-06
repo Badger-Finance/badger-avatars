@@ -660,6 +660,37 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
         assertEq(BPT_50BADGER_50RETH.balanceOf(owner), 14e18);
     }
 
+    function test_withdraw_emergency_manager() public {
+        uint256[] memory amountsDeposit = new uint256[](PIDS.length);
+        amountsDeposit[0] = 20 ether;
+        amountsDeposit[1] = 10 ether;
+        amountsDeposit[2] = 12 ether;
+        uint256[] memory pidsInit = new uint256[](PIDS.length);
+        pidsInit[0] = PIDS[0];
+        pidsInit[1] = PIDS[1];
+        pidsInit[2] = PIDS[2];
+
+        vm.startPrank(owner);
+        avatar.deposit(pidsInit, amountsDeposit);
+        vm.stopPrank();
+
+        // NOTE: switch of role to manager, emergency testing!
+        vm.startPrank(manager);
+        uint256[] memory amountsWithdraw = new uint256[](PIDS.length);
+        amountsWithdraw[0] = 10 ether;
+        amountsWithdraw[1] = 5 ether;
+        amountsWithdraw[2] = 6 ether;
+        for (uint256 i; i < PIDS.length; ++i) {
+            vm.expectEmit(true, false, false, true);
+            emit Withdraw(address(BPTS[i]), amountsWithdraw[i], block.timestamp);
+        }
+        avatar.withdraw(pidsInit, amountsWithdraw);
+
+        assertEq(BPT_80BADGER_20WBTC.balanceOf(owner), 10e18);
+        assertEq(BPT_40WBTC_40DIGG_20GRAVIAURA.balanceOf(owner), 15e18);
+        assertEq(BPT_50BADGER_50RETH.balanceOf(owner), 14e18);
+    }
+
     function test_withdraw_nothing() public {
         uint256[] memory amountsWithdraw = new uint256[](PIDS.length);
         uint256[] memory pidsInit = new uint256[](PIDS.length);
