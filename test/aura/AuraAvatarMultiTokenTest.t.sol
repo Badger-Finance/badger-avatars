@@ -111,18 +111,6 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
     // Initialization
     ////////////////////////////////////////////////////////////////////////////
 
-    function test_constructor() public {
-        uint256[] memory pids = avatar.getPids();
-        address[] memory bpts = avatar.getAssets();
-        address[] memory baseRewardPools = avatar.getbaseRewardPools();
-
-        for (uint256 i; i < pids.length; ++i) {
-            assertEq(pids[i], PIDS[i]);
-            assertEq(bpts[i], address(BPTS[i]));
-            assertEq(baseRewardPools[i], address(BASE_REWARD_POOLS[i]));
-        }
-    }
-
     function test_initialize() public {
         assertEq(avatar.owner(), owner);
         assertFalse(avatar.paused());
@@ -139,6 +127,16 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
         (bpsVal, bpsMin) = avatar.minOutBpsAuraToUsdc();
         assertEq(bpsVal, 9750);
         assertEq(bpsMin, 9000);
+
+        uint256[] memory pids = avatar.getPids();
+        address[] memory bpts = avatar.getAssets();
+        address[] memory baseRewardPools = avatar.getbaseRewardPools();
+
+        for (uint256 i; i < pids.length; ++i) {
+            assertEq(pids[i], PIDS[i]);
+            assertEq(bpts[i], address(BPTS[i]));
+            assertEq(baseRewardPools[i], address(BASE_REWARD_POOLS[i]));
+        }
     }
 
     function test_proxy_vars() public {
