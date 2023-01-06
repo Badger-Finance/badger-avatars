@@ -34,6 +34,7 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
         IERC20MetadataUpgradeable(0x8eB6c82C3081bBBd45DcAC5afA631aaC53478b7C);
     IERC20MetadataUpgradeable constant BPT_50BADGER_50RETH =
         IERC20MetadataUpgradeable(0xe340EBfcAA544da8bB1Ee9005F1a346D50Ec422e);
+    IERC20MetadataUpgradeable BPT_50RETH_50RPL = IERC20MetadataUpgradeable(0x0fd5663D4893AE0D579D580584806AAdd2dD0B8b);
 
     IBaseRewardPool constant BASE_REWARD_POOL_80BADGER_20WBTC =
         IBaseRewardPool(0x4EFc8DED860Bc472FA8d938dc3fD4946Bc1A0a18);
@@ -41,6 +42,7 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
         IBaseRewardPool(0xD7c9c6922db15F47EF3131F2830d8E87f7637210);
     IBaseRewardPool constant BASE_REWARD_POOL_50BADGER_50RETH =
         IBaseRewardPool(0x4E867c6c76173539538B7a9335E89b00434Aec10);
+    IBaseRewardPool constant BASE_REWARD_POOL_50RETH_50RPL = IBaseRewardPool(0x21e2DF86658c8ad41a05453Fa5815A0d91273ee9);
 
     // Token to test sweep
     IERC20MetadataUpgradeable constant BADGER = IERC20MetadataUpgradeable(0x3472A5A71965499acd81997a54BBA8D852C6E53d);
@@ -798,20 +800,31 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
     }
 
     function test_addBptPositionInfo() public {
+        // NOTE: use to track if length increased after adding in these sets
+        address[] memory beforeAvatarAssets = avatar.getAssets();
+        address[] memory beforeAvatarRewardPools = avatar.getbaseRewardPools();
+
         vm.prank(owner);
         avatar.addBptPositionInfo(21);
 
         uint256[] memory avatarPids = avatar.getPids();
+        address[] memory afterAvatarAssets = avatar.getAssets();
+        address[] memory afterAvatarRewardPools = avatar.getbaseRewardPools();
         bool pidIsAdded;
 
         for (uint256 i; i < avatarPids.length; ++i) {
             if (avatarPids[i] == 21) {
                 pidIsAdded = true;
+                // NOTE: verify lptoken & base reward contract addresses save on set storage
+                assertEq(afterAvatarAssets[i], address(BPT_50RETH_50RPL));
+                assertEq(afterAvatarRewardPools[i], address(BASE_REWARD_POOL_50RETH_50RPL));
                 break;
             }
         }
 
         assertTrue(pidIsAdded);
+        assertGt(afterAvatarAssets.length, beforeAvatarAssets.length);
+        assertGt(afterAvatarRewardPools.length, beforeAvatarRewardPools.length);
     }
 
     function test_addBptPositionInfo_alreadyExists() public {
