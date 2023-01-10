@@ -7,6 +7,6 @@ struct TokenAmount {
 }
 
 struct BpsConfig {
-    uint256 val;
-    uint256 min;
+    uint16 val;
+    uint16 min;
 }
