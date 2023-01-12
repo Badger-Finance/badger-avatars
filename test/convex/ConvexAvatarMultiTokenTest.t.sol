@@ -33,9 +33,13 @@ contract ConvexAvatarMultiTokenTest is Test, ConvexAvatarUtils {
     IBaseRewardPool constant BASE_REWARD_POOL_BADGER_WBTC = IBaseRewardPool(0x36c7E7F9031647A74687ce46A8e16BcEA84f3865);
     IFraxUnifiedFarm constant UNIFIED_FARM_BADGER_FRAXBP = IFraxUnifiedFarm(0x5a92EF27f4baA7C766aee6d751f754EBdEBd9fae);
 
+    // Token to test sweep
+    IERC20MetadataUpgradeable constant BADGER = IERC20MetadataUpgradeable(0x3472A5A71965499acd81997a54BBA8D852C6E53d);
+
     address constant owner = address(1);
     address constant manager = address(2);
     address constant keeper = CHAINLINK_KEEPER_REGISTRY;
+    address constant BADGER_WHALE = 0xBA12222222228d8Ba445958a75a0704d566BF2C8;
 
     address[2] assetsExpected = [address(CURVE_LP_BADGER_WBTC), address(WCVX_BADGER_FRAXBP)];
 
@@ -59,6 +63,8 @@ contract ConvexAvatarMultiTokenTest is Test, ConvexAvatarUtils {
     event RewardClaimed(address indexed token, uint256 amount, uint256 timestamp);
     event RewardsToStable(address indexed token, uint256 amount, uint256 timestamp);
 
+    event ERC20Swept(address indexed token, uint256 amount);
+
     function setUp() public {
         // NOTE: pin a block where all required contracts already has being deployed
         vm.createSelectFork("mainnet", 16084000);
@@ -70,6 +76,7 @@ contract ConvexAvatarMultiTokenTest is Test, ConvexAvatarUtils {
         vm.label(address(DAI), "DAI");
         vm.label(address(FRAX), "FRAX");
         vm.label(address(WETH), "WETH");
+        vm.label(address(BADGER), "BADGER");
 
         uint256[] memory pidsInit = new uint256[](1);
         pidsInit[0] = CONVEX_PID_BADGER_WBTC;
@@ -114,7 +121,7 @@ contract ConvexAvatarMultiTokenTest is Test, ConvexAvatarUtils {
         assertEq(bpsVal, 9850);
         assertEq(bpsMin, 9500);
 
-        (bpsVal, bpsMin) = avatar.minOutBpsWethToUsdc();
+        (bpsVal, bpsMin) = avatar.minOutBpsWethToDai();
         assertEq(bpsVal, 9850);
         assertEq(bpsMin, 9500);
 
@@ -302,6 +309,31 @@ contract ConvexAvatarMultiTokenTest is Test, ConvexAvatarUtils {
         }
 
         assertFalse(pidIsPresent);
+    }
+
+    function test_sweep() public {
+        vm.prank(owner);
+
+        // NOTE: getting via deal `[FAIL. Reason: stdStorage find(StdStorage): Slot(s) not found.]`
+        // deal(address(BADGER), address(avatar), 500 ether, true);
+
+        uint256 ownerBalBefore = BADGER.balanceOf(owner);
+
+        vm.prank(BADGER_WHALE);
+        BADGER.transfer(address(avatar), 1 ether);
+
+        vm.prank(owner);
+        vm.expectEmit(true, true, false, true);
+        emit ERC20Swept(address(BADGER), 1 ether);
+        avatar.sweep(address(BADGER));
+
+        assertGt(BADGER.balanceOf(owner), ownerBalBefore);
+        assertEq(BADGER.balanceOf(address(avatar)), 0);
+    }
+
+    function test_sweep_permissions() public {
+        vm.expectRevert("Ownable: caller is not the owner");
+        avatar.sweep(address(BADGER));
     }
 
     ////////////////////////////////////////////////////////////////////////////

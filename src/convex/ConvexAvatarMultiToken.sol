@@ -67,8 +67,8 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
     ///         price) for an FXS to FRAX swap.
     BpsConfig public minOutBpsFxsToFrax;
     /// @notice The current and minimum value (in bps) controlling the minimum executable price (as proprtion of oracle
-    ///         price) for an WETH to USDC swap.
-    BpsConfig public minOutBpsWethToUsdc;
+    ///         price) for an WETH to DAI swap.
+    BpsConfig public minOutBpsWethToDai;
     /// @notice The current and minimum value (in bps) controlling the minimum executable price (as proprtion of oracle
     ///         price) for an FRAX to DAI swap.
     BpsConfig public minOutBpsFraxToDai;
@@ -108,6 +108,8 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
     error NoExistingLockInPrivateVault(address vault);
     error NoExpiredLock(address vault, bytes32 kekId);
 
+    error LengthMismatch();
+
     ////////////////////////////////////////////////////////////////////////////
     // EVENTS
     ////////////////////////////////////////////////////////////////////////////
@@ -119,13 +121,15 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
     event MinOutBpsCrvToWethValUpdated(uint256 newValue, uint256 oldValue);
     event MinOutBpsCvxToWethValUpdated(uint256 newValue, uint256 oldValue);
     event MinOutBpsFxsToFraxValUpdated(uint256 newValue, uint256 oldValue);
-    event MinOutBpsWethToUsdcValUpdated(uint256 newValue, uint256 oldValue);
+    event MinOutBpsWethToDaiValUpdated(uint256 newValue, uint256 oldValue);
 
     event Deposit(address indexed token, uint256 amount, uint256 timestamp);
     event Withdraw(address indexed token, uint256 amount, uint256 timestamp);
 
     event RewardClaimed(address indexed token, uint256 amount, uint256 timestamp);
     event RewardsToStable(address indexed token, uint256 amount, uint256 timestamp);
+
+    event ERC20Swept(address indexed token, uint256 amount);
 
     ////////////////////////////////////////////////////////////////////////////
     // MODIFIERS
@@ -186,7 +190,7 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
             val: 9850, // 98.5%
             min: 9500 // 95%
         });
-        minOutBpsWethToUsdc = BpsConfig({
+        minOutBpsWethToDai = BpsConfig({
             val: 9850, // 98.5%
             min: 9500 // 95%
         });
@@ -359,7 +363,11 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
     /// @param _pids Pids target to stake into
     /// @param _amountAssets Amount of assets to be staked.
     function deposit(uint256[] calldata _pids, uint256[] calldata _amountAssets) external onlyOwner {
-        for (uint256 i; i < _pids.length; i++) {
+        uint256 pidLength = _pids.length;
+        if (pidLength != _amountAssets.length) {
+            revert LengthMismatch();
+        }
+        for (uint256 i; i < pidLength;) {
             /// @dev verify if pid is in storage and amount is > 0
             if (!pids.contains(_pids[i])) {
                 revert PidNotIncluded(_pids[i]);
@@ -374,6 +382,10 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
             CONVEX_BOOSTER.deposit(_pids[i], _amountAssets[i], true);
 
             emit Deposit(lpToken, _amountAssets[i], block.timestamp);
+
+            unchecked {
+                ++i;
+            }
         }
     }
 
@@ -394,6 +406,9 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
     /// @param _pids Pids targetted to withdraw from
     /// @param _amountAssets Amount of assets to be unstaked.
     function withdraw(uint256[] calldata _pids, uint256[] calldata _amountAssets) external onlyOwnerOrManager {
+        if (_pids.length != _amountAssets.length) {
+            revert LengthMismatch();
+        }
         _withdraw(_pids, _amountAssets);
     }
 
@@ -443,6 +458,15 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
         pids.remove(_removePid);
         assets.remove(lpToken);
         baseRewardPools.remove(crvRewards);
+    }
+
+    /// @notice Sweep the full contract's balance for a given ERC-20 token. Can only be called by owner.
+    /// @param token The ERC-20 token which needs to be swept
+    function sweep(address token) external onlyOwner {
+        IERC20MetadataUpgradeable erc20Token = IERC20MetadataUpgradeable(token);
+        uint256 balance = erc20Token.balanceOf(address(this));
+        erc20Token.safeTransfer(msg.sender, balance);
+        emit ERC20Swept(token, balance);
     }
 
     ////////////////////////////////////////////////////////////////////////////
@@ -507,7 +531,7 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
             (address lpToken,,, address crvRewards,,) = CONVEX_BOOSTER.poolInfo(_pids[i]);
 
             IBaseRewardPool(crvRewards).withdrawAndUnwrap(_curveLpDeposited[i], false);
-            IERC20MetadataUpgradeable(lpToken).safeTransfer(msg.sender, _curveLpDeposited[i]);
+            IERC20MetadataUpgradeable(lpToken).safeTransfer(owner(), _curveLpDeposited[i]);
 
             emit Withdraw(lpToken, _curveLpDeposited[i], block.timestamp);
         }
@@ -616,7 +640,7 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
                 recipient: owner(),
                 deadline: type(uint256).max,
                 amountIn: _wethAmount,
-                amountOutMinimum: (getWethAmountInDai(_wethAmount) * minOutBpsWethToUsdc.val) / MAX_BPS,
+                amountOutMinimum: (getWethAmountInDai(_wethAmount) * minOutBpsWethToDai.val) / MAX_BPS,
                 sqrtPriceLimitX96: 0 // Inactive param
             })
         );
