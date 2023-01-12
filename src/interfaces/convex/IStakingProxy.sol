@@ -8,6 +8,10 @@ interface IStakingProxy {
 
     function getReward() external;
 
+    function lockAdditional(bytes32 _kekId, uint256 _addLiq) external;
+
+    function lockLonger(bytes32 _kekId, uint256 newEndingTs) external;
+
     function stakingAddress() external view returns (address);
 
     function stakingToken() external view returns (address);

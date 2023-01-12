@@ -105,6 +105,7 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
     error PoolDeactivated(uint256 pid);
     error PidNotIncluded(uint256 pid);
     error NoPrivateVaultForPid(uint256 pid);
+    error NoExistingLockInPrivateVault(address vault);
 
     ////////////////////////////////////////////////////////////////////////////
     // EVENTS
@@ -276,7 +277,12 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
     /// @notice Takes a given amount of asset from the owner and stakes them on private vault. Can only be called by owner.
     /// @param _pid Pid target to stake into its appropiate vault
     /// @param _amountAsset Amount of asset to be lock.
-    function depositInPrivateVault(uint256 _pid, uint256 _amountAsset) external onlyOwner returns (bytes32 kekId) {
+    /// @param _additionalFunds Allows to deposit further funds in the same lock within the private vault when `True`
+    function depositInPrivateVault(uint256 _pid, uint256 _amountAsset, bool _additionalFunds)
+        external
+        onlyOwner
+        returns (bytes32 kekId)
+    {
         if (_amountAsset == 0) {
             revert NothingToDeposit();
         }
@@ -291,10 +297,20 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
         IFraxUnifiedFarm farm = IFraxUnifiedFarm(proxy.stakingAddress());
 
         IERC20MetadataUpgradeable(stakingToken).safeTransferFrom(msg.sender, address(this), _amountAsset);
-        /// NOTE: we always try to lock for the min duration allowed
-        kekId = proxy.stakeLocked(_amountAsset, farm.lock_time_min());
-        /// @dev detailed required to enable withdrawls later
-        kekIds[vaultAddr] = kekId;
+
+        if (_additionalFunds) {
+            kekId = kekIds[vaultAddr];
+            if (kekId == bytes32(0)) {
+                revert NoExistingLockInPrivateVault(vaultAddr);
+            }
+
+            proxy.lockAdditional(kekId, _amountAsset);
+        } else {
+            /// NOTE: we always try to lock for the min duration allowed
+            kekId = proxy.stakeLocked(_amountAsset, farm.lock_time_min());
+            /// @dev detailed required to enable withdrawls later
+            kekIds[vaultAddr] = kekId;
+        }
 
         emit Deposit(stakingToken, _amountAsset, block.timestamp);
     }
