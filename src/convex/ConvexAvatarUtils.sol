@@ -9,11 +9,14 @@ contract ConvexAvatarUtils is BaseAvatarUtils, ConvexConstants {
     // INTERNAL VIEW
     ////////////////////////////////////////////////////////////////////////////
 
-    /// @dev Assumes frax:usd is 1:1
     function getFxsAmountInFrax(uint256 _fxsAmount) internal view returns (uint256 usdcAmount_) {
+        // NOTE: 8 decimals answer
         uint256 fxsInUsd = fetchPriceFromClFeed(FXS_USD_FEED, CL_FEED_DAY_HEARTBEAT);
+        // NOTE: 8 decimals answer
+        uint256 fraxInUsd = fetchPriceFromClFeed(FRAX_USD_FEED, CL_FEED_HOUR_HEARTBEAT);
+        uint256 fxsFraxRatio = (fxsInUsd * 1e8) / fraxInUsd;
         // Divisor is 10^8 and uint256 max ~ 10^77 so this shouldn't overflow for normal amounts
-        usdcAmount_ = (_fxsAmount * fxsInUsd) / FEED_DIVISOR_FXS_USD;
+        usdcAmount_ = (_fxsAmount * fxsFraxRatio) / FEED_DIVISOR_FXS_USD;
     }
 
     function getCrvAmountInEth(uint256 _crvAmount) internal view returns (uint256 usdcAmount_) {
