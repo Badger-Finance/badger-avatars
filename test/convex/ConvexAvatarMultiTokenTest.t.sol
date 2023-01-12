@@ -403,7 +403,7 @@ contract ConvexAvatarMultiTokenTest is Test, ConvexAvatarUtils {
         assertEq(kekId, avatar.kekIds(vaultAddr));
     }
 
-    function test_depositPrivateVault_additionalFunds() public {
+    function test_depositPrivateVault_additional_funds() public {
         uint256 amountToLock = 10 ether;
         vm.prank(owner);
         avatar.depositInPrivateVault(CONVEX_PID_BADGER_FRAXBP, amountToLock, false);
@@ -424,7 +424,7 @@ contract ConvexAvatarMultiTokenTest is Test, ConvexAvatarUtils {
         assertEq(kekId, avatar.kekIds(vaultAddr));
     }
 
-    function test_depositPrivateVault_additionalFunds_notLockInitiated() public {
+    function test_depositPrivateVault_additionalFunds_not_lock_initiated() public {
         vm.expectRevert(
             abi.encodeWithSelector(
                 ConvexAvatarMultiToken.NoExistingLockInPrivateVault.selector,
@@ -527,6 +527,21 @@ contract ConvexAvatarMultiTokenTest is Test, ConvexAvatarUtils {
         assertEq(IFraxUnifiedFarm(proxy.stakingAddress()).lockedLiquidityOf(vaultAddr), 0);
 
         assertEq(CURVE_LP_BADGER_FRAXBP.balanceOf(owner), 20e18);
+    }
+
+    function test_withdrawFromPrivateVault_not_lock_expired() public {
+        vm.prank(owner);
+        bytes32 kekId = avatar.depositInPrivateVault(CONVEX_PID_BADGER_FRAXBP, 20 ether, false);
+
+        skip(3 days);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                ConvexAvatarMultiToken.NoExpiredLock.selector, avatar.privateVaults(CONVEX_PID_BADGER_FRAXBP), kekId
+            )
+        );
+        vm.prank(owner);
+        avatar.withdrawFromPrivateVault(CONVEX_PID_BADGER_FRAXBP);
     }
 
     function test_withdrawFromPrivateVault_nothing() public {

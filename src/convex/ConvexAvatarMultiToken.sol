@@ -106,6 +106,7 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
     error PidNotIncluded(uint256 pid);
     error NoPrivateVaultForPid(uint256 pid);
     error NoExistingLockInPrivateVault(address vault);
+    error NoExpiredLock(address vault, bytes32 kekId);
 
     ////////////////////////////////////////////////////////////////////////////
     // EVENTS
@@ -327,14 +328,22 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
         }
 
         IStakingProxy proxy = IStakingProxy(vaultAddr);
-        uint256 lockedBal = IFraxUnifiedFarm(proxy.stakingAddress()).lockedLiquidityOf(vaultAddr);
+        IFraxUnifiedFarm unifiedFarm = IFraxUnifiedFarm(proxy.stakingAddress());
+
+        uint256 lockedBal = unifiedFarm.lockedLiquidityOf(vaultAddr);
         if (lockedBal == 0) {
             revert NothingToWithdraw();
         }
 
         bytes32 kek = kekIds[vaultAddr];
 
-        // TODO: double-check that indeed that kek_id is expired
+        /// @dev: only inspecting index `0` given that we only use an unique lock id per private vault
+        (,,, uint256 endingTimestamp,) = unifiedFarm.lockedStakes(vaultAddr, 0);
+
+        if (block.timestamp < endingTimestamp) {
+            revert NoExpiredLock(vaultAddr, kek);
+        }
+
         proxy.withdrawLockedAndUnwrap(kek);
 
         IERC20MetadataUpgradeable curveLp = IERC20MetadataUpgradeable(proxy.curveLpToken());
