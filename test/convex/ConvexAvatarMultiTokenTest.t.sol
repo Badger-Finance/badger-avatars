@@ -247,7 +247,7 @@ contract ConvexAvatarMultiTokenTest is Test, ConvexAvatarUtils {
         avatar.addCurveLpPositionInfo(21);
     }
 
-    function test_addCurveLp_position_infopt() public {
+    function test_addCurveLp_position_info() public {
         vm.prank(owner);
         avatar.addCurveLpPositionInfo(21);
 
@@ -261,6 +261,15 @@ contract ConvexAvatarMultiTokenTest is Test, ConvexAvatarUtils {
         }
 
         assertTrue(pidIsAdded);
+    }
+
+    function test_addCurveLp_position_already_exists() public {
+        vm.prank(owner);
+        avatar.addCurveLpPositionInfo(21);
+
+        vm.prank(owner);
+        vm.expectRevert(abi.encodeWithSelector(ConvexAvatarMultiToken.PidAlreadyExist.selector, 21));
+        avatar.addCurveLpPositionInfo(21);
     }
 
     function test_removeCurveLp_position_info_permissions() public {
@@ -418,6 +427,15 @@ contract ConvexAvatarMultiTokenTest is Test, ConvexAvatarUtils {
         avatar.deposit(pidsInit, amountsDeposit);
     }
 
+    function test_deposit_length_mismatch() public {
+        uint256[] memory amountsDeposit = new uint256[](1);
+        uint256[] memory pidsInit = new uint256[](2);
+
+        vm.prank(owner);
+        vm.expectRevert(abi.encodeWithSelector(ConvexAvatarMultiToken.LengthMismatch.selector));
+        avatar.deposit(pidsInit, amountsDeposit);
+    }
+
     function test_depositPrivateVault() public {
         uint256 amountToLock = 20 ether;
         vm.prank(owner);
@@ -541,6 +559,15 @@ contract ConvexAvatarMultiTokenTest is Test, ConvexAvatarUtils {
         pidsInit[0] = CONVEX_PID_BADGER_WBTC;
         vm.expectRevert(abi.encodeWithSelector(ConvexAvatarMultiToken.NotOwnerOrManager.selector, keeper));
         vm.prank(keeper);
+        avatar.withdraw(pidsInit, amountsWithdraw);
+    }
+
+    function test_withdraw_length_mismatch() public {
+        uint256[] memory amountsWithdraw = new uint256[](1);
+        uint256[] memory pidsInit = new uint256[](2);
+
+        vm.prank(owner);
+        vm.expectRevert(abi.encodeWithSelector(ConvexAvatarMultiToken.LengthMismatch.selector));
         avatar.withdraw(pidsInit, amountsWithdraw);
     }
 

@@ -104,6 +104,7 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
 
     error PoolDeactivated(uint256 pid);
     error PidNotIncluded(uint256 pid);
+    error PidAlreadyExist(uint256 pid);
     error NoPrivateVaultForPid(uint256 pid);
     error NoExistingLockInPrivateVault(address vault);
     error NoExpiredLock(address vault, bytes32 kekId);
@@ -511,6 +512,9 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
     }
 
     function _addCurveLpPositionInfo(uint256 _newPid) internal {
+        if (pids.contains(_newPid)) {
+            revert PidAlreadyExist(_newPid);
+        }
         pids.add(_newPid);
         (address lpToken,,, address crvRewards,,) = CONVEX_BOOSTER.poolInfo(_newPid);
         assets.add(lpToken);
