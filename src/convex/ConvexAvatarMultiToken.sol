@@ -13,7 +13,7 @@ import {EnumerableSetUpgradeable} from
 import {IUniswapRouterV3} from "../interfaces/uniswap/IUniswapRouterV3.sol";
 
 import {BaseAvatar} from "../lib/BaseAvatar.sol";
-import {MAX_BPS} from "../BaseConstants.sol";
+import {MAX_BPS, CHAINLINK_KEEPER_REGISTRY} from "../BaseConstants.sol";
 import {BpsConfig, TokenAmount} from "../BaseStructs.sol";
 import {ConvexAvatarUtils} from "./ConvexAvatarUtils.sol";
 import {IBaseRewardPool} from "../interfaces/aura/IBaseRewardPool.sol";
@@ -44,8 +44,6 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
     /// @notice Address of the manager of the avatar. Manager has limited permissions and can harvest rewards or
     ///         fine-tune operational settings.
     address public manager;
-    /// @notice Address of the keeper of the avatar. Keeper can only harvest rewards at a predefined frequency.
-    address public keeper;
 
     /// @notice Pool IDS (in CONVEX Booster) of strategy tokens.
     EnumerableSetUpgradeable.UintSet internal pids;
@@ -113,7 +111,6 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
     ////////////////////////////////////////////////////////////////////////////
 
     event ManagerUpdated(address indexed newManager, address indexed oldManager);
-    event KeeperUpdated(address indexed newKeeper, address indexed oldKeeper);
 
     event ClaimFrequencyUpdated(uint256 newClaimFrequency, uint256 oldClaimFrequency);
 
@@ -142,24 +139,20 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
 
     /// @notice Checks whether a call is from the keeper.
     modifier onlyKeeper() {
-        if (msg.sender != keeper) {
+        if (msg.sender != CHAINLINK_KEEPER_REGISTRY) {
             revert NotKeeper(msg.sender);
         }
         _;
     }
 
-    function initialize(
-        address _owner,
-        address _manager,
-        address _keeper,
-        uint256[] calldata _pids,
-        uint256[] calldata _fraxPids
-    ) public initializer {
+    function initialize(address _owner, address _manager, uint256[] calldata _pids, uint256[] calldata _fraxPids)
+        public
+        initializer
+    {
         __BaseAvatar_init(_owner);
         __Pausable_init();
 
         manager = _manager;
-        keeper = _keeper;
 
         claimFrequency = 1 weeks;
 
@@ -239,15 +232,6 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
         emit ManagerUpdated(_manager, oldManager);
     }
 
-    /// @notice Updates the keeper address. Can only be called by owner.
-    /// @param _keeper Address of the new keeper.
-    function setKeeper(address _keeper) external onlyOwner {
-        address oldKeeper = keeper;
-
-        keeper = _keeper;
-        emit KeeperUpdated(_keeper, oldKeeper);
-    }
-
     /// @notice Updates the frequency at which rewards are processed by the keeper. Can only be called by owner.
     /// @param _claimFrequency The new claim frequency in seconds.
     function setClaimFrequency(uint256 _claimFrequency) external onlyOwner {
@@ -265,7 +249,7 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
     ///         for a CRV to WETH swap. The value should be more than the minimum value. Can be called by the owner or
     ///         the manager.
     /// @param _minOutBpsCrvToWeth The new value in bps.
-    function setMinOutBpsCrvToWethVal(uint256 _minOutBpsCrvToWeth) external onlyOwnerOrManager {
+    function setMinOutBpsCrvToWethVal(uint16 _minOutBpsCrvToWeth) external onlyOwnerOrManager {
         if (_minOutBpsCrvToWeth > MAX_BPS) {
             revert InvalidBps(_minOutBpsCrvToWeth);
         }

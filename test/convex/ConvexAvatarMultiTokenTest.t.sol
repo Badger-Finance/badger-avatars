@@ -7,7 +7,7 @@ import {IERC20MetadataUpgradeable} from
 
 import {ConvexAvatarMultiToken, TokenAmount} from "../../src/convex/ConvexAvatarMultiToken.sol";
 import {ConvexAvatarUtils} from "../../src/convex/ConvexAvatarUtils.sol";
-import {CONVEX_PID_BADGER_WBTC, CONVEX_PID_BADGER_FRAXBP} from "../../src/BaseConstants.sol";
+import {MAX_BPS, CHAINLINK_KEEPER_REGISTRY} from "../../src/BaseConstants.sol";
 
 import {IBaseRewardPool} from "../../src/interfaces/aura/IBaseRewardPool.sol";
 import {IStakingProxy} from "../../src/interfaces/convex/IStakingProxy.sol";
@@ -18,6 +18,10 @@ import {MockV3Aggregator} from "../mocks/MockV3Aggregator.sol";
 
 contract ConvexAvatarMultiTokenTest is Test, ConvexAvatarUtils {
     ConvexAvatarMultiToken avatar;
+
+    // Convex
+    uint256 constant CONVEX_PID_BADGER_WBTC = 74;
+    uint256 constant CONVEX_PID_BADGER_FRAXBP = 35;
 
     IERC20MetadataUpgradeable constant CURVE_LP_BADGER_WBTC =
         IERC20MetadataUpgradeable(0x137469B55D1f15651BA46A89D0588e97dD0B6562);
@@ -31,7 +35,7 @@ contract ConvexAvatarMultiTokenTest is Test, ConvexAvatarUtils {
 
     address constant owner = address(1);
     address constant manager = address(2);
-    address constant keeper = address(3);
+    address constant keeper = CHAINLINK_KEEPER_REGISTRY;
 
     address[2] assetsExpected = [address(CURVE_LP_BADGER_WBTC), address(WCVX_BADGER_FRAXBP)];
 
@@ -74,7 +78,7 @@ contract ConvexAvatarMultiTokenTest is Test, ConvexAvatarUtils {
         pidsFraxInit[0] = CONVEX_PID_BADGER_FRAXBP;
 
         avatar = new ConvexAvatarMultiToken();
-        avatar.initialize(owner, manager, keeper, pidsInit, pidsFraxInit);
+        avatar.initialize(owner, manager, pidsInit, pidsFraxInit);
 
         for (uint256 i = 0; i < assetsExpected.length; i++) {
             deal(assetsExpected[i], owner, 20e18, true);
@@ -94,7 +98,6 @@ contract ConvexAvatarMultiTokenTest is Test, ConvexAvatarUtils {
         assertFalse(avatar.paused());
 
         assertEq(avatar.manager(), manager);
-        assertEq(avatar.keeper(), keeper);
 
         uint256 bpsVal;
         uint256 bpsMin;
@@ -124,7 +127,7 @@ contract ConvexAvatarMultiTokenTest is Test, ConvexAvatarUtils {
         vm.expectRevert("Initializable: contract is already initialized");
         uint256[] memory pids;
         uint256[] memory fraxPids;
-        avatar.initialize(address(this), address(this), address(this), pids, fraxPids);
+        avatar.initialize(address(this), address(this), pids, fraxPids);
     }
 
     ////////////////////////////////////////////////////////////////////////////
@@ -216,20 +219,6 @@ contract ConvexAvatarMultiTokenTest is Test, ConvexAvatarUtils {
     function test_setManager_permissions() public {
         vm.expectRevert("Ownable: caller is not the owner");
         avatar.setManager(address(0));
-    }
-
-    function test_setKeeper() public {
-        vm.prank(owner);
-        vm.expectEmit(true, true, false, false);
-        emit KeeperUpdated(address(this), keeper);
-        avatar.setKeeper(address(this));
-
-        assertEq(avatar.keeper(), address(this));
-    }
-
-    function test_setKeeper_permissions() public {
-        vm.expectRevert("Ownable: caller is not the owner");
-        avatar.setKeeper(address(0));
     }
 
     function test_setClaimFrequency() public {
@@ -339,8 +328,8 @@ contract ConvexAvatarMultiTokenTest is Test, ConvexAvatarUtils {
         vm.startPrank(owner);
         avatar.setMinOutBpsCrvToWethVal(9700);
 
-        vm.expectRevert(abi.encodeWithSelector(ConvexAvatarMultiToken.InvalidBps.selector, 1000000));
-        avatar.setMinOutBpsCrvToWethVal(1000000);
+        vm.expectRevert(abi.encodeWithSelector(ConvexAvatarMultiToken.InvalidBps.selector, 60000));
+        avatar.setMinOutBpsCrvToWethVal(60000);
 
         vm.expectRevert(abi.encodeWithSelector(ConvexAvatarMultiToken.LessThanBpsMin.selector, 1000, 9500));
         avatar.setMinOutBpsCrvToWethVal(1000);
