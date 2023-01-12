@@ -400,7 +400,7 @@ contract ConvexAvatarMultiTokenTest is Test, ConvexAvatarUtils {
 
         assertEq(lockedBal, amountToLock);
         assertEq(WCVX_BADGER_FRAXBP.balanceOf(owner), 0);
-        assertEq(kekId, avatar.kekIds(vaultAddr, 0));
+        assertEq(kekId, avatar.kekIds(vaultAddr));
     }
 
     function test_depositPrivateVault_permissions() public {

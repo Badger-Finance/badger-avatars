@@ -81,7 +81,7 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
 
     /// @dev holds the relation between pid in convex-frax system and private vaults avatar created
     mapping(uint256 => address) public privateVaults;
-    mapping(address => bytes32[]) public kekIds;
+    mapping(address => bytes32) public kekIds;
 
     ////////////////////////////////////////////////////////////////////////////
     // ERRORS
@@ -294,7 +294,7 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
         /// NOTE: we always try to lock for the min duration allowed
         kekId = proxy.stakeLocked(_amountAsset, farm.lock_time_min());
         /// @dev detailed required to enable withdrawls later
-        kekIds[vaultAddr].push(kekId);
+        kekIds[vaultAddr] = kekId;
 
         emit Deposit(stakingToken, _amountAsset, block.timestamp);
     }
@@ -303,7 +303,7 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
     /// It will loop thru all existent keks and withdraw fully from each of them.
     /// @dev Internally in the unified farm contract calls `getReward` collecting rewards and updating the balances
     /// @param _pid Pid target to withdraw from avatar private vault
-    function withdrawFromPrivateVault(uint256 _pid) external onlyOwner {
+    function withdrawFromPrivateVault(uint256 _pid) external onlyOwnerOrManager {
         address vaultAddr = privateVaults[_pid];
 
         if (vaultAddr == address(0)) {
@@ -316,14 +316,10 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
             revert NothingToWithdraw();
         }
 
-        bytes32[] memory keks = kekIds[vaultAddr];
+        bytes32 kek = kekIds[vaultAddr];
 
-        for (uint256 i; i < keks.length;) {
-            proxy.withdrawLockedAndUnwrap(keks[i]);
-            unchecked {
-                ++i;
-            }
-        }
+        // TODO: double-check that indeed that kek_id is expired
+        proxy.withdrawLockedAndUnwrap(kek);
 
         IERC20MetadataUpgradeable curveLp = IERC20MetadataUpgradeable(proxy.curveLpToken());
         uint256 curveLpBalance = curveLp.balanceOf(address(this));
@@ -358,7 +354,7 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
 
     /// @notice Unstakes all staked assets and transfers them back to owner. Can only be called by owner.
     /// @dev This function doesn't claim any rewards.
-    function withdrawAll() external onlyOwner {
+    function withdrawAll() external onlyOwnerOrManager {
         uint256 length = baseRewardPools.length();
         uint256[] memory curveLpDeposited = new uint256[](length);
         for (uint256 i; i < length; i++) {
@@ -372,7 +368,7 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
     /// @dev This function doesn't claim any rewards.
     /// @param _pids Pids targetted to withdraw from
     /// @param _amountAssets Amount of assets to be unstaked.
-    function withdraw(uint256[] calldata _pids, uint256[] calldata _amountAssets) external onlyOwner {
+    function withdraw(uint256[] calldata _pids, uint256[] calldata _amountAssets) external onlyOwnerOrManager {
         _withdraw(_pids, _amountAssets);
     }
 
@@ -406,9 +402,16 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
         }
 
         (address lpToken,,, address crvRewards,,) = CONVEX_BOOSTER.poolInfo(_removePid);
-        uint256 stakedBal = IBaseRewardPool(crvRewards).balanceOf(address(this));
+        IBaseRewardPool baseRewardPool = IBaseRewardPool(crvRewards);
+
+        uint256 stakedBal = baseRewardPool.balanceOf(address(this));
         if (stakedBal > 0) {
             revert CurveLpStillStaked(lpToken, crvRewards, stakedBal);
+        }
+
+        // NOTE: verify pending rewards and claim. Processing is done separately
+        if (baseRewardPool.earned(address(this)) > 0) {
+            baseRewardPool.getReward();
         }
 
         // NOTE: indeed if nothing is staked, then remove from storage
