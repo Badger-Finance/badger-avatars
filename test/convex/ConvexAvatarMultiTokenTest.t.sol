@@ -796,6 +796,30 @@ contract ConvexAvatarMultiTokenTest is Test, ConvexAvatarUtils {
         assertTrue(upkeepNeeded);
     }
 
+    function test_checkUpkeep_premature() public {
+        uint256[] memory amountsDeposit = new uint256[](1);
+        amountsDeposit[0] = 20 ether;
+        uint256[] memory pidsInit = new uint256[](1);
+        pidsInit[0] = CONVEX_PID_BADGER_WBTC;
+        vm.prank(owner);
+        avatar.deposit(pidsInit, amountsDeposit);
+
+        skipAndForwardFeeds(1 weeks);
+
+        bool upkeepNeeded;
+
+        (upkeepNeeded,) = avatar.checkUpkeep(new bytes(0));
+        assertTrue(upkeepNeeded);
+
+        vm.prank(keeper);
+        avatar.performUpkeep(new bytes(0));
+
+        skip(1 weeks - 1);
+
+        (upkeepNeeded,) = avatar.checkUpkeep(new bytes(0));
+        assertFalse(upkeepNeeded);
+    }
+
     function test_performUpKeep() public {
         uint256[] memory amountsDeposit = new uint256[](1);
         amountsDeposit[0] = 20 ether;
@@ -834,6 +858,58 @@ contract ConvexAvatarMultiTokenTest is Test, ConvexAvatarUtils {
         // Upkeep is not needed anymore
         (upkeepNeeded,) = avatar.checkUpkeep(new bytes(0));
         assertFalse(upkeepNeeded);
+    }
+
+    function test_performUpkeep_permissions() public {
+        uint256[] memory amountsDeposit = new uint256[](1);
+        amountsDeposit[0] = 20 ether;
+        uint256[] memory pidsInit = new uint256[](1);
+        pidsInit[0] = CONVEX_PID_BADGER_WBTC;
+        vm.prank(owner);
+        avatar.deposit(pidsInit, amountsDeposit);
+
+        address[3] memory actors = [address(this), owner, manager];
+        for (uint256 i; i < actors.length; ++i) {
+            uint256 snapId = vm.snapshot();
+
+            vm.prank(actors[i]);
+            vm.expectRevert(abi.encodeWithSelector(ConvexAvatarMultiToken.NotKeeper.selector, actors[i]));
+            avatar.performUpkeep(new bytes(0));
+
+            vm.revertTo(snapId);
+        }
+    }
+
+    function test_performUpkeep_premature() public {
+        uint256[] memory amountsDeposit = new uint256[](1);
+        amountsDeposit[0] = 20 ether;
+        uint256[] memory pidsInit = new uint256[](1);
+        pidsInit[0] = CONVEX_PID_BADGER_WBTC;
+        vm.prank(owner);
+        avatar.deposit(pidsInit, amountsDeposit);
+
+        skipAndForwardFeeds(1 weeks);
+
+        bool upkeepNeeded;
+
+        (upkeepNeeded,) = avatar.checkUpkeep(new bytes(0));
+        assertTrue(upkeepNeeded);
+
+        vm.prank(keeper);
+        avatar.performUpkeep(new bytes(0));
+
+        skip(1 weeks - 1);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                ConvexAvatarMultiToken.TooSoon.selector,
+                block.timestamp,
+                avatar.lastClaimTimestamp(),
+                avatar.claimFrequency()
+            )
+        );
+        vm.prank(keeper);
+        avatar.performUpkeep(new bytes(0));
     }
 
     ////////////////////////////////////////////////////////////////////////////
