@@ -57,21 +57,9 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
     /// @notice The frequency (in seconds) at which the keeper should harvest rewards.
     uint256 public claimFrequency;
 
-    /// @notice The current and minimum value (in bps) controlling the minimum executable price (as proprtion of oracle
-    ///         price) for a CRV to WETH swap.
-    BpsConfig public minOutBpsCrvToWeth;
-    /// @notice The current and minimum value (in bps) controlling the minimum executable price (as proprtion of oracle
-    ///         price) for an CVX to WETH swap.
-    BpsConfig public minOutBpsCvxToWeth;
-    /// @notice The current and minimum value (in bps) controlling the minimum executable price (as proprtion of oracle
-    ///         price) for an FXS to FRAX swap.
-    BpsConfig public minOutBpsFxsToFrax;
-    /// @notice The current and minimum value (in bps) controlling the minimum executable price (as proprtion of oracle
-    ///         price) for an WETH to DAI swap.
-    BpsConfig public minOutBpsWethToDai;
-    /// @notice The current and minimum value (in bps) controlling the minimum executable price (as proprtion of oracle
-    ///         price) for an FRAX to DAI swap.
-    BpsConfig public minOutBpsFraxToDai;
+    /// @notice The current and minimum value (in bps) controlling the minimum executable price (as proportion of oracle
+    ///         price) for a tokenA to tokenB swap.
+    mapping(address => mapping(address => BpsConfig)) public bpsTkn2TknConfig;
 
     /// @notice The timestamp at which rewards were last claimed and harvested.
     uint256 public lastClaimTimestamp;
@@ -119,10 +107,8 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
 
     event ClaimFrequencyUpdated(uint256 newClaimFrequency, uint256 oldClaimFrequency);
 
-    event MinOutBpsCrvToWethValUpdated(uint256 newValue, uint256 oldValue);
-    event MinOutBpsCvxToWethValUpdated(uint256 newValue, uint256 oldValue);
-    event MinOutBpsFxsToFraxValUpdated(uint256 newValue, uint256 oldValue);
-    event MinOutBpsWethToDaiValUpdated(uint256 newValue, uint256 oldValue);
+    event MinOutBpsValUpdated(address tokenA, address tokenB, uint256 newValue, uint256 oldValue);
+    event MinOutBpsMinUpdated(address tokenA, address tokenB, uint256 oldValue, uint256 newValue);
 
     event Deposit(address indexed token, uint256 amount, uint256 timestamp);
     event Withdraw(address indexed token, uint256 amount, uint256 timestamp);
@@ -179,23 +165,23 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
             }
         }
 
-        minOutBpsCrvToWeth = BpsConfig({
+        bpsTkn2TknConfig[address(CRV)][address(WETH)] = BpsConfig({
             val: 9850, // 98.5%
             min: 9500 // 95%
         });
-        minOutBpsCvxToWeth = BpsConfig({
+        bpsTkn2TknConfig[address(CVX)][address(WETH)] = BpsConfig({
             val: 9850, // 98.5%
             min: 9500 // 95%
         });
-        minOutBpsFxsToFrax = BpsConfig({
+        bpsTkn2TknConfig[address(FXS)][address(FRAX)] = BpsConfig({
             val: 9850, // 98.5%
             min: 9500 // 95%
         });
-        minOutBpsWethToDai = BpsConfig({
+        bpsTkn2TknConfig[address(WETH)][address(DAI)] = BpsConfig({
             val: 9850, // 98.5%
             min: 9500 // 95%
         });
-        minOutBpsFraxToDai = BpsConfig({
+        bpsTkn2TknConfig[address(FRAX)][address(DAI)] = BpsConfig({
             val: 9850, // 98.5%
             min: 9500 // 95%
         });
@@ -248,28 +234,52 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
         emit ClaimFrequencyUpdated(_claimFrequency, oldClaimFrequency);
     }
 
+    /// @notice Updates the minimum possible value for the minimum executable price (in bps as proportion of an oracle price)
+    ///         for tokenA to tokenB swap. The value should be more than the minimum value. Can be called by the owner or
+    ///         the manager.
+    /// @param _tokenA Target token `from` to update in the mapping
+    /// @param _tokenB Target token `to` to update in the mapping
+    /// @param _minOutBpsMin The new minimum value in bps.
+    function setMinOutBpsMin(address _tokenA, address _tokenB, uint16 _minOutBpsMin) external onlyOwner {
+        if (_minOutBpsMin > MAX_BPS) {
+            revert InvalidBps(_minOutBpsMin);
+        }
+
+        uint256 minOutBpsVal = bpsTkn2TknConfig[_tokenA][_tokenB].val;
+        if (_minOutBpsMin > minOutBpsVal) {
+            revert MoreThanBpsVal(_minOutBpsMin, minOutBpsVal);
+        }
+
+        uint256 oldMinOutBpsMin = bpsTkn2TknConfig[_tokenA][_tokenB].min;
+        bpsTkn2TknConfig[_tokenA][_tokenB].min = _minOutBpsMin;
+
+        emit MinOutBpsMinUpdated(_tokenA, _tokenB, _minOutBpsMin, oldMinOutBpsMin);
+    }
+
     ////////////////////////////////////////////////////////////////////////////
     // PUBLIC: Manager - Config
     ////////////////////////////////////////////////////////////////////////////
 
     /// @notice Updates the current value for the minimum executable price (in bps as proportion of an oracle price)
-    ///         for a CRV to WETH swap. The value should be more than the minimum value. Can be called by the owner or
+    ///         for tokenA to tokenB swap. The value should be more than the minimum value. Can be called by the owner or
     ///         the manager.
-    /// @param _minOutBpsCrvToWeth The new value in bps.
-    function setMinOutBpsCrvToWethVal(uint16 _minOutBpsCrvToWeth) external onlyOwnerOrManager {
-        if (_minOutBpsCrvToWeth > MAX_BPS) {
-            revert InvalidBps(_minOutBpsCrvToWeth);
+    /// @param _tokenA Target token `from` to update in the mapping
+    /// @param _tokenB Target token `to` to update in the mapping
+    /// @param _minOutBpsVal The new value in bps.
+    function setMinOutBpsVal(address _tokenA, address _tokenB, uint16 _minOutBpsVal) external onlyOwnerOrManager {
+        if (_minOutBpsVal > MAX_BPS) {
+            revert InvalidBps(_minOutBpsVal);
         }
 
-        uint256 minOutBpsCrvToWethMin = minOutBpsCrvToWeth.min;
-        if (_minOutBpsCrvToWeth < minOutBpsCrvToWethMin) {
-            revert LessThanBpsMin(_minOutBpsCrvToWeth, minOutBpsCrvToWethMin);
+        uint256 minOutBpsMin = bpsTkn2TknConfig[_tokenA][_tokenB].min;
+        if (_minOutBpsVal < minOutBpsMin) {
+            revert LessThanBpsMin(_minOutBpsVal, minOutBpsMin);
         }
 
-        uint256 oldMinOutBpsCrvToWethVal = minOutBpsCrvToWeth.val;
-        minOutBpsCrvToWeth.val = _minOutBpsCrvToWeth;
+        uint256 oldMinOutBpsVal = bpsTkn2TknConfig[_tokenA][_tokenB].val;
+        bpsTkn2TknConfig[_tokenA][_tokenB].val = _minOutBpsVal;
 
-        emit MinOutBpsCrvToWethValUpdated(_minOutBpsCrvToWeth, oldMinOutBpsCrvToWethVal);
+        emit MinOutBpsValUpdated(_tokenA, _tokenB, _minOutBpsVal, oldMinOutBpsVal);
     }
 
     ////////////////////////////////////////////////////////////////////////////
@@ -635,7 +645,10 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
     function swapCrvForWeth(uint256 _crvAmount) internal returns (uint256 wethEarned_) {
         // Swap CRV -> WETH
         wethEarned_ = CRV_ETH_CURVE_POOL.exchange(
-            1, 0, _crvAmount, (getCrvAmountInEth(_crvAmount) * minOutBpsCrvToWeth.val) / MAX_BPS
+            1,
+            0,
+            _crvAmount,
+            (getCrvAmountInEth(_crvAmount) * bpsTkn2TknConfig[address(CRV)][address(WETH)].val) / MAX_BPS
         );
     }
 
@@ -645,7 +658,10 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
     function swapCvxForWeth(uint256 _cvxAmount) internal returns (uint256 wethEarned_) {
         // Swap CVX -> WETH
         wethEarned_ = CVX_ETH_CURVE_POOL.exchange(
-            1, 0, _cvxAmount, (getCvxAmountInEth(_cvxAmount) * minOutBpsCrvToWeth.val) / MAX_BPS
+            1,
+            0,
+            _cvxAmount,
+            (getCvxAmountInEth(_cvxAmount) * bpsTkn2TknConfig[address(CVX)][address(WETH)].val) / MAX_BPS
         );
     }
 
@@ -662,7 +678,8 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
                 recipient: owner(),
                 deadline: type(uint256).max,
                 amountIn: _wethAmount,
-                amountOutMinimum: (getWethAmountInDai(_wethAmount) * minOutBpsWethToDai.val) / MAX_BPS,
+                amountOutMinimum: (getWethAmountInDai(_wethAmount) * bpsTkn2TknConfig[address(WETH)][address(DAI)].val)
+                    / MAX_BPS,
                 sqrtPriceLimitX96: 0 // Inactive param
             })
         );
@@ -678,7 +695,7 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
         // 1. Swap FXS -> FRAX
         uint256[] memory amounts = FRAXSWAP_ROUTER.swapExactTokensForTokens(
             _fxsAmount,
-            (getFxsAmountInFrax(_fxsAmount) * minOutBpsFxsToFrax.val) / MAX_BPS,
+            (getFxsAmountInFrax(_fxsAmount) * bpsTkn2TknConfig[address(FXS)][address(FRAX)].val) / MAX_BPS,
             path,
             address(this),
             block.timestamp
@@ -686,7 +703,11 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
         uint256 fraxBal = amounts[amounts.length - 1];
         // 2. Swap FRAX -> DAI
         daiEarned_ = FRAX_3CRV_CURVE_POOL.exchange_underlying(
-            0, 1, fraxBal, (getFraxAmountInDai(fraxBal) * minOutBpsFraxToDai.val) / MAX_BPS, owner()
+            0,
+            1,
+            fraxBal,
+            (getFraxAmountInDai(fraxBal) * bpsTkn2TknConfig[address(FRAX)][address(DAI)].val) / MAX_BPS,
+            owner()
         );
     }
 

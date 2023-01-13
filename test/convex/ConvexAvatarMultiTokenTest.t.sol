@@ -57,10 +57,8 @@ contract ConvexAvatarMultiTokenTest is Test, ConvexAvatarUtils {
 
     event ClaimFrequencyUpdated(uint256 oldClaimFrequency, uint256 newClaimFrequency);
 
-    event MinOutBpsCrvToWethValUpdated(uint256 newValue, uint256 oldValue);
-    event MinOutBpsCvxToWethValUpdated(uint256 newValue, uint256 oldValue);
-    event MinOutBpsFxsToFraxValUpdated(uint256 newValue, uint256 oldValue);
-    event MinOutBpsWethToUsdcValUpdated(uint256 newValue, uint256 oldValue);
+    event MinOutBpsValUpdated(address tokenA, address tokenB, uint256 newValue, uint256 oldValue);
+    event MinOutBpsMinUpdated(address tokenA, address tokenB, uint256 oldValue, uint256 newValue);
 
     event Deposit(address indexed token, uint256 amount, uint256 timestamp);
     event Withdraw(address indexed token, uint256 amount, uint256 timestamp);
@@ -114,23 +112,23 @@ contract ConvexAvatarMultiTokenTest is Test, ConvexAvatarUtils {
         uint256 bpsVal;
         uint256 bpsMin;
 
-        (bpsVal, bpsMin) = avatar.minOutBpsCrvToWeth();
+        (bpsVal, bpsMin) = avatar.bpsTkn2TknConfig(address(CRV), address(WETH));
         assertEq(bpsVal, 9850);
         assertEq(bpsMin, 9500);
 
-        (bpsVal, bpsMin) = avatar.minOutBpsCvxToWeth();
+        (bpsVal, bpsMin) = avatar.bpsTkn2TknConfig(address(CVX), address(WETH));
         assertEq(bpsVal, 9850);
         assertEq(bpsMin, 9500);
 
-        (bpsVal, bpsMin) = avatar.minOutBpsFxsToFrax();
+        (bpsVal, bpsMin) = avatar.bpsTkn2TknConfig(address(FXS), address(FRAX));
         assertEq(bpsVal, 9850);
         assertEq(bpsMin, 9500);
 
-        (bpsVal, bpsMin) = avatar.minOutBpsWethToDai();
+        (bpsVal, bpsMin) = avatar.bpsTkn2TknConfig(address(WETH), address(DAI));
         assertEq(bpsVal, 9850);
         assertEq(bpsMin, 9500);
 
-        (bpsVal, bpsMin) = avatar.minOutBpsFraxToDai();
+        (bpsVal, bpsMin) = avatar.bpsTkn2TknConfig(address(FRAX), address(DAI));
         assertEq(bpsVal, 9850);
         assertEq(bpsMin, 9500);
 
@@ -364,40 +362,65 @@ contract ConvexAvatarMultiTokenTest is Test, ConvexAvatarUtils {
         avatar.sweep(address(BADGER));
     }
 
+    function test_setMinOutBpsMin() public {
+        vm.prank(owner);
+        vm.expectEmit(true, true, false, true);
+        emit MinOutBpsMinUpdated(address(CRV), address(WETH), 5000, 9500);
+        avatar.setMinOutBpsMin(address(CRV), address(WETH), 5000);
+
+        (, uint256 min) = avatar.bpsTkn2TknConfig(address(CRV), address(WETH));
+        assertEq(min, 5000);
+    }
+
+    function test_setMinOutBpsMin_invalidValues() public {
+        vm.startPrank(owner);
+
+        vm.expectRevert(abi.encodeWithSelector(ConvexAvatarMultiToken.InvalidBps.selector, 60000));
+        avatar.setMinOutBpsMin(address(CRV), address(WETH), 60000);
+
+        vm.expectRevert(abi.encodeWithSelector(ConvexAvatarMultiToken.MoreThanBpsVal.selector, 9950, 9850));
+        avatar.setMinOutBpsMin(address(CRV), address(WETH), 9950);
+    }
+
+    function test_setMinOutBpsMin_permissions() public {
+        vm.expectRevert("Ownable: caller is not the owner");
+        avatar.setMinOutBpsMin(address(CRV), address(WETH), 5000);
+    }
+
     ////////////////////////////////////////////////////////////////////////////
     // Config: Manager/Owner
     ////////////////////////////////////////////////////////////////////////////
 
-    function test_setMinOutBpsCrvToWethVal() external {
+    function test_setMinOutBpsVal() external {
         uint256 val;
 
         vm.prank(owner);
-        vm.expectEmit(false, false, false, true);
-        emit MinOutBpsCrvToWethValUpdated(9600, 9850);
-        avatar.setMinOutBpsCrvToWethVal(9600);
-        (val,) = avatar.minOutBpsCrvToWeth();
+        vm.expectEmit(true, true, false, true);
+        emit MinOutBpsValUpdated(address(CRV), address(WETH), 9600, 9850);
+        avatar.setMinOutBpsVal(address(CRV), address(WETH), 9600);
+        (val,) = avatar.bpsTkn2TknConfig(address(CRV), address(WETH));
         assertEq(val, 9600);
 
         vm.prank(manager);
-        avatar.setMinOutBpsCrvToWethVal(9820);
-        (val,) = avatar.minOutBpsCrvToWeth();
+        avatar.setMinOutBpsVal(address(CRV), address(WETH), 9820);
+        (val,) = avatar.bpsTkn2TknConfig(address(CRV), address(WETH));
         assertEq(val, 9820);
     }
 
-    function test_setMinOutBpsCrvToWethVal_invalidValues() external {
+    function test_setMinOutBpsVal_invalidValues() external {
         vm.startPrank(owner);
-        avatar.setMinOutBpsCrvToWethVal(9700);
+        avatar.setMinOutBpsVal(address(CRV), address(WETH), 9700);
 
         vm.expectRevert(abi.encodeWithSelector(ConvexAvatarMultiToken.InvalidBps.selector, 60000));
-        avatar.setMinOutBpsCrvToWethVal(60000);
+        avatar.setMinOutBpsVal(address(CRV), address(WETH), 60000);
 
         vm.expectRevert(abi.encodeWithSelector(ConvexAvatarMultiToken.LessThanBpsMin.selector, 1000, 9500));
-        avatar.setMinOutBpsCrvToWethVal(1000);
+        avatar.setMinOutBpsVal(address(CRV), address(WETH), 1000);
     }
 
-    function test_setMinOutBpsCrvToWethVal_permissions() external {
+    function test_setMinOutBpsVal_permissions() external {
         vm.expectRevert(abi.encodeWithSelector(ConvexAvatarMultiToken.NotOwnerOrManager.selector, (address(this))));
-        avatar.setMinOutBpsCrvToWethVal(9600);
+        avatar.setMinOutBpsVal(address(CRV), address(WETH), 9600);
     }
 
     ////////////////////////////////////////////////////////////////////////////
