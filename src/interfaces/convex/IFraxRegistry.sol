@@ -12,4 +12,6 @@ interface IFraxRegistry {
             address rewardsAddress,
             uint8 active
         );
+
+    function vaultMap(uint256, address) external view returns (address);
 }

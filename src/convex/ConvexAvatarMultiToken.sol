@@ -276,6 +276,9 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
     // PUBLIC: Owner
     ////////////////////////////////////////////////////////////////////////////
 
+    /// @notice Takes a given amount of asset from the owner and stakes them on private vault. Can only be called by owner.
+    /// @dev Keeps in storage the `pid` and `vaultAddr` created during execution
+    /// @param _pid Pid target to create a private vault to stake into
     function createPrivateVault(uint256 _pid) external onlyOwner {
         _createPrivateVault(_pid);
     }
@@ -353,7 +356,7 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
 
         IERC20MetadataUpgradeable curveLp = IERC20MetadataUpgradeable(proxy.curveLpToken());
         uint256 curveLpBalance = curveLp.balanceOf(address(this));
-        curveLp.safeTransfer(msg.sender, curveLpBalance);
+        curveLp.safeTransfer(owner(), curveLpBalance);
 
         delete kekIds[vaultAddr];
 
@@ -552,6 +555,8 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
         _processRewards();
     }
 
+    /// @notice Claim and process CRV, CVX & FXS rewards, selling them for DAI
+    /// @return processed_ An array containing addresses and amounts of harvested/swapped tokens
     function _processRewards() internal returns (TokenAmount[] memory processed_) {
         // 1. Claim CVX, CRV & FXS rewards
         (uint256 totalCrv, uint256 totalCvx, uint256 totalFxs) = claimAndRegisterRewards();
@@ -577,6 +582,10 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
         emit RewardsToStable(address(DAI), totalDaiEarned, block.timestamp);
     }
 
+    /// @notice Claims pending CRV, CVX & FXS rewards from both staking contracts and sets the lastClaimTimestamp value.
+    /// @return totalCrv_ The total CRV in contract after claiming.
+    /// @return totalCvx_ The total CVX in contract after claiming.
+    /// @return totalFxs_ The total FXS in contract after claiming.
     function claimAndRegisterRewards() internal returns (uint256 totalCrv_, uint256 totalCvx_, uint256 totalFxs_) {
         // Update last claimed time
         lastClaimTimestamp = block.timestamp;
@@ -620,6 +629,9 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
         emit RewardClaimed(address(FXS), totalFxs_, block.timestamp);
     }
 
+    /// @notice Swaps the given amount of CRV for WETH.
+    /// @param _crvAmount The amount of CRV to sell.
+    /// @return wethEarned_ The amount of WETH earned.
     function swapCrvForWeth(uint256 _crvAmount) internal returns (uint256 wethEarned_) {
         // Swap CRV -> WETH
         wethEarned_ = CRV_ETH_CURVE_POOL.exchange(
@@ -627,6 +639,9 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
         );
     }
 
+    /// @notice Swaps the given amount of CVX for WETH.
+    /// @param _cvxAmount The amount of CVX to sell.
+    /// @return wethEarned_ The amount of WETH earned.
     function swapCvxForWeth(uint256 _cvxAmount) internal returns (uint256 wethEarned_) {
         // Swap CVX -> WETH
         wethEarned_ = CVX_ETH_CURVE_POOL.exchange(
@@ -634,6 +649,9 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
         );
     }
 
+    /// @notice Swaps the given amount of WETH for DAI.
+    /// @param _wethAmount The amount of WETH to sell.
+    /// @return daiEarned_ The amount of DAI earned.
     function swapWethForDai(uint256 _wethAmount) internal returns (uint256 daiEarned_) {
         // Swap WETH -> DAI
         daiEarned_ = UNIV3_ROUTER.exactInputSingle(
@@ -650,6 +668,9 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
         );
     }
 
+    /// @notice Swaps the given amount of FXS for DAI.
+    /// @param _fxsAmount The amount of FXS to sell.
+    /// @return daiEarned_ The amount of DAI earned.
     function swapFxsForDai(uint256 _fxsAmount) internal returns (uint256 daiEarned_) {
         address[] memory path = new address[](2);
         path[0] = address(FXS);
@@ -721,9 +742,14 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
         }
     }
 
-    /// @dev Returns all pids values
+    /// @dev Returns all pids values from vanilla convex infrastructure
     function getPids() public view returns (uint256[] memory) {
         return pids.values();
+    }
+
+    /// @dev Returns all pids values from convex-frax infrastructure
+    function getPrivateVaultPids() public view returns (uint256[] memory) {
+        return pidsPrivateVaults.values();
     }
 
     /// @dev Returns all assets addresses
@@ -734,5 +760,36 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
     /// @dev Returns all rewards pool addresses
     function getbaseRewardPools() public view returns (address[] memory) {
         return baseRewardPools.values();
+    }
+
+    /// @notice The total amounts of both Curve Lps tokens that the avatar is handling
+    function totalAssets()
+        public
+        view
+        returns (uint256[] memory vanillaAssetAmounts, uint256[] memory privateVaultAssetAmounts)
+    {
+        /// @dev loop first thru the vanilla convex staked positions
+        uint256 length = baseRewardPools.length();
+        vanillaAssetAmounts = new uint256[](length);
+
+        for (uint256 i; i < length;) {
+            vanillaAssetAmounts[i] = IBaseRewardPool(baseRewardPools.at(i)).balanceOf(address(this));
+            unchecked {
+                ++i;
+            }
+        }
+
+        /// @dev loop thru all private vaults and check amt of liq locked
+        length = pidsPrivateVaults.length();
+        privateVaultAssetAmounts = new uint256[](length);
+
+        for (uint256 i; i < length;) {
+            address vaultAddr = privateVaults[pidsPrivateVaults.at(i)];
+            IStakingProxy proxy = IStakingProxy(vaultAddr);
+            privateVaultAssetAmounts[i] = IFraxUnifiedFarm(proxy.stakingAddress()).lockedLiquidityOf(vaultAddr);
+            unchecked {
+                ++i;
+            }
+        }
     }
 }

@@ -43,6 +43,11 @@ contract ConvexAvatarMultiTokenTest is Test, ConvexAvatarUtils {
 
     address[2] assetsExpected = [address(CURVE_LP_BADGER_WBTC), address(WCVX_BADGER_FRAXBP)];
 
+    // vanilla convex vars
+    uint256[1] VANILLA_PIDS = [CONVEX_PID_BADGER_WBTC];
+    IERC20MetadataUpgradeable[1] CURVE_LPS = [CURVE_LP_BADGER_WBTC];
+    IBaseRewardPool[1] BASE_REWARD_POOLS = [BASE_REWARD_POOL_BADGER_WBTC];
+
     ////////////////////////////////////////////////////////////////////////////
     // EVENTS
     ////////////////////////////////////////////////////////////////////////////
@@ -128,6 +133,20 @@ contract ConvexAvatarMultiTokenTest is Test, ConvexAvatarUtils {
         (bpsVal, bpsMin) = avatar.minOutBpsFraxToDai();
         assertEq(bpsVal, 9850);
         assertEq(bpsMin, 9500);
+
+        uint256[] memory pids = avatar.getPids();
+        address[] memory curveLps = avatar.getAssets();
+        address[] memory baseRewardPools = avatar.getbaseRewardPools();
+
+        for (uint256 i; i < pids.length; ++i) {
+            assertEq(pids[i], VANILLA_PIDS[i]);
+            assertEq(curveLps[i], address(CURVE_LPS[i]));
+            assertEq(baseRewardPools[i], address(BASE_REWARD_POOLS[i]));
+        }
+
+        uint256[] memory privateVaultPids = avatar.getPrivateVaultPids();
+
+        assertEq(privateVaultPids[0], CONVEX_PID_BADGER_FRAXBP);
     }
 
     function test_initialize_double() public {
@@ -385,6 +404,28 @@ contract ConvexAvatarMultiTokenTest is Test, ConvexAvatarUtils {
     // Actions: Owner
     ////////////////////////////////////////////////////////////////////////////
 
+    function test_createPrivateVault() public {
+        vm.prank(owner);
+        avatar.createPrivateVault(28);
+
+        uint256[] memory privateVaultPids = avatar.getPrivateVaultPids();
+
+        // NOTE: we check 2nd index, since 1st was created in the `initialize`
+        assertEq(privateVaultPids[1], 28);
+        assertEq(avatar.privateVaults(28), CONVEX_FRAX_REGISTRY.vaultMap(28, address(avatar)));
+    }
+
+    function test_createPrivateVault_no_active() public {
+        vm.expectRevert(abi.encodeWithSelector(ConvexAvatarMultiToken.PoolDeactivated.selector, 5));
+        vm.prank(owner);
+        avatar.createPrivateVault(5);
+    }
+
+    function test_createPrivateVault_permissions() public {
+        vm.expectRevert("Ownable: caller is not the owner");
+        avatar.createPrivateVault(5);
+    }
+
     function test_deposit() public {
         uint256[] memory amountsDeposit = new uint256[](1);
         amountsDeposit[0] = 20 ether;
@@ -436,6 +477,22 @@ contract ConvexAvatarMultiTokenTest is Test, ConvexAvatarUtils {
         avatar.deposit(pidsInit, amountsDeposit);
     }
 
+    function test_totalAssets() public {
+        uint256[] memory amountsDeposit = new uint256[](1);
+        amountsDeposit[0] = 20 ether;
+        uint256[] memory pidsInit = new uint256[](1);
+        pidsInit[0] = CONVEX_PID_BADGER_WBTC;
+
+        vm.prank(owner);
+        avatar.deposit(pidsInit, amountsDeposit);
+        vm.prank(owner);
+        avatar.depositInPrivateVault(CONVEX_PID_BADGER_FRAXBP, 20 ether, false);
+
+        (uint256[] memory vanillaAssetAmounts, uint256[] memory privateVaultAssetAmounts) = avatar.totalAssets();
+        assertEq(vanillaAssetAmounts[0], 20 ether);
+        assertEq(privateVaultAssetAmounts[0], 20 ether);
+    }
+
     function test_depositPrivateVault() public {
         uint256 amountToLock = 20 ether;
         vm.prank(owner);
@@ -451,6 +508,12 @@ contract ConvexAvatarMultiTokenTest is Test, ConvexAvatarUtils {
         assertEq(lockedBal, amountToLock);
         assertEq(WCVX_BADGER_FRAXBP.balanceOf(owner), 0);
         assertEq(kekId, avatar.kekIds(vaultAddr));
+    }
+
+    function test_depositPrivateVault_not_private_vault() public {
+        vm.expectRevert(abi.encodeWithSelector(ConvexAvatarMultiToken.NoPrivateVaultForPid.selector, 80));
+        vm.prank(owner);
+        avatar.depositInPrivateVault(80, 20 ether, false);
     }
 
     function test_depositPrivateVault_additional_funds() public {
@@ -544,6 +607,28 @@ contract ConvexAvatarMultiTokenTest is Test, ConvexAvatarUtils {
         assertEq(CURVE_LP_BADGER_WBTC.balanceOf(owner), 10e18);
     }
 
+    function test_withdraw_emergency_manager() public {
+        uint256[] memory amountsDeposit = new uint256[](1);
+        amountsDeposit[0] = 20 ether;
+        uint256[] memory pidsInit = new uint256[](1);
+        pidsInit[0] = CONVEX_PID_BADGER_WBTC;
+
+        vm.startPrank(owner);
+        avatar.deposit(pidsInit, amountsDeposit);
+        vm.stopPrank();
+
+        // NOTE: switch of role to manager, emergency testing!
+        vm.startPrank(manager);
+        vm.expectEmit(true, false, false, true);
+        emit Withdraw(address(CURVE_LP_BADGER_WBTC), 10e18, block.timestamp);
+        uint256[] memory amountsWithdraw = new uint256[](1);
+        amountsWithdraw[0] = 10 ether;
+        avatar.withdraw(pidsInit, amountsWithdraw);
+
+        assertEq(BASE_REWARD_POOL_BADGER_WBTC.balanceOf(address(avatar)), 10e18);
+        assertEq(CURVE_LP_BADGER_WBTC.balanceOf(owner), 10e18);
+    }
+
     function test_withdraw_nothing() public {
         uint256[] memory amountsWithdraw = new uint256[](1);
         uint256[] memory pidsInit = new uint256[](1);
@@ -578,6 +663,8 @@ contract ConvexAvatarMultiTokenTest is Test, ConvexAvatarUtils {
         skip(2 weeks);
 
         vm.prank(owner);
+        vm.expectEmit(true, true, false, true);
+        emit Withdraw(address(CURVE_LP_BADGER_FRAXBP), 20 ether, block.timestamp);
         avatar.withdrawFromPrivateVault(CONVEX_PID_BADGER_FRAXBP);
 
         address vaultAddr = avatar.privateVaults(CONVEX_PID_BADGER_FRAXBP);
@@ -586,6 +673,32 @@ contract ConvexAvatarMultiTokenTest is Test, ConvexAvatarUtils {
         assertEq(IFraxUnifiedFarm(proxy.stakingAddress()).lockedLiquidityOf(vaultAddr), 0);
 
         assertEq(CURVE_LP_BADGER_FRAXBP.balanceOf(owner), 20e18);
+    }
+
+    function test_withdrawFromPrivateVault_emergency_manager() public {
+        vm.prank(owner);
+        avatar.depositInPrivateVault(CONVEX_PID_BADGER_FRAXBP, 20 ether, false);
+        vm.stopPrank();
+
+        skip(2 weeks);
+
+        vm.prank(manager);
+        vm.expectEmit(true, true, false, true);
+        emit Withdraw(address(CURVE_LP_BADGER_FRAXBP), 20 ether, block.timestamp);
+        avatar.withdrawFromPrivateVault(CONVEX_PID_BADGER_FRAXBP);
+
+        address vaultAddr = avatar.privateVaults(CONVEX_PID_BADGER_FRAXBP);
+        IStakingProxy proxy = IStakingProxy(vaultAddr);
+
+        assertEq(IFraxUnifiedFarm(proxy.stakingAddress()).lockedLiquidityOf(vaultAddr), 0);
+
+        assertEq(CURVE_LP_BADGER_FRAXBP.balanceOf(owner), 20e18);
+    }
+
+    function test_withdrawFromPrivateVault_not_private_vault() public {
+        vm.expectRevert(abi.encodeWithSelector(ConvexAvatarMultiToken.NoPrivateVaultForPid.selector, 80));
+        vm.prank(owner);
+        avatar.withdrawFromPrivateVault(80);
     }
 
     function test_withdrawFromPrivateVault_not_lock_expired() public {
