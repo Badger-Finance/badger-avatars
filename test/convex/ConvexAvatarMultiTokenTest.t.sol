@@ -151,6 +151,13 @@ contract ConvexAvatarMultiTokenTest is Test, ConvexAvatarUtils {
 
         assertEq(privateVaultPids[0], CONVEX_PID_BADGER_FRAXBP);
         assertEq(privateVault, CONVEX_FRAX_REGISTRY.vaultMap(CONVEX_PID_BADGER_FRAXBP, address(avatar)));
+
+        // allowance checks
+        assertEq(CRV.allowance(address(avatar), address(CRV_ETH_CURVE_POOL)), type(uint256).max);
+        assertEq(CVX.allowance(address(avatar), address(CVX_ETH_CURVE_POOL)), type(uint256).max);
+        assertEq(FRAX.allowance(address(avatar), address(FRAX_3CRV_CURVE_POOL)), type(uint256).max);
+        assertEq(FXS.allowance(address(avatar), address(FRAXSWAP_ROUTER)), type(uint256).max);
+        assertEq(WETH.allowance(address(avatar), address(UNIV3_ROUTER)), type(uint256).max);
     }
 
     function test_initialize_double() public {
@@ -336,6 +343,32 @@ contract ConvexAvatarMultiTokenTest is Test, ConvexAvatarUtils {
         );
         vm.prank(owner);
         avatar.removeCurveLpPositionInfo(CONVEX_PID_BADGER_WBTC);
+    }
+
+    function test_removeCurveLp_position_claiming_reward() public {
+        uint256[] memory amountsDeposit = new uint256[](1);
+        amountsDeposit[0] = 20 ether;
+        uint256[] memory pidsInit = new uint256[](1);
+        pidsInit[0] = CONVEX_PID_BADGER_WBTC;
+        vm.prank(owner);
+        avatar.deposit(pidsInit, amountsDeposit);
+
+        skip(1 weeks);
+
+        vm.prank(owner);
+        avatar.withdraw(pidsInit, amountsDeposit);
+
+        uint256 initialAvatarCrv = CRV.balanceOf(address(avatar));
+        uint256 initialAvatarCvx = CVX.balanceOf(address(avatar));
+
+        assertEq(initialAvatarCvx, 0);
+        assertEq(initialAvatarCrv, 0);
+
+        vm.prank(owner);
+        avatar.removeCurveLpPositionInfo(CONVEX_PID_BADGER_WBTC);
+
+        assertGt(CRV.balanceOf(address(avatar)), 0);
+        assertGt(CVX.balanceOf(address(avatar)), 0);
     }
 
     function test_removeCurveLp_position_info() public {
@@ -844,6 +877,57 @@ contract ConvexAvatarMultiTokenTest is Test, ConvexAvatarUtils {
 
         assertGt(CRV.balanceOf(owner), initialOwnerCrv);
         assertGt(CVX.balanceOf(owner), initialOwnerCvx);
+    }
+
+    function test_claimRewardsAndSendToOwner_fxs_route() public {
+        vm.prank(owner);
+        avatar.depositInPrivateVault(CONVEX_PID_BADGER_FRAXBP, 20 ether, false);
+
+        uint256 initialOwnerCrv = CRV.balanceOf(owner);
+        uint256 initialOwnerCvx = CVX.balanceOf(owner);
+        uint256 initialOwnerFxs = FXS.balanceOf(owner);
+
+        skip(1 weeks);
+
+        uint256 crvReward;
+        uint256 fxsReward;
+
+        IStakingProxy proxy = IStakingProxy(avatar.privateVaults(CONVEX_PID_BADGER_FRAXBP));
+
+        (address[] memory tokenAddresses, uint256[] memory totalEarned) = proxy.earned();
+
+        for (uint256 i; i < tokenAddresses.length;) {
+            if (tokenAddresses[i] == address(CRV)) {
+                crvReward = totalEarned[i];
+                assertGt(crvReward, 0);
+            }
+            if (tokenAddresses[i] == address(FXS)) {
+                fxsReward = totalEarned[i];
+                assertGt(fxsReward, 0);
+            }
+            unchecked {
+                ++i;
+            }
+        }
+
+        vm.prank(owner);
+        avatar.claimRewardsAndSendToOwner();
+
+        (tokenAddresses, totalEarned) = proxy.earned();
+        for (uint256 i; i < tokenAddresses.length;) {
+            assertEq(totalEarned[i], 0);
+            unchecked {
+                ++i;
+            }
+        }
+
+        assertEq(CRV.balanceOf(address(avatar)), 0);
+        assertEq(CVX.balanceOf(address(avatar)), 0);
+        assertEq(FXS.balanceOf(address(avatar)), 0);
+
+        assertGt(CRV.balanceOf(owner), initialOwnerCrv);
+        assertGt(CVX.balanceOf(owner), initialOwnerCvx);
+        assertGt(FXS.balanceOf(owner), initialOwnerFxs);
     }
 
     function test_claimRewardsAndSendToOwner_permissions() public {
