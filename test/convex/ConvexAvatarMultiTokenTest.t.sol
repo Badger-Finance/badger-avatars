@@ -173,7 +173,8 @@ contract ConvexAvatarMultiTokenTest is Test, ConvexAvatarUtils {
 
         address logic = address(new ConvexAvatarMultiToken());
 
-        bytes memory initData = abi.encodeCall(ConvexAvatarMultiToken.initialize, (owner, manager, pidsInit, pidsFraxInit));
+        bytes memory initData =
+            abi.encodeCall(ConvexAvatarMultiToken.initialize, (owner, manager, pidsInit, pidsFraxInit));
 
         ConvexAvatarMultiToken avatarProxy = ConvexAvatarMultiToken(
             address(
@@ -207,7 +208,6 @@ contract ConvexAvatarMultiTokenTest is Test, ConvexAvatarUtils {
         assertEq(FRAX.allowance(address(avatarProxy), address(FRAX_3CRV_CURVE_POOL)), type(uint256).max);
         assertEq(FXS.allowance(address(avatarProxy), address(FRAXSWAP_ROUTER)), type(uint256).max);
         assertEq(WETH.allowance(address(avatarProxy), address(UNIV3_ROUTER)), type(uint256).max);
-
     }
 
     function test_initialize_double() public {
