@@ -2,6 +2,8 @@
 pragma solidity ^0.8.0;
 
 import {Test} from "forge-std/Test.sol";
+import {TransparentUpgradeableProxy} from "openzeppelin-contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
+import {ProxyAdmin} from "openzeppelin-contracts/proxy/transparent/ProxyAdmin.sol";
 import {IERC20MetadataUpgradeable} from
     "../../lib/openzeppelin-contracts-upgradeable/contracts/token/ERC20/extensions/IERC20MetadataUpgradeable.sol";
 
@@ -158,6 +160,54 @@ contract ConvexAvatarMultiTokenTest is Test, ConvexAvatarUtils {
         assertEq(FRAX.allowance(address(avatar), address(FRAX_3CRV_CURVE_POOL)), type(uint256).max);
         assertEq(FXS.allowance(address(avatar), address(FRAXSWAP_ROUTER)), type(uint256).max);
         assertEq(WETH.allowance(address(avatar), address(UNIV3_ROUTER)), type(uint256).max);
+    }
+
+    function test_proxy_vars() public {
+        ProxyAdmin proxyAdmin = new ProxyAdmin();
+
+        uint256[] memory pidsInit = new uint256[](1);
+        pidsInit[0] = CONVEX_PID_BADGER_WBTC;
+
+        uint256[] memory pidsFraxInit = new uint256[](1);
+        pidsFraxInit[0] = CONVEX_PID_BADGER_FRAXBP;
+
+        address logic = address(new ConvexAvatarMultiToken());
+
+        bytes memory initData = abi.encodeCall(ConvexAvatarMultiToken.initialize, (owner, manager, pidsInit, pidsFraxInit));
+
+        ConvexAvatarMultiToken avatarProxy = ConvexAvatarMultiToken(
+            address(
+                new TransparentUpgradeableProxy(
+                    logic,
+                    address(proxyAdmin),
+                    initData
+                )
+            )
+        );
+
+        uint256[] memory pids = avatarProxy.getPids();
+        address[] memory curveLps = avatarProxy.getAssets();
+        address[] memory baseRewardPools = avatarProxy.getbaseRewardPools();
+
+        for (uint256 i; i < pids.length; ++i) {
+            assertEq(pids[i], VANILLA_PIDS[i]);
+            assertEq(curveLps[i], address(CURVE_LPS[i]));
+            assertEq(baseRewardPools[i], address(BASE_REWARD_POOLS[i]));
+        }
+
+        uint256[] memory privateVaultPids = avatarProxy.getPrivateVaultPids();
+        address privateVault = avatarProxy.privateVaults(privateVaultPids[0]);
+
+        assertEq(privateVaultPids[0], CONVEX_PID_BADGER_FRAXBP);
+        assertEq(privateVault, CONVEX_FRAX_REGISTRY.vaultMap(CONVEX_PID_BADGER_FRAXBP, address(avatarProxy)));
+
+        // allowance checks
+        assertEq(CRV.allowance(address(avatarProxy), address(CRV_ETH_CURVE_POOL)), type(uint256).max);
+        assertEq(CVX.allowance(address(avatarProxy), address(CVX_ETH_CURVE_POOL)), type(uint256).max);
+        assertEq(FRAX.allowance(address(avatarProxy), address(FRAX_3CRV_CURVE_POOL)), type(uint256).max);
+        assertEq(FXS.allowance(address(avatarProxy), address(FRAXSWAP_ROUTER)), type(uint256).max);
+        assertEq(WETH.allowance(address(avatarProxy), address(UNIV3_ROUTER)), type(uint256).max);
+
     }
 
     function test_initialize_double() public {
