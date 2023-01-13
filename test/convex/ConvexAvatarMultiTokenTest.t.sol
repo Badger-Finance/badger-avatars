@@ -6,6 +6,7 @@ import {IERC20MetadataUpgradeable} from
     "../../lib/openzeppelin-contracts-upgradeable/contracts/token/ERC20/extensions/IERC20MetadataUpgradeable.sol";
 
 import {ConvexAvatarMultiToken, TokenAmount} from "../../src/convex/ConvexAvatarMultiToken.sol";
+import {BaseAvatarUtils} from "../../src/BaseAvatarUtils.sol";
 import {ConvexAvatarUtils} from "../../src/convex/ConvexAvatarUtils.sol";
 import {MAX_BPS, CHAINLINK_KEEPER_REGISTRY} from "../../src/BaseConstants.sol";
 
@@ -29,8 +30,11 @@ contract ConvexAvatarMultiTokenTest is Test, ConvexAvatarUtils {
         IERC20MetadataUpgradeable(0x09b2E090531228d1b8E3d948C73b990Cb6e60720);
     IERC20MetadataUpgradeable constant WCVX_BADGER_FRAXBP =
         IERC20MetadataUpgradeable(0xb92e3fD365Fc5E038aa304Afe919FeE158359C88);
+    IERC20MetadataUpgradeable constant CURVE_LP_SILO_FRAX =
+        IERC20MetadataUpgradeable(0x2302aaBe69e6E7A1b0Aa23aAC68fcCB8A4D2B460);
 
     IBaseRewardPool constant BASE_REWARD_POOL_BADGER_WBTC = IBaseRewardPool(0x36c7E7F9031647A74687ce46A8e16BcEA84f3865);
+    IBaseRewardPool constant BASE_REWARD_POOL_SILO_FRAX = IBaseRewardPool(0xE259d085f55825624bBA8571eD20984c125Ba720);
     IFraxUnifiedFarm constant UNIFIED_FARM_BADGER_FRAXBP = IFraxUnifiedFarm(0x5a92EF27f4baA7C766aee6d751f754EBdEBd9fae);
 
     // Token to test sweep
@@ -143,8 +147,10 @@ contract ConvexAvatarMultiTokenTest is Test, ConvexAvatarUtils {
         }
 
         uint256[] memory privateVaultPids = avatar.getPrivateVaultPids();
+        address privateVault = avatar.privateVaults(privateVaultPids[0]);
 
         assertEq(privateVaultPids[0], CONVEX_PID_BADGER_FRAXBP);
+        assertEq(privateVault, CONVEX_FRAX_REGISTRY.vaultMap(CONVEX_PID_BADGER_FRAXBP, address(avatar)));
     }
 
     function test_initialize_double() public {
@@ -265,19 +271,31 @@ contract ConvexAvatarMultiTokenTest is Test, ConvexAvatarUtils {
     }
 
     function test_addCurveLp_position_info() public {
+        // NOTE: use to track if length increased after adding in these sets
+        address[] memory beforeAvatarAssets = avatar.getAssets();
+        address[] memory beforeAvatarRewardPools = avatar.getbaseRewardPools();
+
         vm.prank(owner);
-        avatar.addCurveLpPositionInfo(21);
+        avatar.addCurveLpPositionInfo(78);
 
         uint256[] memory avatarPids = avatar.getPids();
+        address[] memory afterAvatarAssets = avatar.getAssets();
+        address[] memory afterAvatarRewardPools = avatar.getbaseRewardPools();
         bool pidIsAdded;
 
         for (uint256 i = 0; i < avatarPids.length; i++) {
-            if (avatarPids[i] == 21) {
+            if (avatarPids[i] == 78) {
                 pidIsAdded = true;
+                // NOTE: verify lptoken & base reward contract addresses save on set storage
+                assertEq(afterAvatarAssets[i], address(CURVE_LP_SILO_FRAX));
+                assertEq(afterAvatarRewardPools[i], address(BASE_REWARD_POOL_SILO_FRAX));
+                break;
             }
         }
 
         assertTrue(pidIsAdded);
+        assertGt(afterAvatarAssets.length, beforeAvatarAssets.length);
+        assertGt(afterAvatarRewardPools.length, beforeAvatarRewardPools.length);
     }
 
     function test_addCurveLp_position_already_exists() public {
@@ -421,6 +439,52 @@ contract ConvexAvatarMultiTokenTest is Test, ConvexAvatarUtils {
     function test_setMinOutBpsVal_permissions() external {
         vm.expectRevert(abi.encodeWithSelector(ConvexAvatarMultiToken.NotOwnerOrManager.selector, (address(this))));
         avatar.setMinOutBpsVal(address(CRV), address(WETH), 9600);
+    }
+
+    function test_processRewards() public {
+        uint256[] memory amountsDeposit = new uint256[](1);
+        amountsDeposit[0] = 20 ether;
+        uint256[] memory pidsInit = new uint256[](1);
+        pidsInit[0] = CONVEX_PID_BADGER_WBTC;
+
+        vm.prank(owner);
+        avatar.deposit(pidsInit, amountsDeposit);
+
+        uint256 daiBalanceBefore = DAI.balanceOf(owner);
+
+        skipAndForwardFeeds(1 hours);
+
+        address[2] memory actors = [owner, manager];
+        for (uint256 i; i < actors.length; ++i) {
+            uint256 snapId = vm.snapshot();
+
+            vm.prank(actors[i]);
+            vm.expectEmit(false, false, false, false);
+            emit RewardsToStable(address(DAI), 0, block.timestamp);
+            TokenAmount[] memory processed = avatar.processRewards();
+
+            assertEq(processed[0].token, address(DAI));
+            assertGt(processed[0].amount, 0);
+
+            assertEq(CRV.balanceOf(address(avatar)), 0);
+            assertEq(CVX.balanceOf(address(avatar)), 0);
+            assertEq(FXS.balanceOf(address(avatar)), 0);
+
+            assertGt(DAI.balanceOf(owner), daiBalanceBefore);
+
+            vm.revertTo(snapId);
+        }
+    }
+
+    function test_processRewards_permissions() public {
+        vm.expectRevert(abi.encodeWithSelector(ConvexAvatarMultiToken.NotOwnerOrManager.selector, address(this)));
+        avatar.processRewards();
+    }
+
+    function test_processRewards_noRewards() public {
+        vm.prank(owner);
+        vm.expectRevert(ConvexAvatarMultiToken.NoRewards.selector);
+        avatar.processRewards();
     }
 
     ////////////////////////////////////////////////////////////////////////////
@@ -881,6 +945,25 @@ contract ConvexAvatarMultiTokenTest is Test, ConvexAvatarUtils {
         // Upkeep is not needed anymore
         (upkeepNeeded,) = avatar.checkUpkeep(new bytes(0));
         assertFalse(upkeepNeeded);
+    }
+
+    function test_performUpkeep_staleFeed() public {
+        uint256[] memory amountsDeposit = new uint256[](1);
+        amountsDeposit[0] = 20 ether;
+        uint256[] memory pidsInit = new uint256[](1);
+        pidsInit[0] = CONVEX_PID_BADGER_WBTC;
+        vm.prank(owner);
+        avatar.deposit(pidsInit, amountsDeposit);
+
+        skip(1 weeks);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                BaseAvatarUtils.StalePriceFeed.selector, block.timestamp, CRV_ETH_FEED.latestTimestamp(), 24 hours
+            )
+        );
+        vm.prank(keeper);
+        avatar.performUpkeep(new bytes(0));
     }
 
     function test_performUpkeep_permissions() public {
