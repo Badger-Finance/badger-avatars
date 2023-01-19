@@ -287,7 +287,7 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
     // PUBLIC: Owner
     ////////////////////////////////////////////////////////////////////////////
 
-    /// @notice Takes a given amount of asset from the owner and stakes them on private vault. Can only be called by owner.
+    /// @notice Takes a given pid to create a private vault for the avatar as owner. Can only be called by owner.
     /// @dev Keeps in storage the `pid` and `vaultAddr` created during execution
     /// @param _pid Pid target to create a private vault to stake into
     function createPrivateVault(uint256 _pid) external onlyOwner {
@@ -339,8 +339,7 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
         emit Deposit(stakingToken, _amountAsset, block.timestamp);
     }
 
-    /// @notice Unstakes all staked assets and transfers them back to owner. Can only be called by owner.
-    /// It will loop thru all existent keks and withdraw fully from each of them.
+    /// @notice Unstakes all staked assets and transfers them back to owner. Can only be called by owner or manager.
     /// @dev Internally in the unified farm contract calls `getReward` collecting rewards and updating the balances
     /// @param _pid Pid target to withdraw from avatar private vault
     function withdrawFromPrivateVault(uint256 _pid) external onlyOwnerOrManager {
@@ -408,7 +407,7 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
         }
     }
 
-    /// @notice Unstakes all staked assets and transfers them back to owner. Can only be called by owner.
+    /// @notice Unstakes all staked assets and transfers them back to owner. Can only be called by owner or manager.
     /// @dev This function doesn't claim any rewards.
     function withdrawAll() external onlyOwnerOrManager {
         uint256 length = baseRewardPools.length();
@@ -420,7 +419,7 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
         _withdraw(pids.values(), curveLpDeposited);
     }
 
-    /// @notice Unstakes the given amount of assets and transfers them back to owner. Can only be called by owner.
+    /// @notice Unstakes the given amount of assets and transfers them back to owner. Can only be called by owner or manager.
     /// @dev This function doesn't claim any rewards.
     /// @param _pids Pids targetted to withdraw from
     /// @param _amountAssets Amount of assets to be unstaked.
