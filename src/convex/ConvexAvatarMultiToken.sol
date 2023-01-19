@@ -96,6 +96,7 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
     error NoPrivateVaultForPid(uint256 pid);
     error NoExistingLockInPrivateVault(address vault);
     error NoExpiredLock(address vault, bytes32 kekId);
+    error MinLockTimeMisconfigured(address farm, uint256 minLockTime);
 
     error LengthMismatch();
 
@@ -325,7 +326,11 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
 
             proxy.lockAdditional(kekId, _amountAsset);
         } else {
-            /// NOTE: we always try to lock for the min duration allowed
+            // NOTE: we always try to lock for the min duration allowed
+            uint256 minLockTime = farm.lock_time_min();
+            if (minLockTime > MAX_LOCKING_TIME) {
+                revert MinLockTimeMisconfigured(address(farm), minLockTime);
+            }
             kekId = proxy.stakeLocked(_amountAsset, farm.lock_time_min());
             /// @dev detailed required to enable withdrawls later
             kekIds[vaultAddr] = kekId;

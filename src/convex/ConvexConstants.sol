@@ -60,4 +60,7 @@ abstract contract ConvexConstants {
     // NOTE: all CL eth feeds are expressed in 18 decimals
     uint256 internal constant FEED_DIVISOR_ETH = 1e18;
     uint256 internal constant FEED_DIVISOR_FXS_USD = 1e8;
+
+    // locking constraints param
+    uint256 internal constant MAX_LOCKING_TIME = 4 weeks;
 }
