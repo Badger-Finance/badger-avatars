@@ -16,9 +16,9 @@ contract GlobalAccessControlManaged is PausableUpgradeable {
     bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
     bytes32 public constant UNPAUSER_ROLE = keccak256("UNPAUSER_ROLE");
 
-    /// =======================
-    /// ===== Initializer =====
-    /// =======================
+    ////////////////////////////////////////////////////////////////////////////
+    // INITIALIZER
+    ////////////////////////////////////////////////////////////////////////////
 
     /**
      * @notice Initializer
@@ -30,9 +30,9 @@ contract GlobalAccessControlManaged is PausableUpgradeable {
         gac = IGac(_globalAccessControl);
     }
 
-    /// =====================
-    /// ===== Modifiers =====
-    /// =====================
+    ////////////////////////////////////////////////////////////////////////////
+    // MODIFIERS
+    ////////////////////////////////////////////////////////////////////////////
 
     // @dev only holders of the given role on the GAC can call
     modifier onlyRole(bytes32 role) {
@@ -68,9 +68,9 @@ contract GlobalAccessControlManaged is PausableUpgradeable {
         _;
     }
 
-    /// ================================
-    /// ===== Permissioned actions =====
-    /// ================================
+    ////////////////////////////////////////////////////////////////////////////
+    // PERMISSIONED ACTIONS
+    ////////////////////////////////////////////////////////////////////////////
 
     function pause() external {
         require(gac.hasRole(PAUSER_ROLE, msg.sender));

@@ -691,7 +691,7 @@ contract ConvexAvatarMultiTokenTest is Test, ConvexAvatarUtils {
         vm.prank(owner);
         avatar.depositInPrivateVault(CONVEX_PID_BADGER_FRAXBP, amountToLock, false);
 
-        /// NOTE: ensure moving enough forward more than `lock_time_min`
+        // NOTE: ensure moving enough forward more than `lock_time_min`
         skip(3 weeks);
 
         vm.prank(owner);

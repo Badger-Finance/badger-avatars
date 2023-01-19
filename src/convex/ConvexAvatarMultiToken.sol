@@ -621,7 +621,7 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
             address vaultAddr = privateVaults[pidsPrivateVaults.at(i)];
             IStakingProxy proxy = IStakingProxy(vaultAddr);
             (, uint256[] memory totalEarned) = proxy.earned();
-            /// NOTE: assume as long at zero index rewards > 0, any other index could be as well
+            // NOTE: assume as long at zero index rewards > 0, any other index could be as well
             if (totalEarned[0] > 0) {
                 proxy.getReward();
             }
