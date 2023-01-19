@@ -18,4 +18,6 @@ interface IFraxUnifiedFarm {
             uint256 endingTimestamp,
             uint256 lockMultiplier
         );
+
+    function setMiscVariables(uint256[6] memory _miscVars) external;
 }

@@ -472,6 +472,9 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
             baseRewardPool.getReward();
         }
 
+        // NOTE: while removing the info from storage, we ensure that allowance is set back to zero
+        IERC20MetadataUpgradeable(lpToken).safeApprove(address(CONVEX_BOOSTER), 0);
+
         // NOTE: indeed if nothing is staked, then remove from storage
         pids.remove(_removePid);
         assets.remove(lpToken);

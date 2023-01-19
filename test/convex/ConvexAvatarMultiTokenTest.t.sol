@@ -478,6 +478,7 @@ contract ConvexAvatarMultiTokenTest is Test, ConvexAvatarUtils {
         }
 
         assertFalse(pidIsPresent);
+        assertEq(CURVE_LP_BADGER_WBTC.allowance(address(avatar), address(CONVEX_BOOSTER)), 0);
     }
 
     function test_sweep() public {
@@ -759,6 +760,31 @@ contract ConvexAvatarMultiTokenTest is Test, ConvexAvatarUtils {
         uint256 amountToLock = 10 ether;
         vm.prank(owner);
         avatar.depositInPrivateVault(CONVEX_PID_BADGER_FRAXBP, amountToLock, true);
+    }
+
+    function test_depositInPrivateVault_misconfigured_min_lock_time() public {
+        uint256 enforceMinLockTime = 7 weeks;
+        uint256[6] memory miscVars;
+        miscVars[0] = 2 ether;
+        miscVars[1] = 5;
+        miscVars[2] = 5;
+        miscVars[3] = 5;
+        miscVars[4] = 5;
+        miscVars[5] = enforceMinLockTime;
+        // NOTE: malicious admin actor setting 7 weeks for `_lock_time_min`
+        vm.prank(0xB1748C79709f4Ba2Dd82834B8c82D4a505003f27);
+        UNIFIED_FARM_BADGER_FRAXBP.setMiscVariables(miscVars);
+        vm.stopPrank();
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                ConvexAvatarMultiToken.MinLockTimeMisconfigured.selector,
+                address(UNIFIED_FARM_BADGER_FRAXBP),
+                enforceMinLockTime
+            )
+        );
+        vm.prank(owner);
+        avatar.depositInPrivateVault(CONVEX_PID_BADGER_FRAXBP, 10 ether, false);
     }
 
     function test_depositPrivateVault_permissions() public {
