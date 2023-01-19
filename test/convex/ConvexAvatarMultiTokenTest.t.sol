@@ -983,6 +983,8 @@ contract ConvexAvatarMultiTokenTest is Test, ConvexAvatarUtils {
 
         assertGt(crvReward, 0);
 
+        uint256 totalCvxReward = getMintableCvxForCrvAmount(crvReward);
+
         vm.prank(owner);
         vm.expectEmit(true, false, false, true);
         emit RewardClaimed(address(CRV), crvReward, block.timestamp);
@@ -993,8 +995,8 @@ contract ConvexAvatarMultiTokenTest is Test, ConvexAvatarUtils {
         assertEq(CRV.balanceOf(address(avatar)), 0);
         assertEq(CVX.balanceOf(address(avatar)), 0);
 
-        assertGt(CRV.balanceOf(owner), initialOwnerCrv);
-        assertGt(CVX.balanceOf(owner), initialOwnerCvx);
+        assertEq(CRV.balanceOf(owner) - initialOwnerCrv, crvReward);
+        assertEq(CVX.balanceOf(owner) - initialOwnerCvx, totalCvxReward);
     }
 
     function test_claimRewardsAndSendToOwner_fxs_route() public {
