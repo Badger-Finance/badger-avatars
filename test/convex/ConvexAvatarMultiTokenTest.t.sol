@@ -217,6 +217,48 @@ contract ConvexAvatarMultiTokenTest is Test, ConvexAvatarUtils {
         avatar.initialize(address(this), address(this), pids, fraxPids);
     }
 
+    function test_pendingRewards() public {
+        vm.prank(owner);
+        avatar.depositInPrivateVault(CONVEX_PID_BADGER_FRAXBP, 20 ether, false);
+
+        skip(1 weeks);
+
+        TokenAmount[] memory pendantRewards = avatar.pendingRewards();
+
+        uint256 totalCrv = CRV.balanceOf(address(avatar));
+        uint256 totalCvx = CVX.balanceOf(address(avatar));
+        uint256 totalFxs = FXS.balanceOf(address(avatar));
+
+        uint256[] memory privateVaultPids = avatar.getPrivateVaultPids();
+
+        for (uint256 i; i < privateVaultPids.length;) {
+            address vaultAddr = avatar.privateVaults(privateVaultPids[i]);
+            IStakingProxy proxy = IStakingProxy(vaultAddr);
+            (address[] memory tokenAddresses, uint256[] memory totalEarned) = proxy.earned();
+            for (uint256 j; j < tokenAddresses.length;) {
+                if (tokenAddresses[j] == address(CRV)) {
+                    totalCrv += totalEarned[j];
+                }
+                if (tokenAddresses[j] == address(CVX)) {
+                    totalCvx += totalEarned[j];
+                }
+                if (tokenAddresses[j] == address(FXS)) {
+                    totalFxs += totalEarned[j];
+                }
+                unchecked {
+                    ++j;
+                }
+            }
+            unchecked {
+                ++i;
+            }
+        }
+
+        assertEq(pendantRewards[0].amount, totalCrv);
+        assertEq(pendantRewards[1].amount, totalCvx);
+        assertEq(pendantRewards[2].amount, totalFxs);
+    }
+
     ////////////////////////////////////////////////////////////////////////////
     // Ownership
     ////////////////////////////////////////////////////////////////////////////

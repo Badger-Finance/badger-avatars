@@ -708,18 +708,21 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
     // PUBLIC VIEW
     ////////////////////////////////////////////////////////////////////////////
 
-    /// @notice Checks whether an upkeep is to be performed.
-    /// @dev The calldata is encoded with the `processRewardsKeeper` selector. This selector is ignored when
-    ///      performing upkeeps using the `performUpkeep` function.
-    /// @return upkeepNeeded_ A boolean indicating whether an upkeep is to be performed.
-    /// @return performData_ The calldata to be passed to the upkeep function.
-    function checkUpkeep(bytes calldata) external override returns (bool upkeepNeeded_, bytes memory performData_) {
-        uint256 crvPending;
-        uint256 fxsPending;
+    /// @notice The pending CRV, CVX and FXS rewards that are yet to be processed.
+    /// @dev Includes any CRV, CVX and FXS tokens in the contract.
+    /// @return rewards_ An array containing addresses and amounts of pending rewards
+    function pendingRewards() public view returns (TokenAmount[] memory rewards_) {
+        rewards_ = new TokenAmount[](3);
+        uint256 totalCrv = CRV.balanceOf(address(this));
+        uint256 totalCvx = CVX.balanceOf(address(this));
+        uint256 totalFxs = FXS.balanceOf(address(this));
+
         uint256 length = baseRewardPools.length();
 
         for (uint256 i; i < length;) {
-            crvPending += IBaseRewardPool(baseRewardPools.at(i)).earned(address(this));
+            uint256 crvEarned = IBaseRewardPool(baseRewardPools.at(i)).earned(address(this));
+            totalCrv += crvEarned;
+            totalCvx += getMintableCvxForCrvAmount(crvEarned);
             unchecked {
                 ++i;
             }
@@ -732,10 +735,13 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
             (address[] memory tokenAddresses, uint256[] memory totalEarned) = proxy.earned();
             for (uint256 j; j < tokenAddresses.length;) {
                 if (tokenAddresses[j] == address(CRV)) {
-                    crvPending += totalEarned[j];
+                    totalCrv += totalEarned[j];
+                }
+                if (tokenAddresses[j] == address(CVX)) {
+                    totalCvx += totalEarned[j];
                 }
                 if (tokenAddresses[j] == address(FXS)) {
-                    fxsPending += totalEarned[j];
+                    totalFxs += totalEarned[j];
                 }
                 unchecked {
                     ++j;
@@ -746,11 +752,26 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
             }
         }
 
-        uint256 crvBalance = CRV.balanceOf(address(this));
-        uint256 fxsBalance = FXS.balanceOf(address(this));
+        rewards_[0] = TokenAmount(address(CRV), totalCrv);
+        rewards_[1] = TokenAmount(address(CVX), totalCvx);
+        rewards_[2] = TokenAmount(address(FXS), totalFxs);
+    }
+
+    /// @notice Checks whether an upkeep is to be performed.
+    /// @dev The calldata is encoded with the `processRewardsKeeper` selector. This selector is ignored when
+    ///      performing upkeeps using the `performUpkeep` function.
+    /// @return upkeepNeeded_ A boolean indicating whether an upkeep is to be performed.
+    /// @return performData_ The calldata to be passed to the upkeep function.
+    function checkUpkeep(bytes calldata)
+        external
+        view
+        override
+        returns (bool upkeepNeeded_, bytes memory performData_)
+    {
+        TokenAmount[] memory rewards = pendingRewards();
 
         if ((block.timestamp - lastClaimTimestamp) >= claimFrequency) {
-            if (crvPending > 0 || crvBalance > 0 || fxsPending > 0 || fxsBalance > 0) {
+            if (rewards[0].amount > 0 || rewards[1].amount > 0 || rewards[2].amount > 0) {
                 upkeepNeeded_ = true;
             }
         }

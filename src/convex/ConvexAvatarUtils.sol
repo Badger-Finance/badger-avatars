@@ -4,6 +4,8 @@ pragma solidity ^0.8.0;
 import {BaseAvatarUtils} from "../BaseAvatarUtils.sol";
 import {ConvexConstants} from "./ConvexConstants.sol";
 
+import {IConvexToken} from "../interfaces/convex/IConvexToken.sol";
+
 contract ConvexAvatarUtils is BaseAvatarUtils, ConvexConstants {
     ////////////////////////////////////////////////////////////////////////////
     // INTERNAL VIEW
@@ -45,5 +47,31 @@ contract ConvexAvatarUtils is BaseAvatarUtils, ConvexConstants {
         uint256 daiInUsd = fetchPriceFromClFeed(DAI_USD_FEED, CL_FEED_HOUR_HEARTBEAT);
         uint256 fraxDaiRatio = (fraxInUsd * 1e8) / daiInUsd;
         daiAmount_ = (_fraxAmount * fraxDaiRatio) / 1e8;
+    }
+
+    /// @notice Calculates the expected amount of CVX minted given some CRV rewards.
+    /// @dev ref: https://etherscan.io/token/0x4e3fbd56cd56c3e72c1403e103b45db9da5b9d2b#code#L1091
+    /// @param _crvAmount The input CRV reward amount.
+    /// @return cvxAmount_ The expected amount of CVX minted.
+    function getMintableCvxForCrvAmount(uint256 _crvAmount) internal view returns (uint256 cvxAmount_) {
+        uint256 supply = CVX.totalSupply();
+        uint256 reductionPerCliff = IConvexToken(address(CVX)).reductionPerCliff();
+        uint256 totalCliffs = IConvexToken(address(CVX)).totalCliffs();
+        uint256 maxSupply = IConvexToken(address(CVX)).maxSupply();
+
+        uint256 cliff = supply / reductionPerCliff;
+        //mint if below total cliffs
+        if (cliff < totalCliffs) {
+            //for reduction% take inverse of current cliff
+            uint256 reduction = totalCliffs - cliff;
+            //reduce
+            cvxAmount_ = _crvAmount * reduction / totalCliffs;
+
+            //supply cap check
+            uint256 amtTillMax = maxSupply - supply;
+            if (cvxAmount_ > amtTillMax) {
+                cvxAmount_ = amtTillMax;
+            }
+        }
     }
 }
