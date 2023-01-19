@@ -118,23 +118,23 @@ contract ConvexAvatarMultiTokenTest is Test, ConvexAvatarUtils {
         uint256 bpsVal;
         uint256 bpsMin;
 
-        (bpsVal, bpsMin) = avatar.bpsTkn2TknConfig(address(CRV), address(WETH));
+        (bpsVal, bpsMin) = avatar.minOutBps(address(CRV), address(WETH));
         assertEq(bpsVal, 9850);
         assertEq(bpsMin, 9500);
 
-        (bpsVal, bpsMin) = avatar.bpsTkn2TknConfig(address(CVX), address(WETH));
+        (bpsVal, bpsMin) = avatar.minOutBps(address(CVX), address(WETH));
         assertEq(bpsVal, 9850);
         assertEq(bpsMin, 9500);
 
-        (bpsVal, bpsMin) = avatar.bpsTkn2TknConfig(address(FXS), address(FRAX));
+        (bpsVal, bpsMin) = avatar.minOutBps(address(FXS), address(FRAX));
         assertEq(bpsVal, 9850);
         assertEq(bpsMin, 9500);
 
-        (bpsVal, bpsMin) = avatar.bpsTkn2TknConfig(address(WETH), address(DAI));
+        (bpsVal, bpsMin) = avatar.minOutBps(address(WETH), address(DAI));
         assertEq(bpsVal, 9850);
         assertEq(bpsMin, 9500);
 
-        (bpsVal, bpsMin) = avatar.bpsTkn2TknConfig(address(FRAX), address(DAI));
+        (bpsVal, bpsMin) = avatar.minOutBps(address(FRAX), address(DAI));
         assertEq(bpsVal, 9850);
         assertEq(bpsMin, 9500);
 
@@ -469,7 +469,7 @@ contract ConvexAvatarMultiTokenTest is Test, ConvexAvatarUtils {
         emit MinOutBpsMinUpdated(address(CRV), address(WETH), 9500, 5000);
         avatar.setMinOutBpsMin(address(CRV), address(WETH), 5000);
 
-        (, uint256 min) = avatar.bpsTkn2TknConfig(address(CRV), address(WETH));
+        (, uint256 min) = avatar.minOutBps(address(CRV), address(WETH));
         assertEq(min, 5000);
     }
 
@@ -499,12 +499,12 @@ contract ConvexAvatarMultiTokenTest is Test, ConvexAvatarUtils {
         vm.expectEmit(true, true, false, true);
         emit MinOutBpsValUpdated(address(CRV), address(WETH), 9850, 9600);
         avatar.setMinOutBpsVal(address(CRV), address(WETH), 9600);
-        (val,) = avatar.bpsTkn2TknConfig(address(CRV), address(WETH));
+        (val,) = avatar.minOutBps(address(CRV), address(WETH));
         assertEq(val, 9600);
 
         vm.prank(manager);
         avatar.setMinOutBpsVal(address(CRV), address(WETH), 9820);
-        (val,) = avatar.bpsTkn2TknConfig(address(CRV), address(WETH));
+        (val,) = avatar.minOutBps(address(CRV), address(WETH));
         assertEq(val, 9820);
     }
 
