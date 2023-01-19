@@ -63,7 +63,7 @@ contract ConvexAvatarMultiTokenTest is Test, ConvexAvatarUtils {
 
     event ClaimFrequencyUpdated(uint256 oldClaimFrequency, uint256 newClaimFrequency);
 
-    event MinOutBpsValUpdated(address tokenA, address tokenB, uint256 newValue, uint256 oldValue);
+    event MinOutBpsValUpdated(address tokenA, address tokenB, uint256 oldValue, uint256 newValue);
     event MinOutBpsMinUpdated(address tokenA, address tokenB, uint256 oldValue, uint256 newValue);
 
     event Deposit(address indexed token, uint256 amount, uint256 timestamp);
@@ -466,7 +466,7 @@ contract ConvexAvatarMultiTokenTest is Test, ConvexAvatarUtils {
     function test_setMinOutBpsMin() public {
         vm.prank(owner);
         vm.expectEmit(true, true, false, true);
-        emit MinOutBpsMinUpdated(address(CRV), address(WETH), 5000, 9500);
+        emit MinOutBpsMinUpdated(address(CRV), address(WETH), 9500, 5000);
         avatar.setMinOutBpsMin(address(CRV), address(WETH), 5000);
 
         (, uint256 min) = avatar.bpsTkn2TknConfig(address(CRV), address(WETH));
@@ -497,7 +497,7 @@ contract ConvexAvatarMultiTokenTest is Test, ConvexAvatarUtils {
 
         vm.prank(owner);
         vm.expectEmit(true, true, false, true);
-        emit MinOutBpsValUpdated(address(CRV), address(WETH), 9600, 9850);
+        emit MinOutBpsValUpdated(address(CRV), address(WETH), 9850, 9600);
         avatar.setMinOutBpsVal(address(CRV), address(WETH), 9600);
         (val,) = avatar.bpsTkn2TknConfig(address(CRV), address(WETH));
         assertEq(val, 9600);

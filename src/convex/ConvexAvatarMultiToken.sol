@@ -107,7 +107,7 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
 
     event ClaimFrequencyUpdated(uint256 newClaimFrequency, uint256 oldClaimFrequency);
 
-    event MinOutBpsValUpdated(address tokenA, address tokenB, uint256 newValue, uint256 oldValue);
+    event MinOutBpsValUpdated(address tokenA, address tokenB, uint256 oldValue, uint256 newValue);
     event MinOutBpsMinUpdated(address tokenA, address tokenB, uint256 oldValue, uint256 newValue);
 
     event Deposit(address indexed token, uint256 amount, uint256 timestamp);
@@ -253,7 +253,7 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
         uint256 oldMinOutBpsMin = bpsTkn2TknConfig[_tokenA][_tokenB].min;
         bpsTkn2TknConfig[_tokenA][_tokenB].min = _minOutBpsMin;
 
-        emit MinOutBpsMinUpdated(_tokenA, _tokenB, _minOutBpsMin, oldMinOutBpsMin);
+        emit MinOutBpsMinUpdated(_tokenA, _tokenB, oldMinOutBpsMin, _minOutBpsMin);
     }
 
     ////////////////////////////////////////////////////////////////////////////
@@ -279,7 +279,7 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
         uint256 oldMinOutBpsVal = bpsTkn2TknConfig[_tokenA][_tokenB].val;
         bpsTkn2TknConfig[_tokenA][_tokenB].val = _minOutBpsVal;
 
-        emit MinOutBpsValUpdated(_tokenA, _tokenB, _minOutBpsVal, oldMinOutBpsVal);
+        emit MinOutBpsValUpdated(_tokenA, _tokenB, oldMinOutBpsVal, _minOutBpsVal);
     }
 
     ////////////////////////////////////////////////////////////////////////////
