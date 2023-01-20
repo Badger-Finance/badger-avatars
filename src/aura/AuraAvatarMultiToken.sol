@@ -666,12 +666,9 @@ contract AuraAvatarMultiToken is BaseAvatar, PausableUpgradeable, AuraAvatarUtil
         // Update last claimed time
         lastClaimTimestamp = block.timestamp;
 
-        uint256 length = baseRewardPools.length();
-        for (uint256 i; i < length;) {
+        for (uint256 i; i < baseRewardPools.length();) {
             IBaseRewardPool baseRewardPool = IBaseRewardPool(baseRewardPools.at(i));
-            if (baseRewardPool.earned(address(this)) > 0) {
-                baseRewardPool.getReward();
-            }
+            baseRewardPool.getReward();
             unchecked {
                 ++i;
             }
