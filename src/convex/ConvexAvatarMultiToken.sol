@@ -358,6 +358,7 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
         }
 
         bytes32 kek = kekIds[vaultAddr];
+        delete kekIds[vaultAddr];
 
         /// @dev: only inspecting index `0` given that we only use an unique lock id per private vault
         (,,, uint256 endingTimestamp,) = unifiedFarm.lockedStakes(vaultAddr, 0);
@@ -371,8 +372,6 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
         IERC20MetadataUpgradeable curveLp = IERC20MetadataUpgradeable(proxy.curveLpToken());
         uint256 curveLpBalance = curveLp.balanceOf(address(this));
         curveLp.safeTransfer(owner(), curveLpBalance);
-
-        delete kekIds[vaultAddr];
 
         emit Withdraw(address(curveLp), curveLpBalance, block.timestamp);
     }
