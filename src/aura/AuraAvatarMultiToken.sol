@@ -430,10 +430,8 @@ contract AuraAvatarMultiToken is BaseAvatar, PausableUpgradeable, AuraAvatarUtil
             revert BptStillStaked(lpToken, crvRewards, stakedAmount);
         }
 
-        // NOTE: verify pending rewards and claim. Processing is done separately
-        if (baseRewardPool.earned(address(this)) > 0) {
-            baseRewardPool.getReward();
-        }
+        // NOTE: Claim extra and normal rewards. Processing is done separately
+        baseRewardPool.getReward();
 
         // NOTE: while removing the info from storage, we ensure that allowance is set back to zero
         IERC20MetadataUpgradeable(lpToken).safeApprove(address(AURA_BOOSTER), 0);
