@@ -418,6 +418,11 @@ contract AuraAvatarMultiToken is BaseAvatar, PausableUpgradeable, AuraAvatarUtil
         }
 
         (address lpToken,,, address crvRewards,,) = AURA_BOOSTER.poolInfo(_removePid);
+        // NOTE: remove from storage prior to external calls, CEI compliance
+        pids.remove(_removePid);
+        assets.remove(lpToken);
+        baseRewardPools.remove(crvRewards);
+
         IBaseRewardPool baseRewardPool = IBaseRewardPool(crvRewards);
 
         uint256 stakedAmount = baseRewardPool.balanceOf(address(this));
@@ -430,10 +435,8 @@ contract AuraAvatarMultiToken is BaseAvatar, PausableUpgradeable, AuraAvatarUtil
             baseRewardPool.getReward();
         }
 
-        // NOTE: indeed if nothing is staked, then remove from storage
-        pids.remove(_removePid);
-        assets.remove(lpToken);
-        baseRewardPools.remove(crvRewards);
+        // NOTE: while removing the info from storage, we ensure that allowance is set back to zero
+        IERC20MetadataUpgradeable(lpToken).safeApprove(address(AURA_BOOSTER), 0);
     }
 
     /// @notice Sweep the full contract's balance for a given ERC-20 token. Can only be called by owner.
