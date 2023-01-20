@@ -42,6 +42,8 @@ interface IBooster {
 
     function feeTokens(address) external view returns (address distro, address rewards, bool active);
 
+    function getRewardMultipliers(address) external view returns (uint256);
+
     function gaugeMap(address) external view returns (bool);
 
     function isShutdown() external view returns (bool);

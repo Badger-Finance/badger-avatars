@@ -5,7 +5,7 @@ import {EnumerableSet} from "../../lib/openzeppelin-contracts/contracts/utils/st
 import {Pausable} from "../../lib/openzeppelin-contracts/contracts/security/Pausable.sol";
 
 import {MAX_BPS} from "../BaseConstants.sol";
-import {AvatarRegistryUtils} from "./AvatarRegistryUtils.sol";
+import {UpKeepManagerUtils} from "./UpKeepManagerUtils.sol";
 
 import {IAvatar} from "../interfaces/badger/IAvatar.sol";
 import {IAggregatorV3} from "../interfaces/chainlink/IAggregatorV3.sol";
@@ -14,11 +14,11 @@ import {IKeeperRegistry} from "../interfaces/chainlink/IKeeperRegistry.sol";
 import {IKeeperRegistrar} from "../interfaces/chainlink/IKeeperRegistrar.sol";
 import {IUniswapRouterV3} from "../interfaces/uniswap/IUniswapRouterV3.sol";
 
-/// @title   AvatarRegistry
+/// @title   UpKeepManager
 /// @author  Petrovska @ BadgerDAO
-/// @dev  Allows the registry to register new avatars and top-up under funded
-/// upkeeps via CL
-contract AvatarRegistry is AvatarRegistryUtils, Pausable, KeeperCompatibleInterface {
+/// @dev  Allows the `UpKeepManager` to register new contracts via governance and top-up under funded
+/// upkeeps via CL keepers
+contract UpKeepManager is UpKeepManagerUtils, Pausable, KeeperCompatibleInterface {
     ////////////////////////////////////////////////////////////////////////////
     // LIBRARIES
     ////////////////////////////////////////////////////////////////////////////
@@ -26,20 +26,12 @@ contract AvatarRegistry is AvatarRegistryUtils, Pausable, KeeperCompatibleInterf
     using EnumerableSet for EnumerableSet.AddressSet;
 
     ////////////////////////////////////////////////////////////////////////////
-    // STRUCT & ENUMS
+    // STRUCT
     ////////////////////////////////////////////////////////////////////////////
 
-    enum AvatarStatus {
-        DEPRECATED,
-        TESTING,
-        SEEDED,
-        FULLY_FUNDED
-    }
-
-    struct AvatarInfo {
+    struct MemberInfo {
         string name;
         uint256 gasLimit;
-        AvatarStatus status;
         uint256 upKeepId;
     }
 
@@ -47,7 +39,7 @@ contract AvatarRegistry is AvatarRegistryUtils, Pausable, KeeperCompatibleInterf
     // CONSTANTS
     ////////////////////////////////////////////////////////////////////////////
 
-    string public constant AVATAR_REGISTRY_NAME = "BadgerDAO Avatar Registry";
+    string public constant NAME = "BadgerDAO UpKeep Manager";
 
     ////////////////////////////////////////////////////////////////////////////
     // IMMUTABLES
@@ -59,11 +51,11 @@ contract AvatarRegistry is AvatarRegistryUtils, Pausable, KeeperCompatibleInterf
     // STORAGE
     ////////////////////////////////////////////////////////////////////////////
 
-    uint256 public avatarMonitoringUpKeepId;
+    uint256 public monitoringUpKeepId;
 
-    /// @dev set helper for ease of iterating thru avatars
-    EnumerableSet.AddressSet internal _avatars;
-    mapping(address => AvatarInfo) public avatarsInfo;
+    /// @dev set helper for ease of iterating thru members
+    EnumerableSet.AddressSet internal _members;
+    mapping(address => MemberInfo) public membersInfo;
 
     ////////////////////////////////////////////////////////////////////////////
     // ERRORS
@@ -74,14 +66,12 @@ contract AvatarRegistry is AvatarRegistryUtils, Pausable, KeeperCompatibleInterf
 
     error NotAutoApproveKeeper();
     error NotUnderFundedUpkeep(uint256 upKeepId);
-    error NotCLKeeperSet();
     error NotMinLinkFundedUpKeep();
     error UpKeepNotCancelled(uint256 upKeepId);
 
     error NotAvatarIncluded(address avatar);
     error AvatarAlreadyRegister(address avatar);
     error AvatarNotRegisteredYet(address avatar);
-    error UpdateSameStatus();
 
     error ZeroAddress();
     error ZeroUintValue();
@@ -91,12 +81,8 @@ contract AvatarRegistry is AvatarRegistryUtils, Pausable, KeeperCompatibleInterf
     // EVENTS
     ////////////////////////////////////////////////////////////////////////////
 
-    event NewAvatar(address indexed avatarAddress, string name, uint256 gasLimit, uint256 timestamp);
-    event RemoveAvatar(address indexed avatarAddress, uint256 upKeepId, uint256 timestamp);
-
-    event UpdateAvatarStatus(
-        address indexed avatarAddress, AvatarStatus oldStatus, AvatarStatus newStatus, uint256 timestamp
-    );
+    event NewMember(address indexed memberAddress, string name, uint256 gasLimit, uint256 timestamp);
+    event RemoveMember(address indexed memberAddress, uint256 upKeepId, uint256 timestamp);
 
     event SweepLinkToTechops(uint256 amount, uint256 timestamp);
     event SweepEth(address recipient, uint256 amount);
@@ -148,9 +134,9 @@ contract AvatarRegistry is AvatarRegistryUtils, Pausable, KeeperCompatibleInterf
             revert ZeroUintValue();
         }
 
-        avatarMonitoringUpKeepId = _registerUpKeep(address(this), gasLimit, AVATAR_REGISTRY_NAME);
+        monitoringUpKeepId = _registerUpKeep(address(this), gasLimit, NAME);
 
-        if (avatarMonitoringUpKeepId > 0) {
+        if (monitoringUpKeepId > 0) {
             /// @dev give allowance of spending LINK funds
             LINK.approve(address(CL_REGISTRY), type(uint256).max);
         }
@@ -158,17 +144,17 @@ contract AvatarRegistry is AvatarRegistryUtils, Pausable, KeeperCompatibleInterf
 
     /// @dev Adds an avatar into the registry
     /// @notice only callable via governance
-    /// @param avatarAddress contract address to be register as new avatar
+    /// @param memberAddress contract address to be register as new avatar
     /// @param name avatar's name
     /// @param gasLimit amount of gas to provide the target contract when
     /// performing upkeep
-    function addAvatar(address avatarAddress, string memory name, uint256 gasLimit) external onlyGovernance {
+    function addMember(address memberAddress, string memory name, uint256 gasLimit) external onlyGovernance {
         /// @dev sanity checks before adding a new avatar in storage
-        if (avatarAddress == address(0)) {
+        if (memberAddress == address(0)) {
             revert ZeroAddress();
         }
-        if (avatarsInfo[avatarAddress].gasLimit != 0) {
-            revert AvatarAlreadyRegister(avatarAddress);
+        if (membersInfo[memberAddress].gasLimit != 0) {
+            revert AvatarAlreadyRegister(memberAddress);
         }
         if (gasLimit == 0) {
             revert ZeroUintValue();
@@ -176,61 +162,35 @@ contract AvatarRegistry is AvatarRegistryUtils, Pausable, KeeperCompatibleInterf
         if (bytes(name).length == 0) {
             revert EmptyString();
         }
-        if (IAvatar(avatarAddress).keeper() != address(CL_REGISTRY)) {
-            revert NotCLKeeperSet();
-        }
 
-        _avatars.add(avatarAddress);
-        avatarsInfo[avatarAddress] = AvatarInfo({
-            name: name,
-            gasLimit: gasLimit,
-            status: AvatarStatus.TESTING,
-            upKeepId: _registerUpKeep(avatarAddress, gasLimit, name)
-        });
+        _members.add(memberAddress);
+        membersInfo[memberAddress] =
+            MemberInfo({name: name, gasLimit: gasLimit, upKeepId: _registerUpKeep(memberAddress, gasLimit, name)});
 
-        emit NewAvatar(avatarAddress, name, gasLimit, block.timestamp);
+        emit NewMember(memberAddress, name, gasLimit, block.timestamp);
     }
 
     /// @dev Cancels an avatar upkeep job
     /// @notice only callable via governance
-    /// @param avatarAddress contract address to be cancel upkeep
-    function cancelAvatarUpKeep(address avatarAddress) external onlyGovernance {
-        if (!_avatars.contains(avatarAddress)) {
-            revert NotAvatarIncluded(avatarAddress);
+    /// @param memberAddress contract address to be cancel upkeep
+    function cancelMemberUpKeep(address memberAddress) external onlyGovernance {
+        if (!_members.contains(memberAddress)) {
+            revert NotAvatarIncluded(memberAddress);
         }
-        // NOTE: only avatar which upkeep is being cancelled can be removed
-        uint256 upKeepId = avatarsInfo[avatarAddress].upKeepId;
+        // NOTE: only member which upkeep is being cancelled can be removed
+        uint256 upKeepId = membersInfo[memberAddress].upKeepId;
         CL_REGISTRY.cancelUpkeep(upKeepId);
-    }
-
-    /// @dev Updates status of an avatar in the registry
-    /// @notice only callable via governance
-    /// @param avatarAddress contract address update status of
-    /// @param newStatus latest status of the avatar
-    function updateStatus(address avatarAddress, AvatarStatus newStatus) external onlyGovernance {
-        if (!_avatars.contains(avatarAddress)) {
-            revert NotAvatarIncluded(avatarAddress);
-        }
-
-        AvatarStatus oldStatus = avatarsInfo[avatarAddress].status;
-        if (oldStatus == newStatus) {
-            revert UpdateSameStatus();
-        }
-
-        avatarsInfo[avatarAddress].status = newStatus;
-
-        emit UpdateAvatarStatus(avatarAddress, oldStatus, newStatus, block.timestamp);
     }
 
     /// @dev Withdraws LINK funds and remove avatar from registry
     /// @notice only callable via governance
-    /// @param avatarAddress contract address to be remove from registry
-    function withdrawLinkFundsAndRemoveAvatar(address avatarAddress) external onlyGovernance {
-        if (!_avatars.contains(avatarAddress)) {
-            revert NotAvatarIncluded(avatarAddress);
+    /// @param memberAddress contract address to be remove from registry
+    function withdrawLinkFundsAndRemoveMember(address memberAddress) external onlyGovernance {
+        if (!_members.contains(memberAddress)) {
+            revert NotAvatarIncluded(memberAddress);
         }
 
-        uint256 upKeepId = avatarsInfo[avatarAddress].upKeepId;
+        uint256 upKeepId = membersInfo[memberAddress].upKeepId;
         // NOTE: only avatar which upkeep is being cancelled can be removed
         (,,,,,, uint64 maxValidBlocknumber,) = CL_REGISTRY.getUpkeep(upKeepId);
         // https://etherscan.io/address/0x02777053d6764996e594c3e88af1d58d5363a2e6#code#F1#L738
@@ -239,12 +199,12 @@ contract AvatarRegistry is AvatarRegistryUtils, Pausable, KeeperCompatibleInterf
         }
 
         // NOTE: removal actions after on-chain checkups
-        _avatars.remove(avatarAddress);
-        delete avatarsInfo[avatarAddress];
+        _members.remove(memberAddress);
+        delete membersInfo[memberAddress];
 
         CL_REGISTRY.withdrawFunds(upKeepId, address(this));
 
-        emit RemoveAvatar(avatarAddress, upKeepId, block.timestamp);
+        emit RemoveMember(memberAddress, upKeepId, block.timestamp);
     }
 
     /// @dev  Sweep the full LINK balance to techops
@@ -323,18 +283,18 @@ contract AvatarRegistry is AvatarRegistryUtils, Pausable, KeeperCompatibleInterf
          ((weiForGas * (1e9) * (premium)) / (linkEth)) + (uint256(_c.flatFeeMicroLink) * (1e12));
     }
 
-    /// @dev checks if an avatar upKeepId is under-funded, helper in `checkUpKeep`
+    /// @dev checks if member upKeepId is under-funded, helper in `checkUpKeep`
     /// and `performUpKeep` methods
-    /// @param avatar contract address to verify if under-funded
-    function _isAvatarUpKeepUnderFunded(address avatar)
+    /// @param member contract address to verify if under-funded
+    function _isMemberUpKeepUnderFunded(address member)
         internal
         view
         returns (uint256 upKeepId, uint96 minUpKeepBal, bool underFunded)
     {
-        if (avatar == address(this)) {
-            upKeepId = avatarMonitoringUpKeepId;
+        if (member == address(this)) {
+            upKeepId = monitoringUpKeepId;
         } else {
-            upKeepId = avatarsInfo[avatar].upKeepId;
+            upKeepId = membersInfo[member].upKeepId;
         }
 
         /// @dev check onchain the min and current amounts to consider top-up
@@ -349,7 +309,7 @@ contract AvatarRegistry is AvatarRegistryUtils, Pausable, KeeperCompatibleInterf
     /// @dev carries over the top-up action of an avatar upKeep
     /// @param avatar contract address to top-up its targetted upKeepId
     function _topupUpkeep(address avatar) internal {
-        (uint256 upKeepId, uint96 minUpKeepBal, bool underFunded) = _isAvatarUpKeepUnderFunded(avatar);
+        (uint256 upKeepId, uint96 minUpKeepBal, bool underFunded) = _isMemberUpKeepUnderFunded(avatar);
 
         if (upKeepId == 0) {
             revert AvatarNotRegisteredYet(avatar);
@@ -454,20 +414,14 @@ contract AvatarRegistry is AvatarRegistryUtils, Pausable, KeeperCompatibleInterf
         whenNotPaused
         returns (bool upkeepNeeded_, bytes memory performData_)
     {
-        address[] memory avatars = getAvatars();
+        address[] memory avatars = getMembers();
         bool underFunded;
 
         uint256 avatarsLength = avatars.length;
         if (avatarsLength > 0) {
-            /// @dev loop thru avatar in test status for register or topup if required
+            // NOTE: loop thru members to see which is underfunded
             for (uint256 i; i < avatarsLength; i++) {
-                /// @dev requires that CL keeper is config properly
-                if (IAvatar(avatars[i]).keeper() != address(CL_REGISTRY)) {
-                    continue;
-                }
-
-                /// @dev check for under funded avatar upkeeps
-                (,, underFunded) = _isAvatarUpKeepUnderFunded(avatars[i]);
+                (,, underFunded) = _isMemberUpKeepUnderFunded(avatars[i]);
                 if (underFunded) {
                     upkeepNeeded_ = true;
                     performData_ = abi.encode(avatars[i]);
@@ -479,7 +433,7 @@ contract AvatarRegistry is AvatarRegistryUtils, Pausable, KeeperCompatibleInterf
         // NOTE: to avoid overwritten an `upKeep` meant for registration, check boolean
         if (!upkeepNeeded_) {
             /// @dev check for the registry itself if its upkeep needs topup
-            (,, underFunded) = _isAvatarUpKeepUnderFunded(address(this));
+            (,, underFunded) = _isMemberUpKeepUnderFunded(address(this));
             if (underFunded) {
                 upkeepNeeded_ = true;
                 performData_ = abi.encode(address(this));
@@ -487,37 +441,8 @@ contract AvatarRegistry is AvatarRegistryUtils, Pausable, KeeperCompatibleInterf
         }
     }
 
-    /// @dev Returns all avatar addresses
-    function getAvatars() public view returns (address[] memory) {
-        return _avatars.values();
-    }
-
-    /// @dev Returns all avatar addresses with matching status
-    function getAvatarsByStatus(AvatarStatus status) public view returns (address[] memory) {
-        uint256 length = _avatars.length();
-        address[] memory avatarInTestStatusHelper = new address[](length);
-        uint256 avatarStatusLength;
-
-        for (uint256 i; i < length;) {
-            address avatar = _avatars.at(i);
-            if (avatarsInfo[avatar].status == status) {
-                avatarInTestStatusHelper[avatarStatusLength] = avatar;
-                unchecked {
-                    ++avatarStatusLength;
-                }
-            }
-            unchecked {
-                ++i;
-            }
-        }
-
-        if (avatarStatusLength != length) {
-            // NOTE: truncate length
-            assembly {
-                mstore(avatarInTestStatusHelper, avatarStatusLength)
-            }
-        }
-
-        return avatarInTestStatusHelper;
+    /// @dev Returns all member addresses
+    function getMembers() public view returns (address[] memory) {
+        return _members.values();
     }
 }
