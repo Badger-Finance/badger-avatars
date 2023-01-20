@@ -322,7 +322,14 @@ contract UpKeepManagerTest is Test {
             abi.encodeWithSelector(IKeeperRegistry.getUpkeep.selector, upKeepIdTarget),
             // getUpKeep mock
             abi.encode(
-                address(avatar), 500000, new bytes(0), enforceUpKeepBal, address(0), address(upKeepManager), 2 ** 64 - 1, 0
+                address(avatar),
+                500000,
+                new bytes(0),
+                enforceUpKeepBal,
+                address(0),
+                address(upKeepManager),
+                2 ** 64 - 1,
+                0
             )
         );
         (upkeepNeeded, performData) = upKeepManager.checkUpkeep(new bytes(0));
