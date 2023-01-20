@@ -11,6 +11,7 @@ import {IERC20MetadataUpgradeable} from
 import {EnumerableSetUpgradeable} from
     "../../lib/openzeppelin-contracts-upgradeable/contracts/utils/structs/EnumerableSetUpgradeable.sol";
 
+import {EnumerableSetExtension} from "../lib/EnumerableSetExtension.sol";
 import {BaseAvatar} from "../lib/BaseAvatar.sol";
 import {MAX_BPS, PRECISION, CHAINLINK_KEEPER_REGISTRY} from "../BaseConstants.sol";
 import {BpsConfig, TokenAmount} from "../BaseStructs.sol";
@@ -35,6 +36,7 @@ contract AuraAvatarMultiToken is BaseAvatar, PausableUpgradeable, AuraAvatarUtil
     using SafeERC20Upgradeable for IERC20MetadataUpgradeable;
     using EnumerableSetUpgradeable for EnumerableSetUpgradeable.AddressSet;
     using EnumerableSetUpgradeable for EnumerableSetUpgradeable.UintSet;
+    using EnumerableSetExtension for EnumerableSetUpgradeable.UintSet;
 
     ////////////////////////////////////////////////////////////////////////////
     // STORAGE
@@ -349,8 +351,7 @@ contract AuraAvatarMultiToken is BaseAvatar, PausableUpgradeable, AuraAvatarUtil
                 revert NothingToDeposit();
             }
 
-            // TODO: Cache this value somewhere and avoid call
-            (address lpToken,,,,,) = AURA_BOOSTER.poolInfo(_pids[i]);
+            address lpToken = assets.at(pids.indexOf(_pids[i]));
             // NOTE: Using msg.sender since this function is only callable by owner.
             //       Keep in mind if access control is changed.
             IERC20MetadataUpgradeable(lpToken).safeTransferFrom(msg.sender, address(this), _amountAssets[i]);
@@ -417,7 +418,10 @@ contract AuraAvatarMultiToken is BaseAvatar, PausableUpgradeable, AuraAvatarUtil
             revert PidNotIncluded(_removePid);
         }
 
-        (address lpToken,,, address crvRewards,,) = AURA_BOOSTER.poolInfo(_removePid);
+        uint256 pidIndex = pids.indexOf(_removePid);
+        address lpToken = assets.at(pidIndex);
+        address crvRewards = baseRewardPools.at(pidIndex);
+
         // NOTE: remove from storage prior to external calls, CEI compliance
         pids.remove(_removePid);
         assets.remove(lpToken);
@@ -596,10 +600,10 @@ contract AuraAvatarMultiToken is BaseAvatar, PausableUpgradeable, AuraAvatarUtil
             if (_amountAssets[i] == 0) {
                 revert NothingToWithdraw();
             }
-            // TODO: Cache
-            (address lpToken,,, address crvRewards,,) = AURA_BOOSTER.poolInfo(_pids[i]);
 
-            IBaseRewardPool(crvRewards).withdrawAndUnwrap(_amountAssets[i], false);
+            uint256 pidIndex = pids.indexOf(_pids[i]);
+            address lpToken = assets.at(pidIndex);
+            IBaseRewardPool(baseRewardPools.at(pidIndex)).withdrawAndUnwrap(_amountAssets[i], false);
             IERC20MetadataUpgradeable(lpToken).safeTransfer(owner(), _amountAssets[i]);
 
             emit Withdraw(lpToken, _amountAssets[i], block.timestamp);
