@@ -336,10 +336,11 @@ contract AuraAvatarMultiToken is BaseAvatar, PausableUpgradeable, AuraAvatarUtil
     /// @param _pids PIDs target to stake into
     /// @param _amountAssets Amount of assets to be staked.
     function deposit(uint256[] calldata _pids, uint256[] calldata _amountAssets) external onlyOwner {
-        if (_pids.length != _amountAssets.length) {
+        uint256 pidLength = _pids.length;
+        if (pidLength != _amountAssets.length) {
             revert LengthMismatch();
         }
-        for (uint256 i; i < _pids.length;) {
+        for (uint256 i; i < pidLength;) {
             // Verify if PID is in storage and amount is > 0
             if (!pids.contains(_pids[i])) {
                 revert PidNotIncluded(_pids[i]);
