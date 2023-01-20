@@ -440,7 +440,7 @@ contract AuraAvatarMultiToken is BaseAvatar, PausableUpgradeable, AuraAvatarUtil
     function sweep(address token) external onlyOwner {
         IERC20MetadataUpgradeable erc20Token = IERC20MetadataUpgradeable(token);
         uint256 balance = erc20Token.balanceOf(address(this));
-        erc20Token.safeTransfer(owner(), balance);
+        erc20Token.safeTransfer(msg.sender, balance);
         emit ERC20Swept(token, balance);
     }
 
