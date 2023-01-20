@@ -53,6 +53,9 @@ contract UpKeepManager is UpKeepManagerUtils, Pausable, KeeperCompatibleInterfac
 
     uint256 public monitoringUpKeepId;
 
+    uint256 public roundsTopUp;
+    uint256 public minRoundsTopUp;
+
     /// @dev set helper for ease of iterating thru members
     EnumerableSet.AddressSet internal _members;
     mapping(address => MemberInfo) public membersInfo;
@@ -84,6 +87,9 @@ contract UpKeepManager is UpKeepManagerUtils, Pausable, KeeperCompatibleInterfac
     event NewMember(address indexed memberAddress, string name, uint256 gasLimit, uint256 timestamp);
     event RemoveMember(address indexed memberAddress, uint256 upKeepId, uint256 timestamp);
 
+    event RoundsTopUpUpdated(uint256 oldValue, uint256 newValue);
+    event MinRoundsTopUpUpdated(uint256 oldValue, uint256 newValue);
+
     event SweepLinkToTechops(uint256 amount, uint256 timestamp);
     event SweepEth(address recipient, uint256 amount);
     event EthSwappedForLink(uint256 amountEthOut, uint256 amountLinkIn, uint256 timestamp);
@@ -95,6 +101,9 @@ contract UpKeepManager is UpKeepManagerUtils, Pausable, KeeperCompatibleInterfac
             revert ZeroAddress();
         }
         governance = _governance;
+
+        roundsTopUp = 20;
+        minRoundsTopUp = 3;
     }
 
     ////////////////////////////////////////////////////////////////////////////
@@ -237,6 +246,27 @@ contract UpKeepManager is UpKeepManagerUtils, Pausable, KeeperCompatibleInterfac
     }
 
     ////////////////////////////////////////////////////////////////////////////
+    // PUBLIC: Governance - Config
+    ////////////////////////////////////////////////////////////////////////////
+
+    /// @notice Updates the value of `roundsTopUp`, which is used for decided how much rounds will
+    ///         will be covered at least while topping-up
+    /// @param _roundsTopUp new value for `roundsTopUp`
+    function setRoundsTopUp(uint256 _roundsTopUp) external onlyGovernance {
+        uint256 oldRoundsTopUp = minRoundsTopUp;
+        roundsTopUp = _roundsTopUp;
+        emit RoundsTopUpUpdated(oldRoundsTopUp, _roundsTopUp);
+    }
+
+    /// @notice Updates the value of `minRoundsTopUp`, which is used to decide if `upKeepId` is underfunded
+    /// @param _minRoundsTopUp new value for `minRoundsTopUp`
+    function setMinRoundsTopUp(uint256 _minRoundsTopUp) external onlyGovernance {
+        uint256 oldMinRoundsTopUp = minRoundsTopUp;
+        minRoundsTopUp = _minRoundsTopUp;
+        emit RoundsTopUpUpdated(oldMinRoundsTopUp, _minRoundsTopUp);
+    }
+
+    ////////////////////////////////////////////////////////////////////////////
     // PUBLIC: Keeper
     ////////////////////////////////////////////////////////////////////////////
 
@@ -301,7 +331,7 @@ contract UpKeepManager is UpKeepManagerUtils, Pausable, KeeperCompatibleInterfac
         minUpKeepBal = CL_REGISTRY.getMinBalanceForUpkeep(upKeepId);
         (,,, uint96 currentUpKeepBal,,,,) = CL_REGISTRY.getUpkeep(upKeepId);
 
-        if (currentUpKeepBal <= minUpKeepBal * MIN_ROUNDS_TOP_UP) {
+        if (currentUpKeepBal <= minUpKeepBal * minRoundsTopUp) {
             underFunded = true;
         }
     }
@@ -318,7 +348,7 @@ contract UpKeepManager is UpKeepManagerUtils, Pausable, KeeperCompatibleInterfac
             revert NotUnderFundedUpkeep(upKeepId);
         }
 
-        uint96 topupAmount = minUpKeepBal * uint96(ROUNDS_TOP_UP);
+        uint96 topupAmount = minUpKeepBal * uint96(roundsTopUp);
 
         uint256 linkRegistryBal = LINK.balanceOf(address(this));
         if (linkRegistryBal < topupAmount) {
@@ -359,7 +389,7 @@ contract UpKeepManager is UpKeepManagerUtils, Pausable, KeeperCompatibleInterfac
         returns (uint256 upkeepID)
     {
         /// @dev we ensure we top-up enough LINK for couple of test-runs (20) and sanity checks
-        uint256 linkAmount = _getLinkAmount(gasLimit) * ROUNDS_TOP_UP;
+        uint256 linkAmount = _getLinkAmount(gasLimit) * roundsTopUp;
         if (linkAmount < MIN_FUNDING_UPKEEP) {
             revert NotMinLinkFundedUpKeep();
         }
