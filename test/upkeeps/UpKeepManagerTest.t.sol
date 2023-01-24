@@ -32,7 +32,7 @@ contract UpKeepManagerTest is Test {
     event SweepLinkToTechops(uint256 amount, uint256 timestamp);
 
     function setUp() public {
-        vm.createSelectFork("mainnet", 16221000);
+        vm.createSelectFork("mainnet", 16385870);
 
         upKeepManager = new UpKeepManager(admin);
 
@@ -63,10 +63,16 @@ contract UpKeepManagerTest is Test {
         upKeepManager.addMember(address(0), "randomAvatar", 500000, 0);
     }
 
-    function test_addMember_requires() public {
+    function test_addMember_reverts() public {
         vm.startPrank(admin);
         vm.expectRevert(UpKeepManager.ZeroAddress.selector);
         upKeepManager.addMember(address(0), "randomAvatar", 500000, 0);
+
+        vm.expectRevert(UpKeepManager.ZeroUintValue.selector);
+        upKeepManager.addMember(address(6), "randomAvatar", 0, 0);
+
+        vm.expectRevert(UpKeepManager.EmptyString.selector);
+        upKeepManager.addMember(address(6), "", 500000, 0);
 
         upKeepManager.addMember(address(avatar), "randomAvatar", 500000, 0);
 
@@ -98,6 +104,27 @@ contract UpKeepManagerTest is Test {
         assertEq(checkData, new bytes(0));
         assertTrue(balance > 0);
         assertEq(keeperJobAdmin, address(upKeepManager));
+    }
+
+    function test_addMember_existing_upKeep() public {
+        // NOTE: use a dripper from our infra for this test
+        uint256 existingUpKeepId = 98030557125143332209375009711552185081207413079136145061022651896587613727137;
+        (address target, uint32 executeGas,,,,,,) = CL_REGISTRY.getUpkeep(existingUpKeepId);
+
+        console.log(target);
+
+        uint256 linkBalBefore = LINK.balanceOf(address(upKeepManager));
+        vm.startPrank(admin);
+        upKeepManager.addMember(target, "RemBadgerDripper2023", executeGas, existingUpKeepId);
+
+        // NOTE: given that it is registed, expected to not spend funds
+        assertEq(LINK.balanceOf(address(upKeepManager)), linkBalBefore);
+
+        (string memory name, uint256 gasLimit, uint256 upKeepId) = upKeepManager.membersInfo(target);
+
+        assertEq(name, "RemBadgerDripper2023");
+        assertEqUint(gasLimit, executeGas);
+        assertEq(upKeepId, existingUpKeepId);
     }
 
     function test_cancelMemberUpKeep_permissions() public {
