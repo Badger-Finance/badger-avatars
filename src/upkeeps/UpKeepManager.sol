@@ -70,6 +70,7 @@ contract UpKeepManager is UpKeepManagerUtils, Pausable, KeeperCompatibleInterfac
     error NotUnderFundedUpkeep(uint256 upKeepId);
     error NotMinLinkFundedUpKeep();
     error UpKeepNotCancelled(uint256 upKeepId);
+    error UpkeepCancelled(uint256 upKeepId);
 
     error NotMemberIncluded(address member);
     error MemberAlreadyRegister(address member);
@@ -288,6 +289,7 @@ contract UpKeepManager is UpKeepManagerUtils, Pausable, KeeperCompatibleInterfac
     ////////////////////////////////////////////////////////////////////////////
 
     /// @dev Contains the logic that should be executed on-chain when `checkUpkeep` returns true.
+    /// @param _performData ABI-encoded member address
     function performUpkeep(bytes calldata _performData) external override onlyKeeper whenNotPaused {
         uint256 upKeepId = _validatePerformData(_performData);
 
@@ -298,7 +300,7 @@ contract UpKeepManager is UpKeepManagerUtils, Pausable, KeeperCompatibleInterfac
     // INTERNAL
     ////////////////////////////////////////////////////////////////////////////
 
-    /// @dev returns the fast gwei and price of link/eth from CL
+    /// @notice returns the fast gwei and price of link/eth from CL
     /// @return gasWei_ current fastest gas value in wei
     /// @return linkEth_ latest answer of feed of link/eth
     function _getFeedData() internal view returns (uint256 gasWei_, uint256 linkEth_) {
@@ -309,7 +311,7 @@ contract UpKeepManager is UpKeepManagerUtils, Pausable, KeeperCompatibleInterfac
         linkEth_ = fetchPriceFromClFeed(LINK_ETH_FEED, CL_FEED_HEARTBEAT_LINK);
     }
 
-    /// @dev converts a gas limit value into link expressed amount
+    /// @notice converts a gas limit value into LINK expressed amount
     /// @param _gasLimit amount of gas to provide the target contract when performing upkeep
     /// @return linkAmount_ amount of LINK needed to cover the job
     function _getLinkAmount(uint256 _gasLimit) internal view returns (uint256 linkAmount_) {
@@ -339,9 +341,11 @@ contract UpKeepManager is UpKeepManagerUtils, Pausable, KeeperCompatibleInterfac
             upKeepId_ = membersInfo[member].upKeepId;
         }
 
-        if (upKeepId_ == 0) {
-            revert MemberNotRegisteredYet(member);
-        }
+        if (upKeepId_ == 0) revert MemberNotRegisteredYet(member);
+
+        (,,,,,, uint64 maxValidBlocknumber,) = CL_REGISTRY.getUpkeep(upKeepId_);
+        // https://etherscan.io/address/0x02777053d6764996e594c3e88af1d58d5363a2e6#code#F1#L332
+        if (maxValidBlocknumber < block.number) revert UpkeepCancelled(upKeepId_);
     }
 
     /// @dev checks if upKeepId is under-funded, helper in `checkUpKeep`
@@ -361,7 +365,7 @@ contract UpKeepManager is UpKeepManagerUtils, Pausable, KeeperCompatibleInterfac
         }
     }
 
-    /// @dev carries over the top-up action of an member upKeep
+    /// @notice carries over the top-up action of an member upKeep
     /// @param _upKeepId id to verify if it is underfunded
     function _topupUpkeep(uint256 _upKeepId) internal {
         (uint96 minUpKeepBal, bool underFunded) = _isUpKeepIdUnderFunded(_upKeepId);
@@ -380,7 +384,7 @@ contract UpKeepManager is UpKeepManagerUtils, Pausable, KeeperCompatibleInterfac
         CL_REGISTRY.addFunds(_upKeepId, topupAmount);
     }
 
-    /// @dev executes the swap from ETH to LINK, for the amount of link required
+    /// @notice executes the swap from ETH to LINK, for the amount of link required
     /// @param _linkRequired amount of link required for handling the `performUpKeep` task
     function _swapEthForLink(uint256 _linkRequired) internal {
         uint256 maxEth = (getLinkAmountInEth(_linkRequired) * MAX_IN_BPS) / MAX_BPS;
@@ -400,12 +404,12 @@ contract UpKeepManager is UpKeepManagerUtils, Pausable, KeeperCompatibleInterfac
         emit EthSwappedForLink(ethSpent, _linkRequired, block.timestamp);
     }
 
-    /// @dev carries registration of target contract in CL
+    /// @notice carries registration of target contract in the CL registry
     /// @param _targetAddress contract which will be register
     /// @param _gasLimit amount of gas to provide the target contract when
     /// performing upkeep
     /// @param _name detailed name for the upkeep job
-    /// @return upkeepID_ id of cl job
+    /// @return upkeepID_ id of CL job
     function _registerUpKeep(address _targetAddress, uint256 _gasLimit, string memory _name)
         internal
         returns (uint256 upkeepID_)
@@ -457,8 +461,10 @@ contract UpKeepManager is UpKeepManagerUtils, Pausable, KeeperCompatibleInterfac
     // PUBLIC VIEW
     ////////////////////////////////////////////////////////////////////////////
 
-    /// @dev Runs off-chain at every block to determine if the `performUpkeep`
-    /// function should be called on-chain.
+    /// @notice Checks whether an upkeep is to be performed.
+    /// @dev The calldata is encoded with the targetted member address
+    /// @return upkeepNeeded_ A boolean indicating whether an upkeep is to be performed.
+    /// @return performData_ The calldata to be passed to the upkeep function.
     function checkUpkeep(bytes calldata)
         external
         view
@@ -472,12 +478,20 @@ contract UpKeepManager is UpKeepManagerUtils, Pausable, KeeperCompatibleInterfac
         uint256 membersLength = members.length;
         if (membersLength > 0) {
             // NOTE: loop thru members to see which is underfunded
-            for (uint256 i; i < membersLength; i++) {
-                (, underFunded) = _isUpKeepIdUnderFunded(membersInfo[members[i]].upKeepId);
+            for (uint256 i; i < membersLength;) {
+                uint256 upKeepId = membersInfo[members[i]].upKeepId;
+                (, underFunded) = _isUpKeepIdUnderFunded(upKeepId);
                 if (underFunded) {
-                    upkeepNeeded_ = true;
-                    performData_ = abi.encode(members[i]);
-                    break;
+                    (,,,,,, uint64 maxValidBlocknumber,) = CL_REGISTRY.getUpkeep(upKeepId);
+                    // NOTE: helps filtering those which `cancelUpkeep` has being initiated
+                    if (maxValidBlocknumber == type(uint64).max) {
+                        upkeepNeeded_ = true;
+                        performData_ = abi.encode(members[i]);
+                        break;
+                    }
+                }
+                unchecked {
+                    ++i;
                 }
             }
         }
