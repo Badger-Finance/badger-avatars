@@ -100,9 +100,7 @@ contract UpKeepManager is UpKeepManagerUtils, Pausable, KeeperCompatibleInterfac
     event RegistryEthReceived(address indexed sender, uint256 value);
 
     constructor(address _governance) {
-        if (_governance == address(0)) {
-            revert ZeroAddress();
-        }
+        if (_governance == address(0)) revert ZeroAddress();
         governance = _governance;
 
         roundsTopUp = 20;
@@ -142,9 +140,7 @@ contract UpKeepManager is UpKeepManagerUtils, Pausable, KeeperCompatibleInterfac
     /// @notice only callable via governance
     /// @param _gasLimit gas limit for the upKeepManager monitoring upkeep task
     function initializeBaseUpkeep(uint256 _gasLimit) external onlyGovernance {
-        if (_gasLimit == 0) {
-            revert ZeroUintValue();
-        }
+        if (_gasLimit == 0) revert ZeroUintValue();
 
         monitoringUpKeepId = _registerUpKeep(address(this), _gasLimit, NAME);
 
@@ -165,18 +161,10 @@ contract UpKeepManager is UpKeepManagerUtils, Pausable, KeeperCompatibleInterfac
         onlyGovernance
     {
         /// @dev sanity checks before adding a new member in storage
-        if (_memberAddress == address(0)) {
-            revert ZeroAddress();
-        }
-        if (membersInfo[_memberAddress].gasLimit != 0) {
-            revert MemberAlreadyRegister(_memberAddress);
-        }
-        if (_gasLimit == 0) {
-            revert ZeroUintValue();
-        }
-        if (bytes(_name).length == 0) {
-            revert EmptyString();
-        }
+        if (_memberAddress == address(0)) revert ZeroAddress();
+        if (membersInfo[_memberAddress].gasLimit != 0) revert MemberAlreadyRegister(_memberAddress);
+        if (_gasLimit == 0) revert ZeroUintValue();
+        if (bytes(_name).length == 0) revert EmptyString();
 
         _members.add(_memberAddress);
         membersInfo[_memberAddress] = MemberInfo({
@@ -194,9 +182,8 @@ contract UpKeepManager is UpKeepManagerUtils, Pausable, KeeperCompatibleInterfac
     /// @notice only callable via governance
     /// @param _memberAddress contract address to be cancel upkeep
     function cancelMemberUpKeep(address _memberAddress) external onlyGovernance {
-        if (!_members.contains(_memberAddress)) {
-            revert NotMemberIncluded(_memberAddress);
-        }
+        if (!_members.contains(_memberAddress)) revert NotMemberIncluded(_memberAddress);
+
         // NOTE: only member which upkeep is being cancelled can be removed
         uint256 upKeepId = membersInfo[_memberAddress].upKeepId;
         CL_REGISTRY.cancelUpkeep(upKeepId);
@@ -217,9 +204,7 @@ contract UpKeepManager is UpKeepManagerUtils, Pausable, KeeperCompatibleInterfac
         // NOTE: only member which upkeep is being cancelled can be removed
         (,,,,,, uint64 maxValidBlocknumber,) = CL_REGISTRY.getUpkeep(upKeepId);
         // https://etherscan.io/address/0x02777053d6764996e594c3e88af1d58d5363a2e6#code#F1#L738
-        if (maxValidBlocknumber == UINT64_MAX) {
-            revert UpKeepNotCancelled(upKeepId);
-        }
+        if (maxValidBlocknumber == UINT64_MAX) revert UpKeepNotCancelled(upKeepId);
 
         CL_REGISTRY.withdrawFunds(upKeepId, address(this));
 
@@ -370,9 +355,7 @@ contract UpKeepManager is UpKeepManagerUtils, Pausable, KeeperCompatibleInterfac
     function _topupUpkeep(uint256 _upKeepId) internal {
         (uint96 minUpKeepBal, bool underFunded) = _isUpKeepIdUnderFunded(_upKeepId);
 
-        if (!underFunded) {
-            revert NotUnderFundedUpkeep(_upKeepId);
-        }
+        if (!underFunded) revert NotUnderFundedUpkeep(_upKeepId);
 
         uint96 topupAmount = minUpKeepBal * uint96(roundsTopUp);
 
@@ -416,9 +399,8 @@ contract UpKeepManager is UpKeepManagerUtils, Pausable, KeeperCompatibleInterfac
     {
         /// @dev we ensure we top-up enough LINK for couple of test-runs (20) and sanity checks
         uint256 linkAmount = _getLinkAmount(_gasLimit) * roundsTopUp;
-        if (linkAmount < MIN_FUNDING_UPKEEP) {
-            revert NotMinLinkFundedUpKeep();
-        }
+        if (linkAmount < MIN_FUNDING_UPKEEP) revert NotMinLinkFundedUpKeep();
+
         uint256 linkRegistryBal = LINK.balanceOf(address(this));
         if (linkRegistryBal < linkAmount) {
             _swapEthForLink(linkAmount - linkRegistryBal);
