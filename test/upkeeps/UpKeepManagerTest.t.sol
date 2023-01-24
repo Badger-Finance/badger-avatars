@@ -67,7 +67,7 @@ contract UpKeepManagerTest is Test {
 
         upKeepManager.addMember(address(avatar), "randomAvatar", 500000);
 
-        vm.expectRevert(abi.encodeWithSelector(UpKeepManager.AvatarAlreadyRegister.selector, address(avatar)));
+        vm.expectRevert(abi.encodeWithSelector(UpKeepManager.MemberAlreadyRegister.selector, address(avatar)));
         upKeepManager.addMember(address(avatar), "randomAvatar", 500000);
     }
 
@@ -104,7 +104,7 @@ contract UpKeepManagerTest is Test {
 
     function test_cancelMemberUpKeep_requires() public {
         vm.startPrank(admin);
-        vm.expectRevert(abi.encodeWithSelector(UpKeepManager.NotAvatarIncluded.selector, dummy_avatar));
+        vm.expectRevert(abi.encodeWithSelector(UpKeepManager.NotMemberIncluded.selector, dummy_avatar));
         // Test for both cases, since it cannot remove from set if not avail
         upKeepManager.cancelMemberUpKeep(dummy_avatar);
     }

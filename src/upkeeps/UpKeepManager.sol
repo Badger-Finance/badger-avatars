@@ -72,9 +72,9 @@ contract UpKeepManager is UpKeepManagerUtils, Pausable, KeeperCompatibleInterfac
     error NotMinLinkFundedUpKeep();
     error UpKeepNotCancelled(uint256 upKeepId);
 
-    error NotAvatarIncluded(address avatar);
-    error AvatarAlreadyRegister(address avatar);
-    error AvatarNotRegisteredYet(address avatar);
+    error NotMemberIncluded(address member);
+    error MemberAlreadyRegister(address member);
+    error MemberNotRegisteredYet(address member);
 
     error ZeroAddress();
     error ZeroUintValue();
@@ -91,7 +91,7 @@ contract UpKeepManager is UpKeepManagerUtils, Pausable, KeeperCompatibleInterfac
     event MinRoundsTopUpUpdated(uint256 oldValue, uint256 newValue);
 
     event SweepLinkToTechops(uint256 amount, uint256 timestamp);
-    event SweepEth(address recipient, uint256 amount);
+    event SweepEth(address recipient, uint256 amount, uint256 timestamp);
     event EthSwappedForLink(uint256 amountEthOut, uint256 amountLinkIn, uint256 timestamp);
 
     event RegistryEthReceived(address indexed sender, uint256 value);
@@ -137,7 +137,7 @@ contract UpKeepManager is UpKeepManagerUtils, Pausable, KeeperCompatibleInterfac
 
     /// @dev It will initiate the upKeep job for monitoring avatars
     /// @notice only callable via governance
-    /// @param gasLimit gas limit for the avatar monitoring upkeep task
+    /// @param gasLimit gas limit for the upKeepManager monitoring upkeep task
     function initializeBaseUpkeep(uint256 gasLimit) external onlyGovernance {
         if (gasLimit == 0) {
             revert ZeroUintValue();
@@ -151,19 +151,19 @@ contract UpKeepManager is UpKeepManagerUtils, Pausable, KeeperCompatibleInterfac
         }
     }
 
-    /// @dev Adds an avatar into the registry
+    /// @dev Adds an member into the manager
     /// @notice only callable via governance
-    /// @param memberAddress contract address to be register as new avatar
-    /// @param name avatar's name
+    /// @param memberAddress contract address to be register as new member
+    /// @param name member's name
     /// @param gasLimit amount of gas to provide the target contract when
     /// performing upkeep
     function addMember(address memberAddress, string memory name, uint256 gasLimit) external onlyGovernance {
-        /// @dev sanity checks before adding a new avatar in storage
+        /// @dev sanity checks before adding a new member in storage
         if (memberAddress == address(0)) {
             revert ZeroAddress();
         }
         if (membersInfo[memberAddress].gasLimit != 0) {
-            revert AvatarAlreadyRegister(memberAddress);
+            revert MemberAlreadyRegister(memberAddress);
         }
         if (gasLimit == 0) {
             revert ZeroUintValue();
@@ -179,28 +179,28 @@ contract UpKeepManager is UpKeepManagerUtils, Pausable, KeeperCompatibleInterfac
         emit NewMember(memberAddress, name, gasLimit, block.timestamp);
     }
 
-    /// @dev Cancels an avatar upkeep job
+    /// @dev Cancels an member's upkeep job
     /// @notice only callable via governance
     /// @param memberAddress contract address to be cancel upkeep
     function cancelMemberUpKeep(address memberAddress) external onlyGovernance {
         if (!_members.contains(memberAddress)) {
-            revert NotAvatarIncluded(memberAddress);
+            revert NotMemberIncluded(memberAddress);
         }
         // NOTE: only member which upkeep is being cancelled can be removed
         uint256 upKeepId = membersInfo[memberAddress].upKeepId;
         CL_REGISTRY.cancelUpkeep(upKeepId);
     }
 
-    /// @dev Withdraws LINK funds and remove avatar from registry
+    /// @dev Withdraws LINK funds and remove member from manager
     /// @notice only callable via governance
-    /// @param memberAddress contract address to be remove from registry
+    /// @param memberAddress contract address to be remove from manager
     function withdrawLinkFundsAndRemoveMember(address memberAddress) external onlyGovernance {
         if (!_members.contains(memberAddress)) {
-            revert NotAvatarIncluded(memberAddress);
+            revert NotMemberIncluded(memberAddress);
         }
 
         uint256 upKeepId = membersInfo[memberAddress].upKeepId;
-        // NOTE: only avatar which upkeep is being cancelled can be removed
+        // NOTE: only member which upkeep is being cancelled can be removed
         (,,,,,, uint64 maxValidBlocknumber,) = CL_REGISTRY.getUpkeep(upKeepId);
         // https://etherscan.io/address/0x02777053d6764996e594c3e88af1d58d5363a2e6#code#F1#L738
         if (maxValidBlocknumber == type(uint64).max) {
@@ -228,7 +228,7 @@ contract UpKeepManager is UpKeepManagerUtils, Pausable, KeeperCompatibleInterfac
     function sweepEthFunds(address payable recipient) external onlyGovernance {
         uint256 ethBal = address(this).balance;
         recipient.transfer(ethBal);
-        emit SweepEth(recipient, ethBal);
+        emit SweepEth(recipient, ethBal, block.timestamp);
     }
 
     ////////////////////////////////////////////////////////////////////////////
@@ -273,9 +273,9 @@ contract UpKeepManager is UpKeepManagerUtils, Pausable, KeeperCompatibleInterfac
     /// @dev Contains the logic that should be executed on-chain when
     /// `checkUpkeep` returns true.
     function performUpkeep(bytes calldata _performData) external override onlyKeeper whenNotPaused {
-        address avatarTarget = abi.decode(_performData, (address));
+        address memberTarget = abi.decode(_performData, (address));
 
-        _topupUpkeep(avatarTarget);
+        _topupUpkeep(memberTarget);
     }
 
     ////////////////////////////////////////////////////////////////////////////
@@ -336,13 +336,13 @@ contract UpKeepManager is UpKeepManagerUtils, Pausable, KeeperCompatibleInterfac
         }
     }
 
-    /// @dev carries over the top-up action of an avatar upKeep
-    /// @param avatar contract address to top-up its targetted upKeepId
-    function _topupUpkeep(address avatar) internal {
-        (uint256 upKeepId, uint96 minUpKeepBal, bool underFunded) = _isMemberUpKeepUnderFunded(avatar);
+    /// @dev carries over the top-up action of an member upKeep
+    /// @param member contract address to top-up its targetted upKeepId
+    function _topupUpkeep(address member) internal {
+        (uint256 upKeepId, uint96 minUpKeepBal, bool underFunded) = _isMemberUpKeepUnderFunded(member);
 
         if (upKeepId == 0) {
-            revert AvatarNotRegisteredYet(avatar);
+            revert MemberNotRegisteredYet(member);
         }
         if (!underFunded) {
             revert NotUnderFundedUpkeep(upKeepId);
@@ -398,7 +398,7 @@ contract UpKeepManager is UpKeepManagerUtils, Pausable, KeeperCompatibleInterfac
             _swapEthForLink(linkAmount - linkRegistryBal);
         }
 
-        /// @dev check registry state before registering
+        /// @dev checks CL registry state before registering
         (IKeeperRegistry.State memory state,,) = CL_REGISTRY.getState();
         uint256 oldNonce = state.nonce;
 
@@ -462,7 +462,7 @@ contract UpKeepManager is UpKeepManagerUtils, Pausable, KeeperCompatibleInterfac
 
         // NOTE: to avoid overwritten an `upKeep` meant for registration, check boolean
         if (!upkeepNeeded_) {
-            /// @dev check for the registry itself if its upkeep needs topup
+            /// @dev check for the UpKeepManager itself if its upkeep needs topup
             (,, underFunded) = _isMemberUpKeepUnderFunded(address(this));
             if (underFunded) {
                 upkeepNeeded_ = true;
