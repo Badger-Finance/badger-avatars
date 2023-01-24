@@ -7,7 +7,6 @@ import {Pausable} from "../../lib/openzeppelin-contracts/contracts/security/Paus
 import {MAX_BPS} from "../BaseConstants.sol";
 import {UpKeepManagerUtils} from "./UpKeepManagerUtils.sol";
 
-import {IAvatar} from "../interfaces/badger/IAvatar.sol";
 import {IAggregatorV3} from "../interfaces/chainlink/IAggregatorV3.sol";
 import {KeeperCompatibleInterface} from "../interfaces/chainlink/KeeperCompatibleInterface.sol";
 import {IKeeperRegistry} from "../interfaces/chainlink/IKeeperRegistry.sol";
@@ -135,7 +134,7 @@ contract UpKeepManager is UpKeepManagerUtils, Pausable, KeeperCompatibleInterfac
     // PUBLIC: Governance
     ////////////////////////////////////////////////////////////////////////////
 
-    /// @dev It will initiate the upKeep job for monitoring avatars
+    /// @dev It will initiate the upKeep job for monitoring members
     /// @notice only callable via governance
     /// @param gasLimit gas limit for the upKeepManager monitoring upkeep task
     function initializeBaseUpkeep(uint256 gasLimit) external onlyGovernance {
@@ -273,9 +272,9 @@ contract UpKeepManager is UpKeepManagerUtils, Pausable, KeeperCompatibleInterfac
     /// @dev Contains the logic that should be executed on-chain when
     /// `checkUpkeep` returns true.
     function performUpkeep(bytes calldata _performData) external override onlyKeeper whenNotPaused {
-        address memberTarget = abi.decode(_performData, (address));
+        uint256 upKeepId = _validatePerformData(_performData);
 
-        _topupUpkeep(memberTarget);
+        _topupUpkeep(upKeepId);
     }
 
     ////////////////////////////////////////////////////////////////////////////
@@ -313,39 +312,46 @@ contract UpKeepManager is UpKeepManagerUtils, Pausable, KeeperCompatibleInterfac
          ((weiForGas * (1e9) * (premium)) / (linkEth)) + (uint256(_c.flatFeeMicroLink) * (1e12));
     }
 
-    /// @dev checks if member upKeepId is under-funded, helper in `checkUpKeep`
-    /// and `performUpKeep` methods
-    /// @param member contract address to verify if under-funded
-    function _isMemberUpKeepUnderFunded(address member)
-        internal
-        view
-        returns (uint256 upKeepId, uint96 minUpKeepBal, bool underFunded)
-    {
+    /// @dev decodes the `bytes` calldata given by keepers and checks its validate against storage
+    /// @param _performData ABI-encoded member address to validate
+    function _validatePerformData(bytes calldata _performData) internal view returns (uint256 upKeepId_) {
+        address member = abi.decode(_performData, (address));
+
         if (member == address(this)) {
-            upKeepId = monitoringUpKeepId;
+            upKeepId_ = monitoringUpKeepId;
         } else {
-            upKeepId = membersInfo[member].upKeepId;
+            upKeepId_ = membersInfo[member].upKeepId;
         }
 
-        /// @dev check onchain the min and current amounts to consider top-up
-        minUpKeepBal = CL_REGISTRY.getMinBalanceForUpkeep(upKeepId);
-        (,,, uint96 currentUpKeepBal,,,,) = CL_REGISTRY.getUpkeep(upKeepId);
+        if (upKeepId_ == 0) {
+            revert MemberNotRegisteredYet(member);
+        }
+    }
 
-        if (currentUpKeepBal <= minUpKeepBal * minRoundsTopUp) {
-            underFunded = true;
+    /// @dev checks if upKeepId is under-funded, helper in `checkUpKeep`
+    /// and `performUpKeep` methods
+    /// @param _upKeepId task id to verify is underfunded
+    function _isUpKeepIdUnderFunded(uint256 _upKeepId)
+        internal
+        view
+        returns (uint96 minUpKeepBal_, bool underFunded_)
+    {
+        /// @dev check onchain the min and current amounts to consider top-up
+        minUpKeepBal_ = CL_REGISTRY.getMinBalanceForUpkeep(_upKeepId);
+        (,,, uint96 currentUpKeepBal,,,,) = CL_REGISTRY.getUpkeep(_upKeepId);
+
+        if (currentUpKeepBal <= minUpKeepBal_ * minRoundsTopUp) {
+            underFunded_ = true;
         }
     }
 
     /// @dev carries over the top-up action of an member upKeep
-    /// @param member contract address to top-up its targetted upKeepId
-    function _topupUpkeep(address member) internal {
-        (uint256 upKeepId, uint96 minUpKeepBal, bool underFunded) = _isMemberUpKeepUnderFunded(member);
+    /// @param _upKeepId id to verify if it is underfunded
+    function _topupUpkeep(uint256 _upKeepId) internal {
+        (uint96 minUpKeepBal, bool underFunded) = _isUpKeepIdUnderFunded(_upKeepId);
 
-        if (upKeepId == 0) {
-            revert MemberNotRegisteredYet(member);
-        }
         if (!underFunded) {
-            revert NotUnderFundedUpkeep(upKeepId);
+            revert NotUnderFundedUpkeep(_upKeepId);
         }
 
         uint96 topupAmount = minUpKeepBal * uint96(roundsTopUp);
@@ -355,7 +361,7 @@ contract UpKeepManager is UpKeepManagerUtils, Pausable, KeeperCompatibleInterfac
             _swapEthForLink(topupAmount - linkRegistryBal);
         }
 
-        CL_REGISTRY.addFunds(upKeepId, topupAmount);
+        CL_REGISTRY.addFunds(_upKeepId, topupAmount);
     }
 
     /// @dev executes the swap from ETH to LINK, for the amount of link required
@@ -444,17 +450,17 @@ contract UpKeepManager is UpKeepManagerUtils, Pausable, KeeperCompatibleInterfac
         whenNotPaused
         returns (bool upkeepNeeded_, bytes memory performData_)
     {
-        address[] memory avatars = getMembers();
+        address[] memory members = getMembers();
         bool underFunded;
 
-        uint256 avatarsLength = avatars.length;
-        if (avatarsLength > 0) {
+        uint256 membersLength = members.length;
+        if (membersLength > 0) {
             // NOTE: loop thru members to see which is underfunded
-            for (uint256 i; i < avatarsLength; i++) {
-                (,, underFunded) = _isMemberUpKeepUnderFunded(avatars[i]);
+            for (uint256 i; i < membersLength; i++) {
+                (, underFunded) = _isUpKeepIdUnderFunded(membersInfo[members[i]].upKeepId);
                 if (underFunded) {
                     upkeepNeeded_ = true;
-                    performData_ = abi.encode(avatars[i]);
+                    performData_ = abi.encode(members[i]);
                     break;
                 }
             }
@@ -463,7 +469,7 @@ contract UpKeepManager is UpKeepManagerUtils, Pausable, KeeperCompatibleInterfac
         // NOTE: to avoid overwritten an `upKeep` meant for registration, check boolean
         if (!upkeepNeeded_) {
             /// @dev check for the UpKeepManager itself if its upkeep needs topup
-            (,, underFunded) = _isMemberUpKeepUnderFunded(address(this));
+            (, underFunded) = _isUpKeepIdUnderFunded(monitoringUpKeepId);
             if (underFunded) {
                 upkeepNeeded_ = true;
                 performData_ = abi.encode(address(this));
