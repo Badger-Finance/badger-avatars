@@ -7,19 +7,18 @@ import {console2 as console} from "forge-std/console2.sol";
 import {IERC20MetadataUpgradeable} from
     "../../lib/openzeppelin-contracts-upgradeable/contracts/token/ERC20/extensions/IERC20MetadataUpgradeable.sol";
 
+import {BaseAvatarUtils} from "../../src/BaseAvatarUtils.sol";
+import {CHAINLINK_KEEPER_REGISTRY} from "../../src/BaseConstants.sol";
 import {IAvatar} from "../../src/interfaces/badger/IAvatar.sol";
 import {IKeeperRegistry} from "../../src/interfaces/chainlink/IKeeperRegistry.sol";
 import {AuraAvatarMultiToken} from "../../src/aura/AuraAvatarMultiToken.sol";
+import {UpKeepManagerUtils} from "../../src/upkeeps/UpKeepManagerUtils.sol";
 import {UpKeepManager} from "../../src/upkeeps/UpKeepManager.sol";
 
-contract UpKeepManagerTest is Test {
+contract UpKeepManagerTest is Test, UpKeepManagerUtils {
     AuraAvatarMultiToken avatar;
     UpKeepManager upKeepManager;
 
-    IERC20MetadataUpgradeable constant LINK = IERC20MetadataUpgradeable(0x514910771AF9Ca656af840dff83E8264EcF986CA);
-    address public constant KEEPER_REGISTRY = 0x02777053d6764996e594c3E88AF1D58D5363a2e6;
-    IKeeperRegistry public constant CL_REGISTRY = IKeeperRegistry(KEEPER_REGISTRY);
-    address public constant TECHOPS = 0x86cbD0ce0c087b482782c181dA8d191De18C8275;
     uint256 constant MONITORING_GAS_LIMIT = 1_000_000;
 
     address constant admin = address(1);
@@ -30,6 +29,7 @@ contract UpKeepManagerTest is Test {
     event MinRoundsTopUpUpdated(uint256 oldValue, uint256 newValue);
 
     event SweepLinkToTechops(uint256 amount, uint256 timestamp);
+    event SweepEth(address recipient, uint256 amount, uint256 timestamp);
 
     function setUp() public {
         vm.createSelectFork("mainnet", 16385870);
@@ -47,6 +47,12 @@ contract UpKeepManagerTest is Test {
         vm.startPrank(admin);
         upKeepManager.initializeBaseUpkeep(MONITORING_GAS_LIMIT);
         vm.stopPrank();
+    }
+
+    function test_constructor() public {
+        assertEq(upKeepManager.governance(), admin);
+        assertEq(upKeepManager.roundsTopUp(), 20);
+        assertEq(upKeepManager.minRoundsTopUp(), 3);
     }
 
     function test_upkeep_monitoring() public {
@@ -127,6 +133,20 @@ contract UpKeepManagerTest is Test {
         assertEq(upKeepId, existingUpKeepId);
     }
 
+    function test_addMember_not_auto_approve() public {
+        (IKeeperRegistry.State memory state, IKeeperRegistry.Config memory config, address[] memory keepers) =
+            CL_REGISTRY.getState();
+        vm.mockCall(
+            CHAINLINK_KEEPER_REGISTRY,
+            abi.encodeWithSelector(IKeeperRegistry.getState.selector),
+            abi.encode(state, config, keepers)
+        );
+
+        vm.startPrank(admin);
+        vm.expectRevert(abi.encodeWithSelector(UpKeepManager.NotAutoApproveKeeper.selector));
+        upKeepManager.addMember(address(avatar), "randomAvatar", 500000, 0);
+    }
+
     function test_cancelMemberUpKeep_permissions() public {
         vm.expectRevert(abi.encodeWithSelector(UpKeepManager.NotGovernance.selector, (address(this))));
         upKeepManager.cancelMemberUpKeep(address(0));
@@ -177,6 +197,25 @@ contract UpKeepManagerTest is Test {
 
         // ensure techops link balance is increased
         assertGt(LINK.balanceOf(address(TECHOPS)), linkTechopsBal);
+    }
+
+    function test_sweepEthFunds_permissions() public {
+        vm.expectRevert(abi.encodeWithSelector(UpKeepManager.NotGovernance.selector, (address(this))));
+        upKeepManager.sweepEthFunds(payable(address(7)));
+    }
+
+    function test_sweepEthFunds() public {
+        vm.deal(address(upKeepManager), 2 ether);
+
+        uint256 ethBalBefore = eoa.balance;
+        uint256 upKeepManagerEthBal = address(upKeepManager).balance;
+
+        vm.prank(admin);
+        vm.expectEmit(true, true, false, false);
+        emit SweepEth(eoa, upKeepManagerEthBal, block.timestamp);
+        upKeepManager.sweepEthFunds(payable(eoa));
+
+        assertEq(eoa.balance, ethBalBefore + upKeepManagerEthBal);
     }
 
     function test_setRoundsTopUp_permissions() public {
@@ -293,7 +332,7 @@ contract UpKeepManagerTest is Test {
         uint96 enforceUpKeepBal = 1 ether;
         // https://book.getfoundry.sh/cheatcodes/mock-call#mockcall
         vm.mockCall(
-            KEEPER_REGISTRY,
+            CHAINLINK_KEEPER_REGISTRY,
             abi.encodeWithSelector(IKeeperRegistry.getUpkeep.selector, upKeepId),
             // getUpKeep mock
             abi.encode(address(avatar), 500000, new bytes(0), enforceUpKeepBal, address(0), TECHOPS, 2 ** 64 - 1, 0)
@@ -338,7 +377,7 @@ contract UpKeepManagerTest is Test {
 
     function test_performUpKeep_unregistered_member() public {
         bytes memory performData = abi.encode(address(7));
-        vm.prank(KEEPER_REGISTRY);
+        vm.prank(CHAINLINK_KEEPER_REGISTRY);
         vm.expectRevert(abi.encodeWithSelector(UpKeepManager.MemberNotRegisteredYet.selector, address(7)));
         upKeepManager.performUpkeep(performData);
     }
@@ -357,7 +396,7 @@ contract UpKeepManagerTest is Test {
         uint96 enforceUpKeepBal = 1 ether;
         // https://book.getfoundry.sh/cheatcodes/mock-call#mockcall
         vm.mockCall(
-            KEEPER_REGISTRY,
+            CHAINLINK_KEEPER_REGISTRY,
             abi.encodeWithSelector(IKeeperRegistry.getUpkeep.selector, upKeepId),
             // getUpKeep mock
             abi.encode(
@@ -368,7 +407,7 @@ contract UpKeepManagerTest is Test {
         bytes memory performData = abi.encode(address(avatar));
 
         vm.expectRevert(abi.encodeWithSelector(UpKeepManager.UpkeepCancelled.selector, upKeepId));
-        vm.prank(KEEPER_REGISTRY);
+        vm.prank(CHAINLINK_KEEPER_REGISTRY);
         upKeepManager.performUpkeep(performData);
     }
 
@@ -380,7 +419,56 @@ contract UpKeepManagerTest is Test {
         bytes memory performData = abi.encode(address(avatar));
 
         vm.expectRevert(abi.encodeWithSelector(UpKeepManager.NotUnderFundedUpkeep.selector, upKeepId));
-        vm.prank(KEEPER_REGISTRY);
+        vm.prank(CHAINLINK_KEEPER_REGISTRY);
+        upKeepManager.performUpkeep(performData);
+    }
+
+    function test_performUpKeep_stale_cl_feed() public {
+        vm.prank(admin);
+        upKeepManager.addMember(address(avatar), "randomAvatar", 500000, 0);
+
+        (,, uint256 upKeepId) = upKeepManager.membersInfo(address(avatar));
+
+        uint96 enforceUpKeepBal = 1 ether;
+        // https://book.getfoundry.sh/cheatcodes/mock-call#mockcall
+        vm.mockCall(
+            CHAINLINK_KEEPER_REGISTRY,
+            abi.encodeWithSelector(IKeeperRegistry.getUpkeep.selector, upKeepId),
+            // getUpKeep mock
+            abi.encode(
+                address(avatar),
+                500000,
+                new bytes(0),
+                enforceUpKeepBal,
+                address(0),
+                address(upKeepManager),
+                2 ** 64 - 1,
+                0
+            )
+        );
+
+        (bool upkeepNeeded, bytes memory performData) = upKeepManager.checkUpkeep(new bytes(0));
+
+        assertTrue(upkeepNeeded);
+
+        // remove all link funds from upKeepManager
+        vm.prank(admin);
+        upKeepManager.sweepLinkFunds();
+        assertEq(address(upKeepManager).balance, 0);
+        assertEq(LINK.balanceOf(address(upKeepManager)), 0);
+        vm.stopPrank();
+
+        // send eth from hypothetical gas station
+        vm.deal(address(upKeepManager), 2 ether);
+
+        skip(1 weeks);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                BaseAvatarUtils.StalePriceFeed.selector, block.timestamp, LINK_ETH_FEED.latestTimestamp(), 6 hours
+            )
+        );
+        vm.prank(CHAINLINK_KEEPER_REGISTRY);
         upKeepManager.performUpkeep(performData);
     }
 
@@ -393,7 +481,7 @@ contract UpKeepManagerTest is Test {
         uint96 enforceUpKeepBal = 1 ether;
         // https://book.getfoundry.sh/cheatcodes/mock-call#mockcall
         vm.mockCall(
-            KEEPER_REGISTRY,
+            CHAINLINK_KEEPER_REGISTRY,
             abi.encodeWithSelector(IKeeperRegistry.getUpkeep.selector, upKeepId),
             // getUpKeep mock
             abi.encode(address(avatar), 500000, new bytes(0), enforceUpKeepBal, address(0), TECHOPS, 2 ** 64 - 1, 0)
@@ -404,7 +492,7 @@ contract UpKeepManagerTest is Test {
         assertTrue(upkeepNeeded);
 
         uint256 linkBalBefore = LINK.balanceOf(address(upKeepManager));
-        vm.prank(KEEPER_REGISTRY);
+        vm.prank(CHAINLINK_KEEPER_REGISTRY);
         upKeepManager.performUpkeep(performData);
         vm.clearMockedCalls();
 
@@ -418,7 +506,7 @@ contract UpKeepManagerTest is Test {
         uint96 enforceUpKeepBal = 1 ether;
         // https://book.getfoundry.sh/cheatcodes/mock-call#mockcall
         vm.mockCall(
-            KEEPER_REGISTRY,
+            CHAINLINK_KEEPER_REGISTRY,
             abi.encodeWithSelector(IKeeperRegistry.getUpkeep.selector, upKeepIdTarget),
             // getUpKeep mock
             abi.encode(
@@ -441,7 +529,7 @@ contract UpKeepManagerTest is Test {
         assertEq(target, address(upKeepManager));
 
         uint256 linkBalBefore = LINK.balanceOf(address(upKeepManager));
-        vm.prank(KEEPER_REGISTRY);
+        vm.prank(CHAINLINK_KEEPER_REGISTRY);
         upKeepManager.performUpkeep(performData);
         vm.clearMockedCalls();
 
@@ -461,7 +549,7 @@ contract UpKeepManagerTest is Test {
         uint96 enforceUpKeepBal = 1 ether;
         // https://book.getfoundry.sh/cheatcodes/mock-call#mockcall
         vm.mockCall(
-            KEEPER_REGISTRY,
+            CHAINLINK_KEEPER_REGISTRY,
             abi.encodeWithSelector(IKeeperRegistry.getUpkeep.selector, upKeepIdTarget),
             // getUpKeep mock
             abi.encode(
@@ -489,7 +577,7 @@ contract UpKeepManagerTest is Test {
         vm.deal(address(upKeepManager), 2 ether);
 
         // trigger a perform, inspect swap with verbosity -vvvv
-        vm.prank(KEEPER_REGISTRY);
+        vm.prank(CHAINLINK_KEEPER_REGISTRY);
         upKeepManager.performUpkeep(performData);
 
         (,, uint256 upKeepId) = upKeepManager.membersInfo(address(avatar));
