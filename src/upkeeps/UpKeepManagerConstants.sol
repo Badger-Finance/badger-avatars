@@ -32,4 +32,7 @@ abstract contract UpKeepManagerConstants {
     // safety constants for `setRoundsTopUp` & `setMinRoundsTopUp`
     uint256 internal constant MAX_ROUNDS_TOP_UP = 100;
     uint256 internal constant MAX_THRESHOLD_UNDER_FUNDED_TOP_UP = 10;
+
+    // readability constant
+    uint64 internal constant UINT64_MAX = type(uint64).max;
 }

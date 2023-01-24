@@ -217,7 +217,7 @@ contract UpKeepManager is UpKeepManagerUtils, Pausable, KeeperCompatibleInterfac
         // NOTE: only member which upkeep is being cancelled can be removed
         (,,,,,, uint64 maxValidBlocknumber,) = CL_REGISTRY.getUpkeep(upKeepId);
         // https://etherscan.io/address/0x02777053d6764996e594c3e88af1d58d5363a2e6#code#F1#L738
-        if (maxValidBlocknumber == type(uint64).max) {
+        if (maxValidBlocknumber == UINT64_MAX) {
             revert UpKeepNotCancelled(upKeepId);
         }
 
@@ -345,7 +345,7 @@ contract UpKeepManager is UpKeepManagerUtils, Pausable, KeeperCompatibleInterfac
 
         (,,,,,, uint64 maxValidBlocknumber,) = CL_REGISTRY.getUpkeep(upKeepId_);
         // https://etherscan.io/address/0x02777053d6764996e594c3e88af1d58d5363a2e6#code#F1#L332
-        if (maxValidBlocknumber < block.number) revert UpkeepCancelled(upKeepId_);
+        if (maxValidBlocknumber != UINT64_MAX) revert UpkeepCancelled(upKeepId_);
     }
 
     /// @dev checks if upKeepId is under-funded, helper in `checkUpKeep`
@@ -484,7 +484,7 @@ contract UpKeepManager is UpKeepManagerUtils, Pausable, KeeperCompatibleInterfac
                 if (underFunded) {
                     (,,,,,, uint64 maxValidBlocknumber,) = CL_REGISTRY.getUpkeep(upKeepId);
                     // NOTE: helps filtering those which `cancelUpkeep` has being initiated
-                    if (maxValidBlocknumber == type(uint64).max) {
+                    if (maxValidBlocknumber == UINT64_MAX) {
                         upkeepNeeded_ = true;
                         performData_ = abi.encode(members[i]);
                         break;

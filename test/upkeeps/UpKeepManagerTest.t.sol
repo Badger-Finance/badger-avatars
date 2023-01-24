@@ -174,6 +174,8 @@ contract UpKeepManagerTest is Test {
         emit RoundsTopUpUpdated(upKeepManager.roundsTopUp(), 10);
         vm.prank(admin);
         upKeepManager.setRoundsTopUp(10);
+
+        assertEq(upKeepManager.roundsTopUp(), 10);
     }
 
     function test_setMinRoundsTopUp_permissions() public {
@@ -198,6 +200,8 @@ contract UpKeepManagerTest is Test {
         emit MinRoundsTopUpUpdated(upKeepManager.minRoundsTopUp(), 4);
         vm.prank(admin);
         upKeepManager.setMinRoundsTopUp(4);
+
+        assertEq(upKeepManager.minRoundsTopUp(), 4);
     }
 
     ////////////////////////////////////////////////////////////////////////////
@@ -290,6 +294,67 @@ contract UpKeepManagerTest is Test {
 
         (bool upkeepNeeded,) = upKeepManager.checkUpkeep(new bytes(0));
         assertFalse(upkeepNeeded);
+    }
+
+    function test_performUpKeep_permissions() public {
+        address[3] memory actors = [address(this), admin, eoa];
+        for (uint256 i; i < actors.length; ++i) {
+            uint256 snapId = vm.snapshot();
+
+            vm.prank(actors[i]);
+            vm.expectRevert(abi.encodeWithSelector(UpKeepManager.NotKeeper.selector, actors[i]));
+            avatar.performUpkeep(new bytes(0));
+
+            vm.revertTo(snapId);
+        }
+    }
+
+    function test_performUpKeep_unregistered_member() public {
+        bytes memory performData = abi.encode(address(7));
+        vm.prank(KEEPER_REGISTRY);
+        vm.expectRevert(abi.encodeWithSelector(UpKeepManager.MemberNotRegisteredYet.selector, address(7)));
+        upKeepManager.performUpkeep(performData);
+    }
+
+    function test_performUpKeep_cancelled_member() public {
+        vm.prank(admin);
+        upKeepManager.addMember(address(avatar), "randomAvatar", 500000, 0);
+        (,, uint256 upKeepId) = upKeepManager.membersInfo(address(avatar));
+
+        vm.prank(admin);
+        upKeepManager.cancelMemberUpKeep(address(avatar));
+        vm.stopPrank();
+
+        (,,,,,, uint256 maxValidBlocknumber,) = CL_REGISTRY.getUpkeep(upKeepId);
+
+        uint96 enforceUpKeepBal = 1 ether;
+        // https://book.getfoundry.sh/cheatcodes/mock-call#mockcall
+        vm.mockCall(
+            KEEPER_REGISTRY,
+            abi.encodeWithSelector(IKeeperRegistry.getUpkeep.selector, upKeepId),
+            // getUpKeep mock
+            abi.encode(
+                address(avatar), 500000, new bytes(0), enforceUpKeepBal, address(upKeepManager), maxValidBlocknumber, 0
+            )
+        );
+
+        bytes memory performData = abi.encode(address(avatar));
+
+        vm.expectRevert(abi.encodeWithSelector(UpKeepManager.UpkeepCancelled.selector, upKeepId));
+        vm.prank(KEEPER_REGISTRY);
+        upKeepManager.performUpkeep(performData);
+    }
+
+    function test_performUpKeep_not_underfunded() public {
+        vm.prank(admin);
+        upKeepManager.addMember(address(avatar), "randomAvatar", 500000, 0);
+        (,, uint256 upKeepId) = upKeepManager.membersInfo(address(avatar));
+
+        bytes memory performData = abi.encode(address(avatar));
+
+        vm.expectRevert(abi.encodeWithSelector(UpKeepManager.NotUnderFundedUpkeep.selector, upKeepId));
+        vm.prank(KEEPER_REGISTRY);
+        upKeepManager.performUpkeep(performData);
     }
 
     function test_performUpKeep_avatar_topup() public {
