@@ -26,6 +26,9 @@ contract UpKeepManagerTest is Test {
     address constant eoa = address(2);
     address constant dummy_avatar = address(3);
 
+    event RoundsTopUpUpdated(uint256 oldValue, uint256 newValue);
+    event MinRoundsTopUpUpdated(uint256 oldValue, uint256 newValue);
+
     event SweepLinkToTechops(uint256 amount, uint256 timestamp);
 
     function setUp() public {
@@ -57,24 +60,24 @@ contract UpKeepManagerTest is Test {
 
     function test_addMember_permissions() public {
         vm.expectRevert(abi.encodeWithSelector(UpKeepManager.NotGovernance.selector, (address(this))));
-        upKeepManager.addMember(address(0), "randomAvatar", 500000);
+        upKeepManager.addMember(address(0), "randomAvatar", 500000, 0);
     }
 
     function test_addMember_requires() public {
         vm.startPrank(admin);
         vm.expectRevert(UpKeepManager.ZeroAddress.selector);
-        upKeepManager.addMember(address(0), "randomAvatar", 500000);
+        upKeepManager.addMember(address(0), "randomAvatar", 500000, 0);
 
-        upKeepManager.addMember(address(avatar), "randomAvatar", 500000);
+        upKeepManager.addMember(address(avatar), "randomAvatar", 500000, 0);
 
         vm.expectRevert(abi.encodeWithSelector(UpKeepManager.MemberAlreadyRegister.selector, address(avatar)));
-        upKeepManager.addMember(address(avatar), "randomAvatar", 500000);
+        upKeepManager.addMember(address(avatar), "randomAvatar", 500000, 0);
     }
 
     function test_addMember() public {
         uint256 linkBalBefore = LINK.balanceOf(address(upKeepManager));
         vm.startPrank(admin);
-        upKeepManager.addMember(address(avatar), "randomAvatar", 500000);
+        upKeepManager.addMember(address(avatar), "randomAvatar", 500000, 0);
 
         (string memory name, uint256 gasLimit, uint256 upKeepId) = upKeepManager.membersInfo(address(avatar));
 
@@ -111,7 +114,7 @@ contract UpKeepManagerTest is Test {
 
     function test_cancelMemberUpKeep_and_removeAvatar() public {
         vm.startPrank(admin);
-        upKeepManager.addMember(address(avatar), "randomAvatar", 500000);
+        upKeepManager.addMember(address(avatar), "randomAvatar", 500000, 0);
         vm.stopPrank();
 
         vm.startPrank(admin);
@@ -147,6 +150,54 @@ contract UpKeepManagerTest is Test {
 
         // ensure techops link balance is increased
         assertGt(LINK.balanceOf(address(TECHOPS)), linkTechopsBal);
+    }
+
+    function test_setRoundsTopUp_permissions() public {
+        vm.expectRevert(abi.encodeWithSelector(UpKeepManager.NotGovernance.selector, (address(this))));
+        upKeepManager.setRoundsTopUp(50000);
+    }
+
+    function test_setRoundsTopUp_zero_value() public {
+        vm.expectRevert(abi.encodeWithSelector(UpKeepManager.ZeroUintValue.selector));
+        vm.prank(admin);
+        upKeepManager.setRoundsTopUp(0);
+    }
+
+    function test_setRoundsTopUp_invalid_value() public {
+        vm.expectRevert(abi.encodeWithSelector(UpKeepManager.InvalidRoundsTopUp.selector, 1000));
+        vm.prank(admin);
+        upKeepManager.setRoundsTopUp(1000);
+    }
+
+    function test_setRoundsTopUp() public {
+        vm.expectEmit(true, true, false, false);
+        emit RoundsTopUpUpdated(upKeepManager.roundsTopUp(), 10);
+        vm.prank(admin);
+        upKeepManager.setRoundsTopUp(10);
+    }
+
+    function test_setMinRoundsTopUp_permissions() public {
+        vm.expectRevert(abi.encodeWithSelector(UpKeepManager.NotGovernance.selector, (address(this))));
+        upKeepManager.setMinRoundsTopUp(50000);
+    }
+
+    function test_setMinRoundsTopUp_zero_value() public {
+        vm.expectRevert(abi.encodeWithSelector(UpKeepManager.ZeroUintValue.selector));
+        vm.prank(admin);
+        upKeepManager.setMinRoundsTopUp(0);
+    }
+
+    function test_setMinRoundsTopUp_invalid_value() public {
+        vm.expectRevert(abi.encodeWithSelector(UpKeepManager.InvalidUnderFundedThreshold.selector, 3000));
+        vm.prank(admin);
+        upKeepManager.setMinRoundsTopUp(3000);
+    }
+
+    function test_setMinRoundsTopUp() public {
+        vm.expectEmit(true, true, false, true);
+        emit MinRoundsTopUpUpdated(upKeepManager.minRoundsTopUp(), 4);
+        vm.prank(admin);
+        upKeepManager.setMinRoundsTopUp(4);
     }
 
     ////////////////////////////////////////////////////////////////////////////
@@ -198,7 +249,7 @@ contract UpKeepManagerTest is Test {
     function test_checkUpkeep() public {
         // deploy avatar and set keeper addr
         vm.prank(admin);
-        upKeepManager.addMember(address(avatar), "randomAvatar", 500000);
+        upKeepManager.addMember(address(avatar), "randomAvatar", 500000, 0);
 
         address[] memory testA = upKeepManager.getMembers();
 
@@ -226,7 +277,7 @@ contract UpKeepManagerTest is Test {
 
     function test_checkUpKeep_not_required() public {
         vm.prank(admin);
-        upKeepManager.addMember(address(avatar), "randomAvatar", 500000);
+        upKeepManager.addMember(address(avatar), "randomAvatar", 500000, 0);
 
         address[] memory testA = upKeepManager.getMembers();
 
@@ -243,7 +294,7 @@ contract UpKeepManagerTest is Test {
 
     function test_performUpKeep_avatar_topup() public {
         vm.prank(admin);
-        upKeepManager.addMember(address(avatar), "randomAvatar", 500000);
+        upKeepManager.addMember(address(avatar), "randomAvatar", 500000, 0);
 
         (,, uint256 upKeepId) = upKeepManager.membersInfo(address(avatar));
 
@@ -309,7 +360,7 @@ contract UpKeepManagerTest is Test {
 
     function test_performUpKeep_swap_involved() public {
         vm.prank(admin);
-        upKeepManager.addMember(address(avatar), "randomAvatar", 500000);
+        upKeepManager.addMember(address(avatar), "randomAvatar", 500000, 0);
         (,, uint256 upKeepIdTarget) = upKeepManager.membersInfo(address(avatar));
 
         bool upkeepNeeded;

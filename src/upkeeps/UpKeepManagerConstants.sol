@@ -28,4 +28,8 @@ abstract contract UpKeepManagerConstants {
     uint256 internal constant MIN_FUNDING_UPKEEP = 5 ether;
     uint256 internal constant REGISTRY_GAS_OVERHEAD = 80_000;
     uint256 internal constant PPB_BASE = 1_000_000_000;
+
+    // safety constants for `setRoundsTopUp` & `setMinRoundsTopUp`
+    uint256 internal constant MAX_ROUNDS_TOP_UP = 100;
+    uint256 internal constant MAX_THRESHOLD_UNDER_FUNDED_TOP_UP = 10;
 }

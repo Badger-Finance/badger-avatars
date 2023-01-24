@@ -75,6 +75,9 @@ contract UpKeepManager is UpKeepManagerUtils, Pausable, KeeperCompatibleInterfac
     error MemberAlreadyRegister(address member);
     error MemberNotRegisteredYet(address member);
 
+    error InvalidRoundsTopUp(uint256 value);
+    error InvalidUnderFundedThreshold(uint256 value);
+
     error ZeroAddress();
     error ZeroUintValue();
     error EmptyString();
@@ -136,13 +139,13 @@ contract UpKeepManager is UpKeepManagerUtils, Pausable, KeeperCompatibleInterfac
 
     /// @dev It will initiate the upKeep job for monitoring members
     /// @notice only callable via governance
-    /// @param gasLimit gas limit for the upKeepManager monitoring upkeep task
-    function initializeBaseUpkeep(uint256 gasLimit) external onlyGovernance {
-        if (gasLimit == 0) {
+    /// @param _gasLimit gas limit for the upKeepManager monitoring upkeep task
+    function initializeBaseUpkeep(uint256 _gasLimit) external onlyGovernance {
+        if (_gasLimit == 0) {
             revert ZeroUintValue();
         }
 
-        monitoringUpKeepId = _registerUpKeep(address(this), gasLimit, NAME);
+        monitoringUpKeepId = _registerUpKeep(address(this), _gasLimit, NAME);
 
         if (monitoringUpKeepId > 0) {
             /// @dev give allowance of spending LINK funds
@@ -152,53 +155,64 @@ contract UpKeepManager is UpKeepManagerUtils, Pausable, KeeperCompatibleInterfac
 
     /// @dev Adds an member into the manager
     /// @notice only callable via governance
-    /// @param memberAddress contract address to be register as new member
-    /// @param name member's name
-    /// @param gasLimit amount of gas to provide the target contract when
-    /// performing upkeep
-    function addMember(address memberAddress, string memory name, uint256 gasLimit) external onlyGovernance {
+    /// @param _memberAddress contract address to be register as new member
+    /// @param _name member's name
+    /// @param _gasLimit amount of gas to provide the target contract when performing upkeep
+    /// @param _existingUpKeepId optional upKeepId to add member which has being registered from other admins
+    function addMember(address _memberAddress, string memory _name, uint256 _gasLimit, uint256 _existingUpKeepId)
+        external
+        onlyGovernance
+    {
         /// @dev sanity checks before adding a new member in storage
-        if (memberAddress == address(0)) {
+        if (_memberAddress == address(0)) {
             revert ZeroAddress();
         }
-        if (membersInfo[memberAddress].gasLimit != 0) {
-            revert MemberAlreadyRegister(memberAddress);
+        if (membersInfo[_memberAddress].gasLimit != 0) {
+            revert MemberAlreadyRegister(_memberAddress);
         }
-        if (gasLimit == 0) {
+        if (_gasLimit == 0) {
             revert ZeroUintValue();
         }
-        if (bytes(name).length == 0) {
+        if (bytes(_name).length == 0) {
             revert EmptyString();
         }
 
-        _members.add(memberAddress);
-        membersInfo[memberAddress] =
-            MemberInfo({name: name, gasLimit: gasLimit, upKeepId: _registerUpKeep(memberAddress, gasLimit, name)});
+        _members.add(_memberAddress);
+        membersInfo[_memberAddress] = MemberInfo({
+            name: _name,
+            gasLimit: _gasLimit,
+            // NOTE: when `_existingUpKeepId` is greater than zero, assumes that other admin has registered
+            //       and there are not needs to register again
+            upKeepId: _existingUpKeepId > 0 ? _existingUpKeepId : _registerUpKeep(_memberAddress, _gasLimit, _name)
+        });
 
-        emit NewMember(memberAddress, name, gasLimit, block.timestamp);
+        emit NewMember(_memberAddress, _name, _gasLimit, block.timestamp);
     }
 
     /// @dev Cancels an member's upkeep job
     /// @notice only callable via governance
-    /// @param memberAddress contract address to be cancel upkeep
-    function cancelMemberUpKeep(address memberAddress) external onlyGovernance {
-        if (!_members.contains(memberAddress)) {
-            revert NotMemberIncluded(memberAddress);
+    /// @param _memberAddress contract address to be cancel upkeep
+    function cancelMemberUpKeep(address _memberAddress) external onlyGovernance {
+        if (!_members.contains(_memberAddress)) {
+            revert NotMemberIncluded(_memberAddress);
         }
         // NOTE: only member which upkeep is being cancelled can be removed
-        uint256 upKeepId = membersInfo[memberAddress].upKeepId;
+        uint256 upKeepId = membersInfo[_memberAddress].upKeepId;
         CL_REGISTRY.cancelUpkeep(upKeepId);
     }
 
     /// @dev Withdraws LINK funds and remove member from manager
     /// @notice only callable via governance
-    /// @param memberAddress contract address to be remove from manager
-    function withdrawLinkFundsAndRemoveMember(address memberAddress) external onlyGovernance {
-        if (!_members.contains(memberAddress)) {
-            revert NotMemberIncluded(memberAddress);
+    /// @param _memberAddress contract address to be remove from manager
+    function withdrawLinkFundsAndRemoveMember(address _memberAddress) external onlyGovernance {
+        if (!_members.contains(_memberAddress)) {
+            revert NotMemberIncluded(_memberAddress);
         }
 
-        uint256 upKeepId = membersInfo[memberAddress].upKeepId;
+        uint256 upKeepId = membersInfo[_memberAddress].upKeepId;
+        _members.remove(_memberAddress);
+        delete membersInfo[_memberAddress];
+
         // NOTE: only member which upkeep is being cancelled can be removed
         (,,,,,, uint64 maxValidBlocknumber,) = CL_REGISTRY.getUpkeep(upKeepId);
         // https://etherscan.io/address/0x02777053d6764996e594c3e88af1d58d5363a2e6#code#F1#L738
@@ -206,13 +220,9 @@ contract UpKeepManager is UpKeepManagerUtils, Pausable, KeeperCompatibleInterfac
             revert UpKeepNotCancelled(upKeepId);
         }
 
-        // NOTE: removal actions after on-chain checkups
-        _members.remove(memberAddress);
-        delete membersInfo[memberAddress];
-
         CL_REGISTRY.withdrawFunds(upKeepId, address(this));
 
-        emit RemoveMember(memberAddress, upKeepId, block.timestamp);
+        emit RemoveMember(_memberAddress, upKeepId, block.timestamp);
     }
 
     /// @dev  Sweep the full LINK balance to techops
@@ -223,11 +233,11 @@ contract UpKeepManager is UpKeepManagerUtils, Pausable, KeeperCompatibleInterfac
     }
 
     /// @dev  Sweep the full ETH balance to recipient
-    /// @param recipient Address receiving eth funds
-    function sweepEthFunds(address payable recipient) external onlyGovernance {
+    /// @param _recipient Address receiving eth funds
+    function sweepEthFunds(address payable _recipient) external onlyGovernance {
         uint256 ethBal = address(this).balance;
-        recipient.transfer(ethBal);
-        emit SweepEth(recipient, ethBal, block.timestamp);
+        _recipient.transfer(ethBal);
+        emit SweepEth(_recipient, ethBal, block.timestamp);
     }
 
     ////////////////////////////////////////////////////////////////////////////
@@ -252,25 +262,32 @@ contract UpKeepManager is UpKeepManagerUtils, Pausable, KeeperCompatibleInterfac
     ///         will be covered at least while topping-up
     /// @param _roundsTopUp new value for `roundsTopUp`
     function setRoundsTopUp(uint256 _roundsTopUp) external onlyGovernance {
+        if (_roundsTopUp == 0) revert ZeroUintValue();
+        if (_roundsTopUp > MAX_ROUNDS_TOP_UP) revert InvalidRoundsTopUp(_roundsTopUp);
+
         uint256 oldRoundsTopUp = minRoundsTopUp;
         roundsTopUp = _roundsTopUp;
+
         emit RoundsTopUpUpdated(oldRoundsTopUp, _roundsTopUp);
     }
 
     /// @notice Updates the value of `minRoundsTopUp`, which is used to decide if `upKeepId` is underfunded
     /// @param _minRoundsTopUp new value for `minRoundsTopUp`
     function setMinRoundsTopUp(uint256 _minRoundsTopUp) external onlyGovernance {
+        if (_minRoundsTopUp == 0) revert ZeroUintValue();
+        if (_minRoundsTopUp > MAX_THRESHOLD_UNDER_FUNDED_TOP_UP) revert InvalidUnderFundedThreshold(_minRoundsTopUp);
+
         uint256 oldMinRoundsTopUp = minRoundsTopUp;
         minRoundsTopUp = _minRoundsTopUp;
-        emit RoundsTopUpUpdated(oldMinRoundsTopUp, _minRoundsTopUp);
+
+        emit MinRoundsTopUpUpdated(oldMinRoundsTopUp, _minRoundsTopUp);
     }
 
     ////////////////////////////////////////////////////////////////////////////
     // PUBLIC: Keeper
     ////////////////////////////////////////////////////////////////////////////
 
-    /// @dev Contains the logic that should be executed on-chain when
-    /// `checkUpkeep` returns true.
+    /// @dev Contains the logic that should be executed on-chain when `checkUpkeep` returns true.
     function performUpkeep(bytes calldata _performData) external override onlyKeeper whenNotPaused {
         uint256 upKeepId = _validatePerformData(_performData);
 
@@ -282,32 +299,31 @@ contract UpKeepManager is UpKeepManagerUtils, Pausable, KeeperCompatibleInterfac
     ////////////////////////////////////////////////////////////////////////////
 
     /// @dev returns the fast gwei and price of link/eth from CL
-    /// @return gasWei current fastest gas value in wei
-    /// @return linkEth latest answer of feed of link/eth
-    function _getFeedData() internal view returns (uint256 gasWei, uint256 linkEth) {
+    /// @return gasWei_ current fastest gas value in wei
+    /// @return linkEth_ latest answer of feed of link/eth
+    function _getFeedData() internal view returns (uint256 gasWei_, uint256 linkEth_) {
         /// @dev check as ref current fast wei gas
-        gasWei = fetchPriceFromClFeed(FAST_GAS_FEED, CL_FEED_HEARTBEAT_GAS);
+        gasWei_ = fetchPriceFromClFeed(FAST_GAS_FEED, CL_FEED_HEARTBEAT_GAS);
 
         /// @dev check latest oracle rate link/eth
-        linkEth = fetchPriceFromClFeed(LINK_ETH_FEED, CL_FEED_HEARTBEAT_LINK);
+        linkEth_ = fetchPriceFromClFeed(LINK_ETH_FEED, CL_FEED_HEARTBEAT_LINK);
     }
 
     /// @dev converts a gas limit value into link expressed amount
-    /// @param gasLimit amount of gas to provide the target contract when
-    /// performing upkeep
-    /// @return linkAmount amount of LINK needed to cover the job
-    function _getLinkAmount(uint256 gasLimit) internal view returns (uint256 linkAmount) {
+    /// @param _gasLimit amount of gas to provide the target contract when performing upkeep
+    /// @return linkAmount_ amount of LINK needed to cover the job
+    function _getLinkAmount(uint256 _gasLimit) internal view returns (uint256 linkAmount_) {
         (, IKeeperRegistry.Config memory _c,) = CL_REGISTRY.getState();
         (uint256 fastGasWei, uint256 linkEth) = _getFeedData();
 
         uint256 adjustedGas = fastGasWei * _c.gasCeilingMultiplier;
-        uint256 weiForGas = adjustedGas * (gasLimit + REGISTRY_GAS_OVERHEAD);
+        uint256 weiForGas = adjustedGas * (_gasLimit + REGISTRY_GAS_OVERHEAD);
         uint256 premium = PPB_BASE + _c.paymentPremiumPPB;
 
         /// @dev amount of LINK to carry one `performUpKeep` operation
         // See: _calculatePaymentAmount
         // https://etherscan.io/address/0x02777053d6764996e594c3E88AF1D58D5363a2e6#code#F1#L776
-        linkAmount =
+        linkAmount_ =
         // From Wei to Eth * Premium / Ratio
          ((weiForGas * (1e9) * (premium)) / (linkEth)) + (uint256(_c.flatFeeMicroLink) * (1e12));
     }
@@ -365,9 +381,9 @@ contract UpKeepManager is UpKeepManagerUtils, Pausable, KeeperCompatibleInterfac
     }
 
     /// @dev executes the swap from ETH to LINK, for the amount of link required
-    /// @param linkRequired amount of link required for handling the `performUpKeep` task
-    function _swapEthForLink(uint256 linkRequired) internal {
-        uint256 maxEth = (getLinkAmountInEth(linkRequired) * MAX_IN_BPS) / MAX_BPS;
+    /// @param _linkRequired amount of link required for handling the `performUpKeep` task
+    function _swapEthForLink(uint256 _linkRequired) internal {
+        uint256 maxEth = (getLinkAmountInEth(_linkRequired) * MAX_IN_BPS) / MAX_BPS;
         uint256 ethSpent = UNIV3_ROUTER.exactOutputSingle{value: maxEth}(
             IUniswapRouterV3.ExactOutputSingleParams({
                 tokenIn: WETH,
@@ -375,27 +391,27 @@ contract UpKeepManager is UpKeepManagerUtils, Pausable, KeeperCompatibleInterfac
                 fee: uint24(3000),
                 recipient: address(this),
                 deadline: type(uint256).max,
-                amountOut: linkRequired,
+                amountOut: _linkRequired,
                 amountInMaximum: maxEth,
                 sqrtPriceLimitX96: 0 // Inactive param
             })
         );
         UNIV3_ROUTER.refundETH();
-        emit EthSwappedForLink(ethSpent, linkRequired, block.timestamp);
+        emit EthSwappedForLink(ethSpent, _linkRequired, block.timestamp);
     }
 
     /// @dev carries registration of target contract in CL
-    /// @param targetAddress contract which will be register
-    /// @param gasLimit amount of gas to provide the target contract when
+    /// @param _targetAddress contract which will be register
+    /// @param _gasLimit amount of gas to provide the target contract when
     /// performing upkeep
-    /// @param name detailed name for the upkeep job
-    /// @return upkeepID id of cl job
-    function _registerUpKeep(address targetAddress, uint256 gasLimit, string memory name)
+    /// @param _name detailed name for the upkeep job
+    /// @return upkeepID_ id of cl job
+    function _registerUpKeep(address _targetAddress, uint256 _gasLimit, string memory _name)
         internal
-        returns (uint256 upkeepID)
+        returns (uint256 upkeepID_)
     {
         /// @dev we ensure we top-up enough LINK for couple of test-runs (20) and sanity checks
-        uint256 linkAmount = _getLinkAmount(gasLimit) * roundsTopUp;
+        uint256 linkAmount = _getLinkAmount(_gasLimit) * roundsTopUp;
         if (linkAmount < MIN_FUNDING_UPKEEP) {
             revert NotMinLinkFundedUpKeep();
         }
@@ -411,10 +427,10 @@ contract UpKeepManager is UpKeepManagerUtils, Pausable, KeeperCompatibleInterfac
         bytes memory data = abi.encodeCall(
             IKeeperRegistrar.register,
             (
-                name,
+                _name,
                 bytes(""),
-                targetAddress,
-                uint32(gasLimit),
+                _targetAddress,
+                uint32(_gasLimit),
                 address(this),
                 bytes(""),
                 uint96(linkAmount),
@@ -429,7 +445,7 @@ contract UpKeepManager is UpKeepManagerUtils, Pausable, KeeperCompatibleInterfac
         uint256 newNonce = state.nonce;
 
         if (newNonce == oldNonce + 1) {
-            upkeepID = uint256(
+            upkeepID_ = uint256(
                 keccak256(abi.encodePacked(blockhash(block.number - 1), address(CL_REGISTRY), uint32(oldNonce)))
             );
         } else {
