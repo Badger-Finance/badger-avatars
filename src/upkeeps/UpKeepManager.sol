@@ -87,7 +87,7 @@ contract UpKeepManager is UpKeepManagerUtils, Pausable, KeeperCompatibleInterfac
     // EVENTS
     ////////////////////////////////////////////////////////////////////////////
 
-    event NewMember(address indexed memberAddress, string name, uint256 gasLimit, uint256 timestamp);
+    event NewMember(address indexed memberAddress, string name, uint256 gasLimit, uint256 upKeepId, uint256 timestamp);
     event RemoveMember(address indexed memberAddress, uint256 upKeepId, uint256 timestamp);
 
     event RoundsTopUpUpdated(uint256 oldValue, uint256 newValue);
@@ -167,15 +167,14 @@ contract UpKeepManager is UpKeepManagerUtils, Pausable, KeeperCompatibleInterfac
         if (bytes(_name).length == 0) revert EmptyString();
 
         _members.add(_memberAddress);
-        membersInfo[_memberAddress] = MemberInfo({
-            name: _name,
-            gasLimit: _gasLimit,
-            // NOTE: when `_existingUpKeepId` is greater than zero, assumes that other admin has registered
-            //       and there are not needs to register again
-            upKeepId: _existingUpKeepId > 0 ? _existingUpKeepId : _registerUpKeep(_memberAddress, _gasLimit, _name)
-        });
 
-        emit NewMember(_memberAddress, _name, _gasLimit, block.timestamp);
+        // NOTE: when `_existingUpKeepId` is greater than zero, assumes that other admin has registered it
+        //       and there are not needs to register again
+        uint256 upKeepId = _existingUpKeepId > 0 ? _existingUpKeepId : _registerUpKeep(_memberAddress, _gasLimit, _name);
+
+        membersInfo[_memberAddress] = MemberInfo({name: _name, gasLimit: _gasLimit, upKeepId: upKeepId});
+
+        emit NewMember(_memberAddress, _name, _gasLimit, upKeepId, block.timestamp);
     }
 
     /// @dev Cancels an member's upkeep job
