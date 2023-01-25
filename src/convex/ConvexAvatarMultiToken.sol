@@ -12,6 +12,7 @@ import {EnumerableSetUpgradeable} from
 
 import {IUniswapRouterV3} from "../interfaces/uniswap/IUniswapRouterV3.sol";
 
+import {EnumerableSetExtension} from "../lib/EnumerableSetExtension.sol";
 import {BaseAvatar} from "../lib/BaseAvatar.sol";
 import {MAX_BPS, CHAINLINK_KEEPER_REGISTRY} from "../BaseConstants.sol";
 import {BpsConfig, TokenAmount} from "../BaseStructs.sol";
@@ -36,6 +37,7 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
     using SafeERC20Upgradeable for IERC20MetadataUpgradeable;
     using EnumerableSetUpgradeable for EnumerableSetUpgradeable.AddressSet;
     using EnumerableSetUpgradeable for EnumerableSetUpgradeable.UintSet;
+    using EnumerableSetExtension for EnumerableSetUpgradeable.UintSet;
 
     ////////////////////////////////////////////////////////////////////////////
     // STORAGE
@@ -399,7 +401,7 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
                 revert NothingToDeposit();
             }
 
-            (address lpToken,,,,,) = CONVEX_BOOSTER.poolInfo(_pids[i]);
+            address lpToken = assets.at(pids.indexOf(_pids[i]));
             IERC20MetadataUpgradeable(lpToken).safeTransferFrom(msg.sender, address(this), _amountAssets[i]);
 
             CONVEX_BOOSTER.deposit(_pids[i], _amountAssets[i], true);
@@ -417,8 +419,11 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
     function withdrawAll() external onlyOwnerOrManager {
         uint256 length = baseRewardPools.length();
         uint256[] memory curveLpDeposited = new uint256[](length);
-        for (uint256 i; i < length; i++) {
+        for (uint256 i; i < length;) {
             curveLpDeposited[i] = IBaseRewardPool(baseRewardPools.at(i)).balanceOf(address(this));
+            unchecked {
+                ++i;
+            }
         }
 
         _withdraw(pids.values(), curveLpDeposited);
@@ -464,7 +469,15 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
             revert PidNotIncluded(_removePid);
         }
 
-        (address lpToken,,, address crvRewards,,) = CONVEX_BOOSTER.poolInfo(_removePid);
+        uint256 pidIndex = pids.indexOf(_removePid);
+        address lpToken = assets.at(pidIndex);
+        address crvRewards = baseRewardPools.at(pidIndex);
+
+        // NOTE: remove from storage prior to external calls, CEI compliance
+        pids.remove(_removePid);
+        assets.remove(lpToken);
+        baseRewardPools.remove(crvRewards);
+
         IBaseRewardPool baseRewardPool = IBaseRewardPool(crvRewards);
 
         uint256 stakedBal = baseRewardPool.balanceOf(address(this));
@@ -477,11 +490,6 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
 
         // NOTE: while removing the info from storage, we ensure that allowance is set back to zero
         IERC20MetadataUpgradeable(lpToken).safeApprove(address(CONVEX_BOOSTER), 0);
-
-        // NOTE: indeed if nothing is staked, then remove from storage
-        pids.remove(_removePid);
-        assets.remove(lpToken);
-        baseRewardPools.remove(crvRewards);
     }
 
     /// @notice Sweep the full contract's balance for a given ERC-20 token. Can only be called by owner.
@@ -551,16 +559,21 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
     /// @param _pids Pids to be targetted to unstake from.
     /// @param _curveLpDeposited Amount of assets to be unstaked.
     function _withdraw(uint256[] memory _pids, uint256[] memory _curveLpDeposited) internal {
-        for (uint256 i; i < _pids.length; i++) {
+        for (uint256 i; i < _pids.length;) {
             if (_curveLpDeposited[i] == 0) {
                 revert NothingToWithdraw();
             }
-            (address lpToken,,, address crvRewards,,) = CONVEX_BOOSTER.poolInfo(_pids[i]);
 
-            IBaseRewardPool(crvRewards).withdrawAndUnwrap(_curveLpDeposited[i], false);
+            uint256 pidIndex = pids.indexOf(_pids[i]);
+            address lpToken = assets.at(pidIndex);
+
+            IBaseRewardPool(baseRewardPools.at(pidIndex)).withdrawAndUnwrap(_curveLpDeposited[i], false);
             IERC20MetadataUpgradeable(lpToken).safeTransfer(owner(), _curveLpDeposited[i]);
 
             emit Withdraw(lpToken, _curveLpDeposited[i], block.timestamp);
+            unchecked {
+                ++i;
+            }
         }
     }
 
