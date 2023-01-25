@@ -457,9 +457,17 @@ contract UpKeepManager is UpKeepManagerUtils, Pausable, KeeperCompatibleInterfac
         whenNotPaused
         returns (bool upkeepNeeded_, bytes memory performData_)
     {
-        address[] memory members = getMembers();
         bool underFunded;
+        
+        /// @dev check for the UpKeepManager itself if its upkeep needs topup
+        ///      prio `UpKeepManger` vs members to avoid ops halting
+        (, underFunded) = _isUpKeepIdUnderFunded(monitoringUpKeepId);
+        if (underFunded) {
+            upkeepNeeded_ = true;
+            performData_ = abi.encode(address(this));
+        }
 
+        address[] memory members = getMembers();
         uint256 membersLength = members.length;
         if (membersLength > 0) {
             // NOTE: loop thru members to see which is underfunded
@@ -478,16 +486,6 @@ contract UpKeepManager is UpKeepManagerUtils, Pausable, KeeperCompatibleInterfac
                 unchecked {
                     ++i;
                 }
-            }
-        }
-
-        // NOTE: to avoid overwritten an `upKeep` meant for registration, check boolean
-        if (!upkeepNeeded_) {
-            /// @dev check for the UpKeepManager itself if its upkeep needs topup
-            (, underFunded) = _isUpKeepIdUnderFunded(monitoringUpKeepId);
-            if (underFunded) {
-                upkeepNeeded_ = true;
-                performData_ = abi.encode(address(this));
             }
         }
     }
