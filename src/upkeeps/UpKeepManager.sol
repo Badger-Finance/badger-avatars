@@ -297,21 +297,25 @@ contract UpKeepManager is UpKeepManagerUtils, Pausable, KeeperCompatibleInterfac
 
     /// @notice converts a gas limit value into LINK expressed amount
     /// @param _gasLimit amount of gas to provide the target contract when performing upkeep
+    /// @param _config current configuration of the CL registry
     /// @return linkAmount_ amount of LINK needed to cover the job
-    function _getLinkAmount(uint256 _gasLimit) internal view returns (uint256 linkAmount_) {
-        (, IKeeperRegistry.Config memory _c,) = CL_REGISTRY.getState();
+    function _getLinkAmount(uint256 _gasLimit, IKeeperRegistry.Config memory _config)
+        internal
+        view
+        returns (uint256 linkAmount_)
+    {
         (uint256 fastGasWei, uint256 linkEth) = _getFeedData();
 
-        uint256 adjustedGas = fastGasWei * _c.gasCeilingMultiplier;
+        uint256 adjustedGas = fastGasWei * _config.gasCeilingMultiplier;
         uint256 weiForGas = adjustedGas * (_gasLimit + REGISTRY_GAS_OVERHEAD);
-        uint256 premium = PPB_BASE + _c.paymentPremiumPPB;
+        uint256 premium = PPB_BASE + _config.paymentPremiumPPB;
 
         /// @dev amount of LINK to carry one `performUpKeep` operation
         // See: _calculatePaymentAmount
         // https://etherscan.io/address/0x02777053d6764996e594c3E88AF1D58D5363a2e6#code#F1#L776
         linkAmount_ =
         // From Wei to Eth * Premium / Ratio
-         ((weiForGas * (1e9) * (premium)) / (linkEth)) + (uint256(_c.flatFeeMicroLink) * (1e12));
+         ((weiForGas * (1e9) * (premium)) / (linkEth)) + (uint256(_config.flatFeeMicroLink) * (1e12));
     }
 
     /// @dev decodes the `bytes` calldata given by keepers and checks its validate against storage
@@ -396,18 +400,18 @@ contract UpKeepManager is UpKeepManagerUtils, Pausable, KeeperCompatibleInterfac
         internal
         returns (uint256 upkeepID_)
     {
+        /// @dev checks CL registry state before registering
+        (IKeeperRegistry.State memory state, IKeeperRegistry.Config memory _c,) = CL_REGISTRY.getState();
+        uint256 oldNonce = state.nonce;
+
         /// @dev we ensure we top-up enough LINK for couple of test-runs (20) and sanity checks
-        uint256 linkAmount = _getLinkAmount(_gasLimit) * roundsTopUp;
+        uint256 linkAmount = _getLinkAmount(_gasLimit, _c) * roundsTopUp;
         if (linkAmount < MIN_FUNDING_UPKEEP) revert NotMinLinkFundedUpKeep();
 
         uint256 linkRegistryBal = LINK.balanceOf(address(this));
         if (linkRegistryBal < linkAmount) {
             _swapEthForLink(linkAmount - linkRegistryBal);
         }
-
-        /// @dev checks CL registry state before registering
-        (IKeeperRegistry.State memory state,,) = CL_REGISTRY.getState();
-        uint256 oldNonce = state.nonce;
 
         bytes memory data = abi.encodeCall(
             IKeeperRegistrar.register,
