@@ -331,6 +331,12 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
             if (minLockTime > MAX_LOCKING_TIME) {
                 revert MinLockTimeMisconfigured(address(farm), minLockTime);
             }
+            // @audit 1. CEI compliance is broken due to the need of the external
+            // call first returning the `kekId` for later storing in mapping.
+            // 2. no reentrancy concern method itself contains a `nonReentrant` modifier
+            // and limited/permissioned to owner. No present fallback methods in proxy/frax farm internally,
+            // limited approval from `owner` to avatar (`_amountAsset`)
+            // ref: https://github.com/convex-eth/frax-cvx-platform/blob/main/contracts/contracts/StakingProxyConvex.sol#L92
             kekId = proxy.stakeLocked(_amountAsset, farm.lock_time_min());
             /// @dev detailed required to enable withdrawls later
             kekIds[vaultAddr] = kekId;
