@@ -97,7 +97,7 @@ contract UpKeepManager is UpKeepManagerUtils, Pausable, KeeperCompatibleInterfac
     event SweepEth(address recipient, uint256 amount, uint256 timestamp);
     event EthSwappedForLink(uint256 amountEthOut, uint256 amountLinkIn, uint256 timestamp);
 
-    event RegistryEthReceived(address indexed sender, uint256 value);
+    event UpKeepManagerEthReceived(address indexed sender, uint256 value);
 
     constructor(address _governance) {
         if (_governance == address(0)) revert ZeroAddress();
@@ -129,7 +129,7 @@ contract UpKeepManager is UpKeepManagerUtils, Pausable, KeeperCompatibleInterfac
 
     /// @dev Fallback function accepts Ether transactions.
     receive() external payable {
-        emit RegistryEthReceived(msg.sender, msg.value);
+        emit UpKeepManagerEthReceived(msg.sender, msg.value);
     }
 
     ////////////////////////////////////////////////////////////////////////////
