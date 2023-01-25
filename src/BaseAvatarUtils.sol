@@ -9,6 +9,7 @@ contract BaseAvatarUtils {
     ////////////////////////////////////////////////////////////////////////////
 
     error StalePriceFeed(uint256 currentTime, uint256 updateTime, uint256 maxPeriod);
+    error NegativePriceFeedAnswer(address feed, int256 answer, uint256 timestamp);
 
     function fetchPriceFromClFeed(IAggregatorV3 _feed, uint256 _maxStalePeriod)
         internal
@@ -17,6 +18,7 @@ contract BaseAvatarUtils {
     {
         (, int256 answer,, uint256 updateTime,) = _feed.latestRoundData();
 
+        if (answer < 0) revert NegativePriceFeedAnswer(address(_feed), answer, block.timestamp);
         if (block.timestamp - updateTime > _maxStalePeriod) {
             revert StalePriceFeed(block.timestamp, updateTime, _maxStalePeriod);
         }

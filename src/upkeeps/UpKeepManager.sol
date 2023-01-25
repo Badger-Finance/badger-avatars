@@ -458,7 +458,7 @@ contract UpKeepManager is UpKeepManagerUtils, Pausable, KeeperCompatibleInterfac
         returns (bool upkeepNeeded_, bytes memory performData_)
     {
         bool underFunded;
-        
+
         /// @dev check for the UpKeepManager itself if its upkeep needs topup
         ///      prio `UpKeepManger` vs members to avoid ops halting
         (, underFunded) = _isUpKeepIdUnderFunded(monitoringUpKeepId);
