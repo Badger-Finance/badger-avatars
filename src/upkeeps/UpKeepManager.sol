@@ -88,7 +88,7 @@ contract UpKeepManager is UpKeepManagerUtils, Pausable, KeeperCompatibleInterfac
     ////////////////////////////////////////////////////////////////////////////
 
     event NewMember(address indexed memberAddress, string name, uint256 gasLimit, uint256 upKeepId, uint256 timestamp);
-    event RemoveMember(address indexed memberAddress, uint256 upKeepId, uint256 timestamp);
+    event RemoveMember(address indexed memberAddress, uint256 upKeepId, uint256 linkRefund, uint256 timestamp);
 
     event RoundsTopUpUpdated(uint256 oldValue, uint256 newValue);
     event MinRoundsTopUpUpdated(uint256 oldValue, uint256 newValue);
@@ -201,13 +201,13 @@ contract UpKeepManager is UpKeepManagerUtils, Pausable, KeeperCompatibleInterfac
         delete membersInfo[_memberAddress];
 
         // NOTE: only member which upkeep is being cancelled can be removed
-        (,,,,,, uint64 maxValidBlocknumber,) = CL_REGISTRY.getUpkeep(upKeepId);
+        (,,, uint96 linkRefund,,, uint64 maxValidBlocknumber,) = CL_REGISTRY.getUpkeep(upKeepId);
         // https://etherscan.io/address/0x02777053d6764996e594c3e88af1d58d5363a2e6#code#F1#L738
         if (maxValidBlocknumber == UINT64_MAX) revert UpKeepNotCancelled(upKeepId);
 
         CL_REGISTRY.withdrawFunds(upKeepId, address(this));
 
-        emit RemoveMember(_memberAddress, upKeepId, block.timestamp);
+        emit RemoveMember(_memberAddress, upKeepId, linkRefund, block.timestamp);
     }
 
     /// @dev  Sweep the full LINK balance to techops
