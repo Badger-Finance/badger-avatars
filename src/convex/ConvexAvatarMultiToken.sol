@@ -472,10 +472,8 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
             revert CurveLpStillStaked(lpToken, crvRewards, stakedBal);
         }
 
-        // NOTE: verify pending rewards and claim. Processing is done separately
-        if (baseRewardPool.earned(address(this)) > 0) {
-            baseRewardPool.getReward();
-        }
+        // NOTE: Claim extra and normal rewards. Processing is done separately
+        baseRewardPool.getReward();
 
         // NOTE: while removing the info from storage, we ensure that allowance is set back to zero
         IERC20MetadataUpgradeable(lpToken).safeApprove(address(CONVEX_BOOSTER), 0);
@@ -615,9 +613,8 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
         uint256 length = baseRewardPools.length();
         for (uint256 i; i < length;) {
             IBaseRewardPool baseRewardPool = IBaseRewardPool(baseRewardPools.at(i));
-            if (baseRewardPool.earned(address(this)) > 0) {
-                baseRewardPool.getReward();
-            }
+            // NOTE: Claim extra and normal rewards. Will not revert if rewards are zero
+            baseRewardPool.getReward();
             unchecked {
                 ++i;
             }
