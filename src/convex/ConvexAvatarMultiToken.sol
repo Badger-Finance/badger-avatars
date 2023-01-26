@@ -384,7 +384,8 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
         emit Withdraw(address(curveLp), curveLpBalance, block.timestamp);
     }
 
-    /// @notice Takes a given amount of assets from the owner and stakes them on the CONVEX Booster. Can only be called by owner.
+    /// @notice Takes a given amount of assets from the owner, funds are deposited in the pool gauge
+    ///         & staked in the reward contract. Can only be called by owner.
     /// @param _pids Pids target to stake into
     /// @param _amountAssets Amount of assets to be staked.
     function deposit(uint256[] calldata _pids, uint256[] calldata _amountAssets) external onlyOwner {
@@ -404,6 +405,7 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
             address lpToken = assets.at(pids.indexOf(_pids[i]));
             IERC20MetadataUpgradeable(lpToken).safeTransferFrom(msg.sender, address(this), _amountAssets[i]);
 
+            /// @dev `true` means to stake funds in the appropiate `rewardContract` given the pid
             CONVEX_BOOSTER.deposit(_pids[i], _amountAssets[i], true);
 
             emit Deposit(lpToken, _amountAssets[i], block.timestamp);
@@ -555,7 +557,7 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
     }
 
     /// @notice Unstakes the given amount of assets and transfers them back to owner.
-    /// @dev This function doesn't claim any rewards. Caller can only be owner.
+    /// @dev This function doesn't claim any rewards.
     /// @param _pids Pids to be targetted to unstake from.
     /// @param _curveLpDeposited Amount of assets to be unstaked.
     function _withdraw(uint256[] memory _pids, uint256[] memory _curveLpDeposited) internal {
