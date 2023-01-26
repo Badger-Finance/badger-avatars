@@ -192,9 +192,7 @@ contract UpKeepManager is UpKeepManagerUtils, Pausable, KeeperCompatibleInterfac
     /// @notice only callable via governance
     /// @param _memberAddress contract address to be remove from manager
     function withdrawLinkFundsAndRemoveMember(address _memberAddress) external onlyGovernance {
-        if (!_members.contains(_memberAddress)) {
-            revert NotMemberIncluded(_memberAddress);
-        }
+        if (!_members.contains(_memberAddress)) revert NotMemberIncluded(_memberAddress);
 
         uint256 upKeepId = membersInfo[_memberAddress].upKeepId;
         _members.remove(_memberAddress);

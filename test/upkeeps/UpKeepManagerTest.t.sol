@@ -11,6 +11,7 @@ import {BaseAvatarUtils} from "../../src/BaseAvatarUtils.sol";
 import {CHAINLINK_KEEPER_REGISTRY} from "../../src/BaseConstants.sol";
 import {IAvatar} from "../../src/interfaces/badger/IAvatar.sol";
 import {IKeeperRegistry} from "../../src/interfaces/chainlink/IKeeperRegistry.sol";
+import {IAggregatorV3} from "../../src/interfaces/chainlink/IAggregatorV3.sol";
 import {AuraAvatarMultiToken} from "../../src/aura/AuraAvatarMultiToken.sol";
 import {UpKeepManagerUtils} from "../../src/upkeeps/UpKeepManagerUtils.sol";
 import {UpKeepManager} from "../../src/upkeeps/UpKeepManager.sol";
@@ -159,7 +160,28 @@ contract UpKeepManagerTest is Test, UpKeepManagerUtils {
         upKeepManager.cancelMemberUpKeep(dummy_avatar);
     }
 
-    function test_cancelMemberUpKeep_and_removeAvatar() public {
+    function test_withdrawLinkFundsAndRemoveMember_permissions() public {
+        vm.expectRevert(abi.encodeWithSelector(UpKeepManager.NotGovernance.selector, (address(this))));
+        upKeepManager.withdrawLinkFundsAndRemoveMember(address(0));
+    }
+
+    function test_withdrawLinkFundsAndRemoveMember_member_not_included() public {
+        vm.startPrank(admin);
+        vm.expectRevert(abi.encodeWithSelector(UpKeepManager.NotMemberIncluded.selector, dummy_avatar));
+        upKeepManager.withdrawLinkFundsAndRemoveMember(dummy_avatar);
+    }
+
+    function test_withdrawLinkFundsAndRemoveMember_upkeep_not_cancelled() public {
+        vm.startPrank(admin);
+        upKeepManager.addMember(address(avatar), "randomAvatar", 500000, 0);
+
+        (,, uint256 upKeepId) = upKeepManager.membersInfo(address(avatar));
+
+        vm.expectRevert(abi.encodeWithSelector(UpKeepManager.UpKeepNotCancelled.selector, upKeepId));
+        upKeepManager.withdrawLinkFundsAndRemoveMember(address(avatar));
+    }
+
+    function test_withdrawLinkFundsAndRemoveMember() public {
         vm.startPrank(admin);
         upKeepManager.addMember(address(avatar), "randomAvatar", 500000, 0);
         vm.stopPrank();
@@ -419,6 +441,67 @@ contract UpKeepManagerTest is Test, UpKeepManagerUtils {
         bytes memory performData = abi.encode(address(avatar));
 
         vm.expectRevert(abi.encodeWithSelector(UpKeepManager.NotUnderFundedUpkeep.selector, upKeepId));
+        vm.prank(CHAINLINK_KEEPER_REGISTRY);
+        upKeepManager.performUpkeep(performData);
+    }
+
+    function test_performUpKeep_negative_answer() public {
+        vm.prank(admin);
+        upKeepManager.addMember(address(avatar), "randomAvatar", 500000, 0);
+
+        (,, uint256 upKeepId) = upKeepManager.membersInfo(address(avatar));
+
+        uint96 enforceUpKeepBal = 1 ether;
+        // https://book.getfoundry.sh/cheatcodes/mock-call#mockcall
+        vm.mockCall(
+            CHAINLINK_KEEPER_REGISTRY,
+            abi.encodeWithSelector(IKeeperRegistry.getUpkeep.selector, upKeepId),
+            // getUpKeep mock
+            abi.encode(
+                address(avatar),
+                500000,
+                new bytes(0),
+                enforceUpKeepBal,
+                address(0),
+                address(upKeepManager),
+                2 ** 64 - 1,
+                0
+            )
+        );
+
+        (bool upkeepNeeded, bytes memory performData) = upKeepManager.checkUpkeep(new bytes(0));
+
+        assertTrue(upkeepNeeded);
+
+        // remove all link funds from upKeepManager
+        vm.prank(admin);
+        upKeepManager.sweepLinkFunds();
+        assertEq(address(upKeepManager).balance, 0);
+        assertEq(LINK.balanceOf(address(upKeepManager)), 0);
+        vm.stopPrank();
+
+        // send eth from hypothetical gas station
+        vm.deal(address(upKeepManager), 2 ether);
+
+        (uint80 roundId,, uint256 startedAt, uint256 updatedAt, uint80 answeredInRound) =
+            LINK_ETH_FEED.latestRoundData();
+        int256 negativeAnswer = -5e18;
+
+        // force neg value
+        vm.mockCall(
+            address(LINK_ETH_FEED),
+            abi.encodeWithSelector(IAggregatorV3.latestRoundData.selector),
+            abi.encode(roundId, negativeAnswer, startedAt, updatedAt, answeredInRound)
+        );
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                BaseAvatarUtils.NegativePriceFeedAnswer.selector,
+                address(LINK_ETH_FEED),
+                negativeAnswer,
+                block.timestamp
+            )
+        );
         vm.prank(CHAINLINK_KEEPER_REGISTRY);
         upKeepManager.performUpkeep(performData);
     }
