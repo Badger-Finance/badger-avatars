@@ -465,6 +465,8 @@ contract UpKeepManager is UpKeepManagerUtils, Pausable, KeeperCompatibleInterfac
         if (underFunded) {
             upkeepNeeded_ = true;
             performData_ = abi.encode(address(this));
+            // NOTE: explicit early return to avoid overrides by `members`
+            return (upkeepNeeded_, performData_);
         }
 
         address[] memory members = getMembers();
