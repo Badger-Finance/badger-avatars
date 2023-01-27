@@ -16,5 +16,5 @@ contract Avatar is BaseAvatar {
         return "Avatar_Template";
     }
 
-    /// NOTE: Add custom avatar functions below
+    // NOTE: Add custom avatar functions below
 }
