@@ -6,8 +6,8 @@ import {Enum, Executor} from "../../lib/safe-contracts/contracts/base/Executor.s
 
 import {GlobalAccessControlManaged} from "./GlobalAccessControlManaged.sol";
 
-/// Avatar
-/// Forwards calls from the owner
+/// @title BaseAvatar
+/// @notice Forwards calls from the owner
 contract BaseAvatar is OwnableUpgradeable, Executor {
     ////////////////////////////////////////////////////////////////////////////
     // INITIALIZATION
