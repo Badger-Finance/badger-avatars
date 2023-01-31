@@ -3,9 +3,9 @@ pragma solidity ^0.8.0;
 
 import {Script} from "forge-std/Script.sol";
 
-import {UpKeepManager} from "../../src/upkeeps/UpKeepManager.sol";
+import {UpkeepManager} from "../../src/upkeeps/UpkeepManager.sol";
 
-contract UpKeepManagerDeploy is Script {
+contract UpkeepManagerDeploy is Script {
     // Config: governance
     address constant TECHOPS_MSIG = 0x86cbD0ce0c087b482782c181dA8d191De18C8275;
 
@@ -13,7 +13,7 @@ contract UpKeepManagerDeploy is Script {
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
         vm.startBroadcast();
 
-        UpKeepManager upkeepManager = new UpKeepManager(TECHOPS_MSIG);
+        UpkeepManager upkeepManager = new UpkeepManager(TECHOPS_MSIG);
 
         vm.stopBroadcast();
     }

@@ -13,12 +13,12 @@ import {IAvatar} from "../../src/interfaces/badger/IAvatar.sol";
 import {IKeeperRegistry} from "../../src/interfaces/chainlink/IKeeperRegistry.sol";
 import {IAggregatorV3} from "../../src/interfaces/chainlink/IAggregatorV3.sol";
 import {AuraAvatarMultiToken} from "../../src/aura/AuraAvatarMultiToken.sol";
-import {UpKeepManagerUtils} from "../../src/upkeeps/UpKeepManagerUtils.sol";
-import {UpKeepManager} from "../../src/upkeeps/UpKeepManager.sol";
+import {UpkeepManagerUtils} from "../../src/Upkeeps/UpkeepManagerUtils.sol";
+import {UpkeepManager} from "../../src/Upkeeps/UpkeepManager.sol";
 
-contract UpKeepManagerTest is Test, UpKeepManagerUtils {
+contract UpkeepManagerTest is Test, UpkeepManagerUtils {
     AuraAvatarMultiToken avatar;
-    UpKeepManager upKeepManager;
+    UpkeepManager upkeepManager;
 
     uint256 constant MONITORING_GAS_LIMIT = 1_000_000;
 
@@ -35,7 +35,7 @@ contract UpKeepManagerTest is Test, UpKeepManagerUtils {
     function setUp() public {
         vm.createSelectFork("mainnet", 16385870);
 
-        upKeepManager = new UpKeepManager(admin);
+        upkeepManager = new UpkeepManager(admin);
 
         uint256[] memory pidsInit = new uint256[](2);
         pidsInit[0] = 20;
@@ -43,22 +43,22 @@ contract UpKeepManagerTest is Test, UpKeepManagerUtils {
         avatar = new AuraAvatarMultiToken();
         avatar.initialize(admin, eoa, pidsInit);
 
-        deal(address(LINK), address(upKeepManager), 1000e18);
+        deal(address(LINK), address(upkeepManager), 1000e18);
 
         vm.startPrank(admin);
-        upKeepManager.initializeBaseUpkeep(MONITORING_GAS_LIMIT);
+        upkeepManager.initializeBaseUpkeep(MONITORING_GAS_LIMIT);
         vm.stopPrank();
     }
 
     function test_constructor() public {
-        assertEq(upKeepManager.governance(), admin);
-        assertEq(upKeepManager.roundsTopUp(), 20);
-        assertEq(upKeepManager.minRoundsTopUp(), 3);
+        assertEq(upkeepManager.governance(), admin);
+        assertEq(upkeepManager.roundsTopUp(), 20);
+        assertEq(upkeepManager.minRoundsTopUp(), 3);
     }
 
-    function test_upkeep_monitoring() public {
-        assertTrue(upKeepManager.monitoringUpKeepId() > 0);
-        assertEq(LINK.allowance(address(upKeepManager), address(CL_REGISTRY)), type(uint256).max);
+    function test_Upkeep_monitoring() public {
+        assertTrue(upkeepManager.monitoringUpkeepId() > 0);
+        assertEq(LINK.allowance(address(upkeepManager), address(CL_REGISTRY)), type(uint256).max);
     }
 
     ////////////////////////////////////////////////////////////////////////////
@@ -66,72 +66,72 @@ contract UpKeepManagerTest is Test, UpKeepManagerUtils {
     ////////////////////////////////////////////////////////////////////////////
 
     function test_addMember_permissions() public {
-        vm.expectRevert(abi.encodeWithSelector(UpKeepManager.NotGovernance.selector, (address(this))));
-        upKeepManager.addMember(address(0), "randomAvatar", 500000, 0);
+        vm.expectRevert(abi.encodeWithSelector(UpkeepManager.NotGovernance.selector, (address(this))));
+        upkeepManager.addMember(address(0), "randomAvatar", 500000, 0);
     }
 
     function test_addMember_reverts() public {
         vm.startPrank(admin);
-        vm.expectRevert(UpKeepManager.ZeroAddress.selector);
-        upKeepManager.addMember(address(0), "randomAvatar", 500000, 0);
+        vm.expectRevert(UpkeepManager.ZeroAddress.selector);
+        upkeepManager.addMember(address(0), "randomAvatar", 500000, 0);
 
-        vm.expectRevert(UpKeepManager.ZeroUintValue.selector);
-        upKeepManager.addMember(address(6), "randomAvatar", 0, 0);
+        vm.expectRevert(UpkeepManager.ZeroUintValue.selector);
+        upkeepManager.addMember(address(6), "randomAvatar", 0, 0);
 
-        vm.expectRevert(UpKeepManager.EmptyString.selector);
-        upKeepManager.addMember(address(6), "", 500000, 0);
+        vm.expectRevert(UpkeepManager.EmptyString.selector);
+        upkeepManager.addMember(address(6), "", 500000, 0);
 
-        upKeepManager.addMember(address(avatar), "randomAvatar", 500000, 0);
+        upkeepManager.addMember(address(avatar), "randomAvatar", 500000, 0);
 
-        vm.expectRevert(abi.encodeWithSelector(UpKeepManager.MemberAlreadyRegister.selector, address(avatar)));
-        upKeepManager.addMember(address(avatar), "randomAvatar", 500000, 0);
+        vm.expectRevert(abi.encodeWithSelector(UpkeepManager.MemberAlreadyRegister.selector, address(avatar)));
+        upkeepManager.addMember(address(avatar), "randomAvatar", 500000, 0);
     }
 
     function test_addMember() public {
-        uint256 linkBalBefore = LINK.balanceOf(address(upKeepManager));
+        uint256 linkBalBefore = LINK.balanceOf(address(upkeepManager));
         vm.startPrank(admin);
-        upKeepManager.addMember(address(avatar), "randomAvatar", 500000, 0);
+        upkeepManager.addMember(address(avatar), "randomAvatar", 500000, 0);
 
-        (string memory name, uint256 gasLimit, uint256 upKeepId) = upKeepManager.membersInfo(address(avatar));
+        (string memory name, uint256 gasLimit, uint256 UpkeepId) = upkeepManager.membersInfo(address(avatar));
 
         assertEq(name, "randomAvatar");
         assertEqUint(gasLimit, 500000);
-        assertTrue(upKeepId > 0);
+        assertTrue(UpkeepId > 0);
 
-        address[] memory avatarBook = upKeepManager.getMembers();
+        address[] memory avatarBook = upkeepManager.getMembers();
         assertEq(avatarBook[0], address(avatar));
 
-        assertLt(LINK.balanceOf(address(upKeepManager)), linkBalBefore);
+        assertLt(LINK.balanceOf(address(upkeepManager)), linkBalBefore);
 
         (address target, uint32 executeGas, bytes memory checkData, uint96 balance,, address keeperJobAdmin,,) =
-            CL_REGISTRY.getUpkeep(upKeepId);
+            CL_REGISTRY.getUpkeep(UpkeepId);
 
         assertEq(target, address(avatar));
         assertEq(executeGas, 500000);
         assertEq(checkData, new bytes(0));
         assertTrue(balance > 0);
-        assertEq(keeperJobAdmin, address(upKeepManager));
+        assertEq(keeperJobAdmin, address(upkeepManager));
     }
 
-    function test_addMember_existing_upKeep() public {
+    function test_addMember_existing_Upkeep() public {
         // NOTE: use a dripper from our infra for this test
-        uint256 existingUpKeepId = 98030557125143332209375009711552185081207413079136145061022651896587613727137;
-        (address target, uint32 executeGas,,,,,,) = CL_REGISTRY.getUpkeep(existingUpKeepId);
+        uint256 existingUpkeepId = 98030557125143332209375009711552185081207413079136145061022651896587613727137;
+        (address target, uint32 executeGas,,,,,,) = CL_REGISTRY.getUpkeep(existingUpkeepId);
 
         console.log(target);
 
-        uint256 linkBalBefore = LINK.balanceOf(address(upKeepManager));
+        uint256 linkBalBefore = LINK.balanceOf(address(upkeepManager));
         vm.startPrank(admin);
-        upKeepManager.addMember(target, "RemBadgerDripper2023", executeGas, existingUpKeepId);
+        upkeepManager.addMember(target, "RemBadgerDripper2023", executeGas, existingUpkeepId);
 
         // NOTE: given that it is registed, expected to not spend funds
-        assertEq(LINK.balanceOf(address(upKeepManager)), linkBalBefore);
+        assertEq(LINK.balanceOf(address(upkeepManager)), linkBalBefore);
 
-        (string memory name, uint256 gasLimit, uint256 upKeepId) = upKeepManager.membersInfo(target);
+        (string memory name, uint256 gasLimit, uint256 UpkeepId) = upkeepManager.membersInfo(target);
 
         assertEq(name, "RemBadgerDripper2023");
         assertEqUint(gasLimit, executeGas);
-        assertEq(upKeepId, existingUpKeepId);
+        assertEq(UpkeepId, existingUpkeepId);
     }
 
     function test_addMember_not_auto_approve() public {
@@ -144,152 +144,152 @@ contract UpKeepManagerTest is Test, UpKeepManagerUtils {
         );
 
         vm.startPrank(admin);
-        vm.expectRevert(abi.encodeWithSelector(UpKeepManager.NotAutoApproveKeeper.selector));
-        upKeepManager.addMember(address(avatar), "randomAvatar", 500000, 0);
+        vm.expectRevert(abi.encodeWithSelector(UpkeepManager.NotAutoApproveKeeper.selector));
+        upkeepManager.addMember(address(avatar), "randomAvatar", 500000, 0);
     }
 
-    function test_cancelMemberUpKeep_permissions() public {
-        vm.expectRevert(abi.encodeWithSelector(UpKeepManager.NotGovernance.selector, (address(this))));
-        upKeepManager.cancelMemberUpKeep(address(0));
+    function test_cancelMemberUpkeep_permissions() public {
+        vm.expectRevert(abi.encodeWithSelector(UpkeepManager.NotGovernance.selector, (address(this))));
+        upkeepManager.cancelMemberUpkeep(address(0));
     }
 
-    function test_cancelMemberUpKeep_requires() public {
+    function test_cancelMemberUpkeep_requires() public {
         vm.startPrank(admin);
-        vm.expectRevert(abi.encodeWithSelector(UpKeepManager.NotMemberIncluded.selector, dummy_avatar));
+        vm.expectRevert(abi.encodeWithSelector(UpkeepManager.NotMemberIncluded.selector, dummy_avatar));
         // Test for both cases, since it cannot remove from set if not avail
-        upKeepManager.cancelMemberUpKeep(dummy_avatar);
+        upkeepManager.cancelMemberUpkeep(dummy_avatar);
     }
 
     function test_withdrawLinkFundsAndRemoveMember_permissions() public {
-        vm.expectRevert(abi.encodeWithSelector(UpKeepManager.NotGovernance.selector, (address(this))));
-        upKeepManager.withdrawLinkFundsAndRemoveMember(address(0));
+        vm.expectRevert(abi.encodeWithSelector(UpkeepManager.NotGovernance.selector, (address(this))));
+        upkeepManager.withdrawLinkFundsAndRemoveMember(address(0));
     }
 
     function test_withdrawLinkFundsAndRemoveMember_member_not_included() public {
         vm.startPrank(admin);
-        vm.expectRevert(abi.encodeWithSelector(UpKeepManager.NotMemberIncluded.selector, dummy_avatar));
-        upKeepManager.withdrawLinkFundsAndRemoveMember(dummy_avatar);
+        vm.expectRevert(abi.encodeWithSelector(UpkeepManager.NotMemberIncluded.selector, dummy_avatar));
+        upkeepManager.withdrawLinkFundsAndRemoveMember(dummy_avatar);
     }
 
-    function test_withdrawLinkFundsAndRemoveMember_upkeep_not_cancelled() public {
+    function test_withdrawLinkFundsAndRemoveMember_Upkeep_not_cancelled() public {
         vm.startPrank(admin);
-        upKeepManager.addMember(address(avatar), "randomAvatar", 500000, 0);
+        upkeepManager.addMember(address(avatar), "randomAvatar", 500000, 0);
 
-        (,, uint256 upKeepId) = upKeepManager.membersInfo(address(avatar));
+        (,, uint256 UpkeepId) = upkeepManager.membersInfo(address(avatar));
 
-        vm.expectRevert(abi.encodeWithSelector(UpKeepManager.UpKeepNotCancelled.selector, upKeepId));
-        upKeepManager.withdrawLinkFundsAndRemoveMember(address(avatar));
+        vm.expectRevert(abi.encodeWithSelector(UpkeepManager.UpkeepNotCancelled.selector, UpkeepId));
+        upkeepManager.withdrawLinkFundsAndRemoveMember(address(avatar));
     }
 
     function test_withdrawLinkFundsAndRemoveMember() public {
         vm.startPrank(admin);
-        upKeepManager.addMember(address(avatar), "randomAvatar", 500000, 0);
+        upkeepManager.addMember(address(avatar), "randomAvatar", 500000, 0);
         vm.stopPrank();
 
         vm.startPrank(admin);
         uint256 currentBlock = block.number;
-        upKeepManager.cancelMemberUpKeep(address(avatar));
+        upkeepManager.cancelMemberUpkeep(address(avatar));
 
         // NOTE: advance blocks to allow fund withdrawal
         vm.roll(currentBlock + 51);
-        uint256 linkBalBefore = LINK.balanceOf(address(upKeepManager));
-        upKeepManager.withdrawLinkFundsAndRemoveMember(address(avatar));
+        uint256 linkBalBefore = LINK.balanceOf(address(upkeepManager));
+        upkeepManager.withdrawLinkFundsAndRemoveMember(address(avatar));
 
-        (string memory name, uint256 gasLimit, uint256 upKeepId) = upKeepManager.membersInfo(address(avatar));
+        (string memory name, uint256 gasLimit, uint256 UpkeepId) = upkeepManager.membersInfo(address(avatar));
 
         assertEq(name, "");
         assertEqUint(gasLimit, 0);
-        assertEqUint(upKeepId, 0);
-        assertGt(LINK.balanceOf(address(upKeepManager)), linkBalBefore);
+        assertEqUint(UpkeepId, 0);
+        assertGt(LINK.balanceOf(address(upkeepManager)), linkBalBefore);
     }
 
     function test_sweep_permissions() public {
-        vm.expectRevert(abi.encodeWithSelector(UpKeepManager.NotGovernance.selector, (address(this))));
-        upKeepManager.sweepLinkFunds(address(TECHOPS));
+        vm.expectRevert(abi.encodeWithSelector(UpkeepManager.NotGovernance.selector, (address(this))));
+        upkeepManager.sweepLinkFunds(address(TECHOPS));
     }
 
     function test_sweep() public {
-        uint256 linkBal = LINK.balanceOf(address(upKeepManager));
+        uint256 linkBal = LINK.balanceOf(address(upkeepManager));
         uint256 linkTechopsBal = LINK.balanceOf(address(TECHOPS));
 
         vm.prank(admin);
         vm.expectEmit(true, true, false, false);
         emit SweepLink(TECHOPS, linkBal, block.timestamp);
-        upKeepManager.sweepLinkFunds(address(TECHOPS));
+        upkeepManager.sweepLinkFunds(address(TECHOPS));
 
         // ensure techops link balance is increased
         assertGt(LINK.balanceOf(address(TECHOPS)), linkTechopsBal);
     }
 
     function test_sweepEthFunds_permissions() public {
-        vm.expectRevert(abi.encodeWithSelector(UpKeepManager.NotGovernance.selector, (address(this))));
-        upKeepManager.sweepEthFunds(payable(address(7)));
+        vm.expectRevert(abi.encodeWithSelector(UpkeepManager.NotGovernance.selector, (address(this))));
+        upkeepManager.sweepEthFunds(payable(address(7)));
     }
 
     function test_sweepEthFunds() public {
-        vm.deal(address(upKeepManager), 2 ether);
+        vm.deal(address(upkeepManager), 2 ether);
 
         uint256 ethBalBefore = eoa.balance;
-        uint256 upKeepManagerEthBal = address(upKeepManager).balance;
+        uint256 UpkeepManagerEthBal = address(upkeepManager).balance;
 
         vm.prank(admin);
         vm.expectEmit(true, true, false, false);
-        emit SweepEth(eoa, upKeepManagerEthBal, block.timestamp);
-        upKeepManager.sweepEthFunds(payable(eoa));
+        emit SweepEth(eoa, UpkeepManagerEthBal, block.timestamp);
+        upkeepManager.sweepEthFunds(payable(eoa));
 
-        assertEq(eoa.balance, ethBalBefore + upKeepManagerEthBal);
+        assertEq(eoa.balance, ethBalBefore + UpkeepManagerEthBal);
     }
 
     function test_setRoundsTopUp_permissions() public {
-        vm.expectRevert(abi.encodeWithSelector(UpKeepManager.NotGovernance.selector, (address(this))));
-        upKeepManager.setRoundsTopUp(50000);
+        vm.expectRevert(abi.encodeWithSelector(UpkeepManager.NotGovernance.selector, (address(this))));
+        upkeepManager.setRoundsTopUp(50000);
     }
 
     function test_setRoundsTopUp_zero_value() public {
-        vm.expectRevert(abi.encodeWithSelector(UpKeepManager.ZeroUintValue.selector));
+        vm.expectRevert(abi.encodeWithSelector(UpkeepManager.ZeroUintValue.selector));
         vm.prank(admin);
-        upKeepManager.setRoundsTopUp(0);
+        upkeepManager.setRoundsTopUp(0);
     }
 
     function test_setRoundsTopUp_invalid_value() public {
-        vm.expectRevert(abi.encodeWithSelector(UpKeepManager.InvalidRoundsTopUp.selector, 1000));
+        vm.expectRevert(abi.encodeWithSelector(UpkeepManager.InvalidRoundsTopUp.selector, 1000));
         vm.prank(admin);
-        upKeepManager.setRoundsTopUp(1000);
+        upkeepManager.setRoundsTopUp(1000);
     }
 
     function test_setRoundsTopUp() public {
         vm.expectEmit(true, true, false, false);
-        emit RoundsTopUpUpdated(upKeepManager.roundsTopUp(), 10);
+        emit RoundsTopUpUpdated(upkeepManager.roundsTopUp(), 10);
         vm.prank(admin);
-        upKeepManager.setRoundsTopUp(10);
+        upkeepManager.setRoundsTopUp(10);
 
-        assertEq(upKeepManager.roundsTopUp(), 10);
+        assertEq(upkeepManager.roundsTopUp(), 10);
     }
 
     function test_setMinRoundsTopUp_permissions() public {
-        vm.expectRevert(abi.encodeWithSelector(UpKeepManager.NotGovernance.selector, (address(this))));
-        upKeepManager.setMinRoundsTopUp(50000);
+        vm.expectRevert(abi.encodeWithSelector(UpkeepManager.NotGovernance.selector, (address(this))));
+        upkeepManager.setMinRoundsTopUp(50000);
     }
 
     function test_setMinRoundsTopUp_zero_value() public {
-        vm.expectRevert(abi.encodeWithSelector(UpKeepManager.ZeroUintValue.selector));
+        vm.expectRevert(abi.encodeWithSelector(UpkeepManager.ZeroUintValue.selector));
         vm.prank(admin);
-        upKeepManager.setMinRoundsTopUp(0);
+        upkeepManager.setMinRoundsTopUp(0);
     }
 
     function test_setMinRoundsTopUp_invalid_value() public {
-        vm.expectRevert(abi.encodeWithSelector(UpKeepManager.InvalidUnderFundedThreshold.selector, 3000));
+        vm.expectRevert(abi.encodeWithSelector(UpkeepManager.InvalidUnderFundedThreshold.selector, 3000));
         vm.prank(admin);
-        upKeepManager.setMinRoundsTopUp(3000);
+        upkeepManager.setMinRoundsTopUp(3000);
     }
 
     function test_setMinRoundsTopUp() public {
         vm.expectEmit(true, true, false, true);
-        emit MinRoundsTopUpUpdated(upKeepManager.minRoundsTopUp(), 4);
+        emit MinRoundsTopUpUpdated(upkeepManager.minRoundsTopUp(), 4);
         vm.prank(admin);
-        upKeepManager.setMinRoundsTopUp(4);
+        upkeepManager.setMinRoundsTopUp(4);
 
-        assertEq(upKeepManager.minRoundsTopUp(), 4);
+        assertEq(upkeepManager.minRoundsTopUp(), 4);
     }
 
     ////////////////////////////////////////////////////////////////////////////
@@ -297,21 +297,21 @@ contract UpKeepManagerTest is Test, UpKeepManagerUtils {
     ////////////////////////////////////////////////////////////////////////////
 
     function test_pause_permissions() public {
-        vm.expectRevert(abi.encodeWithSelector(UpKeepManager.NotGovernance.selector, (address(this))));
-        upKeepManager.pause();
+        vm.expectRevert(abi.encodeWithSelector(UpkeepManager.NotGovernance.selector, (address(this))));
+        upkeepManager.pause();
     }
 
     function test_unpause_permissions() public {
         vm.prank(admin);
-        upKeepManager.pause();
+        upkeepManager.pause();
 
         address[2] memory actors = [address(this), eoa];
         for (uint256 i; i < actors.length; ++i) {
             uint256 snapId = vm.snapshot();
 
             vm.prank(actors[i]);
-            vm.expectRevert(abi.encodeWithSelector(UpKeepManager.NotGovernance.selector, actors[i]));
-            upKeepManager.unpause();
+            vm.expectRevert(abi.encodeWithSelector(UpkeepManager.NotGovernance.selector, actors[i]));
+            upkeepManager.unpause();
 
             vm.revertTo(snapId);
         }
@@ -319,19 +319,19 @@ contract UpKeepManagerTest is Test, UpKeepManagerUtils {
 
     function test_pause() public {
         vm.startPrank(admin);
-        upKeepManager.pause();
+        upkeepManager.pause();
 
-        assertTrue(upKeepManager.paused());
+        assertTrue(upkeepManager.paused());
     }
 
     function test_unpause() public {
         vm.startPrank(admin);
-        upKeepManager.pause();
+        upkeepManager.pause();
 
-        assertTrue(upKeepManager.paused());
+        assertTrue(upkeepManager.paused());
 
-        upKeepManager.unpause();
-        assertFalse(upKeepManager.paused());
+        upkeepManager.unpause();
+        assertFalse(upkeepManager.paused());
     }
 
     ////////////////////////////////////////////////////////////////////////////
@@ -341,37 +341,37 @@ contract UpKeepManagerTest is Test, UpKeepManagerUtils {
     function test_checkUpkeep() public {
         // deploy avatar and set keeper addr
         vm.prank(admin);
-        upKeepManager.addMember(address(avatar), "randomAvatar", 500000, 0);
+        upkeepManager.addMember(address(avatar), "randomAvatar", 500000, 0);
 
-        address[] memory testA = upKeepManager.getMembers();
+        address[] memory testA = upkeepManager.getMembers();
 
         for (uint256 i = 0; i < testA.length; i++) {
             console.log(testA[i]);
         }
 
-        (,, uint256 upKeepId) = upKeepManager.membersInfo(address(avatar));
+        (,, uint256 UpkeepId) = upkeepManager.membersInfo(address(avatar));
 
-        uint96 enforceUpKeepBal = 1 ether;
+        uint96 enforceUpkeepBal = 1 ether;
         // https://book.getfoundry.sh/cheatcodes/mock-call#mockcall
         vm.mockCall(
             CHAINLINK_KEEPER_REGISTRY,
-            abi.encodeWithSelector(IKeeperRegistry.getUpkeep.selector, upKeepId),
-            // getUpKeep mock
-            abi.encode(address(avatar), 500000, new bytes(0), enforceUpKeepBal, address(0), TECHOPS, 2 ** 64 - 1, 0)
+            abi.encodeWithSelector(IKeeperRegistry.getUpkeep.selector, UpkeepId),
+            // getUpkeep mock
+            abi.encode(address(avatar), 500000, new bytes(0), enforceUpkeepBal, address(0), TECHOPS, 2 ** 64 - 1, 0)
         );
-        (bool upkeepNeeded, bytes memory performData) = upKeepManager.checkUpkeep(new bytes(0));
-        assertTrue(upkeepNeeded);
+        (bool UpkeepNeeded, bytes memory performData) = upkeepManager.checkUpkeep(new bytes(0));
+        assertTrue(UpkeepNeeded);
 
         address avatarTarget = abi.decode(performData, (address));
 
         assertEq(avatarTarget, address(avatar));
     }
 
-    function test_checkUpKeep_not_required() public {
+    function test_checkUpkeep_not_required() public {
         vm.prank(admin);
-        upKeepManager.addMember(address(avatar), "randomAvatar", 500000, 0);
+        upkeepManager.addMember(address(avatar), "randomAvatar", 500000, 0);
 
-        address[] memory testA = upKeepManager.getMembers();
+        address[] memory testA = upkeepManager.getMembers();
 
         uint256 len = testA.length;
         console.log(len);
@@ -380,108 +380,108 @@ contract UpKeepManagerTest is Test, UpKeepManagerUtils {
             console.log(testA[i]);
         }
 
-        (bool upkeepNeeded,) = upKeepManager.checkUpkeep(new bytes(0));
-        assertFalse(upkeepNeeded);
+        (bool UpkeepNeeded,) = upkeepManager.checkUpkeep(new bytes(0));
+        assertFalse(UpkeepNeeded);
     }
 
-    function test_performUpKeep_permissions() public {
+    function test_performUpkeep_permissions() public {
         address[3] memory actors = [address(this), admin, eoa];
         for (uint256 i; i < actors.length; ++i) {
             uint256 snapId = vm.snapshot();
 
             vm.prank(actors[i]);
-            vm.expectRevert(abi.encodeWithSelector(UpKeepManager.NotKeeper.selector, actors[i]));
+            vm.expectRevert(abi.encodeWithSelector(UpkeepManager.NotKeeper.selector, actors[i]));
             avatar.performUpkeep(new bytes(0));
 
             vm.revertTo(snapId);
         }
     }
 
-    function test_performUpKeep_unregistered_member() public {
+    function test_performUpkeep_unregistered_member() public {
         bytes memory performData = abi.encode(address(7));
         vm.prank(CHAINLINK_KEEPER_REGISTRY);
-        vm.expectRevert(abi.encodeWithSelector(UpKeepManager.MemberNotRegisteredYet.selector, address(7)));
-        upKeepManager.performUpkeep(performData);
+        vm.expectRevert(abi.encodeWithSelector(UpkeepManager.MemberNotRegisteredYet.selector, address(7)));
+        upkeepManager.performUpkeep(performData);
     }
 
-    function test_performUpKeep_cancelled_member() public {
+    function test_performUpkeep_cancelled_member() public {
         vm.prank(admin);
-        upKeepManager.addMember(address(avatar), "randomAvatar", 500000, 0);
-        (,, uint256 upKeepId) = upKeepManager.membersInfo(address(avatar));
+        upkeepManager.addMember(address(avatar), "randomAvatar", 500000, 0);
+        (,, uint256 UpkeepId) = upkeepManager.membersInfo(address(avatar));
 
         vm.prank(admin);
-        upKeepManager.cancelMemberUpKeep(address(avatar));
+        upkeepManager.cancelMemberUpkeep(address(avatar));
         vm.stopPrank();
 
-        (,,,,,, uint256 maxValidBlocknumber,) = CL_REGISTRY.getUpkeep(upKeepId);
+        (,,,,,, uint256 maxValidBlocknumber,) = CL_REGISTRY.getUpkeep(UpkeepId);
 
-        uint96 enforceUpKeepBal = 1 ether;
+        uint96 enforceUpkeepBal = 1 ether;
         // https://book.getfoundry.sh/cheatcodes/mock-call#mockcall
         vm.mockCall(
             CHAINLINK_KEEPER_REGISTRY,
-            abi.encodeWithSelector(IKeeperRegistry.getUpkeep.selector, upKeepId),
-            // getUpKeep mock
+            abi.encodeWithSelector(IKeeperRegistry.getUpkeep.selector, UpkeepId),
+            // getUpkeep mock
             abi.encode(
-                address(avatar), 500000, new bytes(0), enforceUpKeepBal, address(upKeepManager), maxValidBlocknumber, 0
+                address(avatar), 500000, new bytes(0), enforceUpkeepBal, address(upkeepManager), maxValidBlocknumber, 0
             )
         );
 
         bytes memory performData = abi.encode(address(avatar));
 
-        vm.expectRevert(abi.encodeWithSelector(UpKeepManager.UpkeepCancelled.selector, upKeepId));
+        vm.expectRevert(abi.encodeWithSelector(UpkeepManager.UpkeepCancelled.selector, UpkeepId));
         vm.prank(CHAINLINK_KEEPER_REGISTRY);
-        upKeepManager.performUpkeep(performData);
+        upkeepManager.performUpkeep(performData);
     }
 
-    function test_performUpKeep_not_underfunded() public {
+    function test_performUpkeep_not_underfunded() public {
         vm.prank(admin);
-        upKeepManager.addMember(address(avatar), "randomAvatar", 500000, 0);
-        (,, uint256 upKeepId) = upKeepManager.membersInfo(address(avatar));
+        upkeepManager.addMember(address(avatar), "randomAvatar", 500000, 0);
+        (,, uint256 UpkeepId) = upkeepManager.membersInfo(address(avatar));
 
         bytes memory performData = abi.encode(address(avatar));
 
-        vm.expectRevert(abi.encodeWithSelector(UpKeepManager.NotUnderFundedUpkeep.selector, upKeepId));
+        vm.expectRevert(abi.encodeWithSelector(UpkeepManager.NotUnderFundedUpkeep.selector, UpkeepId));
         vm.prank(CHAINLINK_KEEPER_REGISTRY);
-        upKeepManager.performUpkeep(performData);
+        upkeepManager.performUpkeep(performData);
     }
 
-    function test_performUpKeep_negative_answer() public {
+    function test_performUpkeep_negative_answer() public {
         vm.prank(admin);
-        upKeepManager.addMember(address(avatar), "randomAvatar", 500000, 0);
+        upkeepManager.addMember(address(avatar), "randomAvatar", 500000, 0);
 
-        (,, uint256 upKeepId) = upKeepManager.membersInfo(address(avatar));
+        (,, uint256 UpkeepId) = upkeepManager.membersInfo(address(avatar));
 
-        uint96 enforceUpKeepBal = 1 ether;
+        uint96 enforceUpkeepBal = 1 ether;
         // https://book.getfoundry.sh/cheatcodes/mock-call#mockcall
         vm.mockCall(
             CHAINLINK_KEEPER_REGISTRY,
-            abi.encodeWithSelector(IKeeperRegistry.getUpkeep.selector, upKeepId),
-            // getUpKeep mock
+            abi.encodeWithSelector(IKeeperRegistry.getUpkeep.selector, UpkeepId),
+            // getUpkeep mock
             abi.encode(
                 address(avatar),
                 500000,
                 new bytes(0),
-                enforceUpKeepBal,
+                enforceUpkeepBal,
                 address(0),
-                address(upKeepManager),
+                address(upkeepManager),
                 2 ** 64 - 1,
                 0
             )
         );
 
-        (bool upkeepNeeded, bytes memory performData) = upKeepManager.checkUpkeep(new bytes(0));
+        (bool UpkeepNeeded, bytes memory performData) = upkeepManager.checkUpkeep(new bytes(0));
 
-        assertTrue(upkeepNeeded);
+        assertTrue(UpkeepNeeded);
 
-        // remove all link funds from upKeepManager
+        // remove all link funds from UpkeepManager
         vm.prank(admin);
-        upKeepManager.sweepLinkFunds(address(TECHOPS));
-        assertEq(address(upKeepManager).balance, 0);
-        assertEq(LINK.balanceOf(address(upKeepManager)), 0);
+        upkeepManager.sweepLinkFunds(address(TECHOPS));
+        assertEq(address(upkeepManager).balance, 0);
+        assertEq(LINK.balanceOf(address(upkeepManager)), 0);
         vm.stopPrank();
 
         // send eth from hypothetical gas station
-        vm.deal(address(upKeepManager), 2 ether);
+        vm.deal(address(upkeepManager), 2 ether);
 
         (uint80 roundId,, uint256 startedAt, uint256 updatedAt, uint80 answeredInRound) =
             LINK_ETH_FEED.latestRoundData();
@@ -503,46 +503,46 @@ contract UpKeepManagerTest is Test, UpKeepManagerUtils {
             )
         );
         vm.prank(CHAINLINK_KEEPER_REGISTRY);
-        upKeepManager.performUpkeep(performData);
+        upkeepManager.performUpkeep(performData);
     }
 
-    function test_performUpKeep_stale_cl_feed() public {
+    function test_performUpkeep_stale_cl_feed() public {
         vm.prank(admin);
-        upKeepManager.addMember(address(avatar), "randomAvatar", 500000, 0);
+        upkeepManager.addMember(address(avatar), "randomAvatar", 500000, 0);
 
-        (,, uint256 upKeepId) = upKeepManager.membersInfo(address(avatar));
+        (,, uint256 UpkeepId) = upkeepManager.membersInfo(address(avatar));
 
-        uint96 enforceUpKeepBal = 1 ether;
+        uint96 enforceUpkeepBal = 1 ether;
         // https://book.getfoundry.sh/cheatcodes/mock-call#mockcall
         vm.mockCall(
             CHAINLINK_KEEPER_REGISTRY,
-            abi.encodeWithSelector(IKeeperRegistry.getUpkeep.selector, upKeepId),
-            // getUpKeep mock
+            abi.encodeWithSelector(IKeeperRegistry.getUpkeep.selector, UpkeepId),
+            // getUpkeep mock
             abi.encode(
                 address(avatar),
                 500000,
                 new bytes(0),
-                enforceUpKeepBal,
+                enforceUpkeepBal,
                 address(0),
-                address(upKeepManager),
+                address(upkeepManager),
                 2 ** 64 - 1,
                 0
             )
         );
 
-        (bool upkeepNeeded, bytes memory performData) = upKeepManager.checkUpkeep(new bytes(0));
+        (bool UpkeepNeeded, bytes memory performData) = upkeepManager.checkUpkeep(new bytes(0));
 
-        assertTrue(upkeepNeeded);
+        assertTrue(UpkeepNeeded);
 
-        // remove all link funds from upKeepManager
+        // remove all link funds from UpkeepManager
         vm.prank(admin);
-        upKeepManager.sweepLinkFunds(address(TECHOPS));
-        assertEq(address(upKeepManager).balance, 0);
-        assertEq(LINK.balanceOf(address(upKeepManager)), 0);
+        upkeepManager.sweepLinkFunds(address(TECHOPS));
+        assertEq(address(upkeepManager).balance, 0);
+        assertEq(LINK.balanceOf(address(upkeepManager)), 0);
         vm.stopPrank();
 
         // send eth from hypothetical gas station
-        vm.deal(address(upKeepManager), 2 ether);
+        vm.deal(address(upkeepManager), 2 ether);
 
         skip(1 weeks);
 
@@ -552,51 +552,51 @@ contract UpKeepManagerTest is Test, UpKeepManagerUtils {
             )
         );
         vm.prank(CHAINLINK_KEEPER_REGISTRY);
-        upKeepManager.performUpkeep(performData);
+        upkeepManager.performUpkeep(performData);
     }
 
-    function test_performUpKeep_avatar_topup() public {
+    function test_performUpkeep_avatar_topup() public {
         vm.prank(admin);
-        upKeepManager.addMember(address(avatar), "randomAvatar", 500000, 0);
+        upkeepManager.addMember(address(avatar), "randomAvatar", 500000, 0);
 
-        (,, uint256 upKeepId) = upKeepManager.membersInfo(address(avatar));
+        (,, uint256 UpkeepId) = upkeepManager.membersInfo(address(avatar));
 
-        uint96 enforceUpKeepBal = 1 ether;
+        uint96 enforceUpkeepBal = 1 ether;
         // https://book.getfoundry.sh/cheatcodes/mock-call#mockcall
         vm.mockCall(
             CHAINLINK_KEEPER_REGISTRY,
-            abi.encodeWithSelector(IKeeperRegistry.getUpkeep.selector, upKeepId),
-            // getUpKeep mock
-            abi.encode(address(avatar), 500000, new bytes(0), enforceUpKeepBal, address(0), TECHOPS, 2 ** 64 - 1, 0)
+            abi.encodeWithSelector(IKeeperRegistry.getUpkeep.selector, UpkeepId),
+            // getUpkeep mock
+            abi.encode(address(avatar), 500000, new bytes(0), enforceUpkeepBal, address(0), TECHOPS, 2 ** 64 - 1, 0)
         );
 
-        (bool upkeepNeeded, bytes memory performData) = upKeepManager.checkUpkeep(new bytes(0));
+        (bool UpkeepNeeded, bytes memory performData) = upkeepManager.checkUpkeep(new bytes(0));
 
-        assertTrue(upkeepNeeded);
+        assertTrue(UpkeepNeeded);
 
-        uint256 linkBalBefore = LINK.balanceOf(address(upKeepManager));
+        uint256 linkBalBefore = LINK.balanceOf(address(upkeepManager));
         vm.prank(CHAINLINK_KEEPER_REGISTRY);
-        upKeepManager.performUpkeep(performData);
+        upkeepManager.performUpkeep(performData);
         vm.clearMockedCalls();
 
-        (,,, uint96 balance,,,,) = CL_REGISTRY.getUpkeep(upKeepId);
-        assertTrue(balance > enforceUpKeepBal);
-        assertLt(LINK.balanceOf(address(upKeepManager)), linkBalBefore);
+        (,,, uint96 balance,,,,) = CL_REGISTRY.getUpkeep(UpkeepId);
+        assertTrue(balance > enforceUpkeepBal);
+        assertLt(LINK.balanceOf(address(upkeepManager)), linkBalBefore);
     }
 
-    function test_performUpKeep_self_topup() public {
-        uint256 upKeepIdTarget = upKeepManager.monitoringUpKeepId();
-        uint96 enforceUpKeepBal = 1 ether;
+    function test_performUpkeep_self_topup() public {
+        uint256 UpkeepIdTarget = upkeepManager.monitoringUpkeepId();
+        uint96 enforceUpkeepBal = 1 ether;
         // https://book.getfoundry.sh/cheatcodes/mock-call#mockcall
         vm.mockCall(
             CHAINLINK_KEEPER_REGISTRY,
-            abi.encodeWithSelector(IKeeperRegistry.getUpkeep.selector, upKeepIdTarget),
-            // getUpKeep mock
+            abi.encodeWithSelector(IKeeperRegistry.getUpkeep.selector, UpkeepIdTarget),
+            // getUpkeep mock
             abi.encode(
-                address(upKeepManager),
+                address(upkeepManager),
                 MONITORING_GAS_LIMIT,
                 new bytes(0),
-                enforceUpKeepBal,
+                enforceUpkeepBal,
                 address(0),
                 TECHOPS,
                 2 ** 64 - 1,
@@ -604,75 +604,75 @@ contract UpKeepManagerTest is Test, UpKeepManagerUtils {
             )
         );
 
-        (bool upkeepNeeded, bytes memory performData) = upKeepManager.checkUpkeep(new bytes(0));
-        assertTrue(upkeepNeeded);
+        (bool UpkeepNeeded, bytes memory performData) = upkeepManager.checkUpkeep(new bytes(0));
+        assertTrue(UpkeepNeeded);
 
         address target = abi.decode(performData, (address));
 
-        assertEq(target, address(upKeepManager));
+        assertEq(target, address(upkeepManager));
 
-        uint256 linkBalBefore = LINK.balanceOf(address(upKeepManager));
+        uint256 linkBalBefore = LINK.balanceOf(address(upkeepManager));
         vm.prank(CHAINLINK_KEEPER_REGISTRY);
-        upKeepManager.performUpkeep(performData);
+        upkeepManager.performUpkeep(performData);
         vm.clearMockedCalls();
 
-        (,,, uint96 balance,,,,) = CL_REGISTRY.getUpkeep(upKeepIdTarget);
-        assertTrue(balance > enforceUpKeepBal);
-        assertLt(LINK.balanceOf(address(upKeepManager)), linkBalBefore);
+        (,,, uint96 balance,,,,) = CL_REGISTRY.getUpkeep(UpkeepIdTarget);
+        assertTrue(balance > enforceUpkeepBal);
+        assertLt(LINK.balanceOf(address(upkeepManager)), linkBalBefore);
     }
 
-    function test_performUpKeep_swap_involved() public {
+    function test_performUpkeep_swap_involved() public {
         vm.prank(admin);
-        upKeepManager.addMember(address(avatar), "randomAvatar", 500000, 0);
-        (,, uint256 upKeepIdTarget) = upKeepManager.membersInfo(address(avatar));
+        upkeepManager.addMember(address(avatar), "randomAvatar", 500000, 0);
+        (,, uint256 UpkeepIdTarget) = upkeepManager.membersInfo(address(avatar));
 
-        bool upkeepNeeded;
+        bool UpkeepNeeded;
         bytes memory performData;
 
-        uint96 enforceUpKeepBal = 1 ether;
+        uint96 enforceUpkeepBal = 1 ether;
         // https://book.getfoundry.sh/cheatcodes/mock-call#mockcall
         vm.mockCall(
             CHAINLINK_KEEPER_REGISTRY,
-            abi.encodeWithSelector(IKeeperRegistry.getUpkeep.selector, upKeepIdTarget),
-            // getUpKeep mock
+            abi.encodeWithSelector(IKeeperRegistry.getUpkeep.selector, UpkeepIdTarget),
+            // getUpkeep mock
             abi.encode(
                 address(avatar),
                 500000,
                 new bytes(0),
-                enforceUpKeepBal,
+                enforceUpkeepBal,
                 address(0),
-                address(upKeepManager),
+                address(upkeepManager),
                 2 ** 64 - 1,
                 0
             )
         );
-        (upkeepNeeded, performData) = upKeepManager.checkUpkeep(new bytes(0));
-        assertTrue(upkeepNeeded);
+        (UpkeepNeeded, performData) = upkeepManager.checkUpkeep(new bytes(0));
+        assertTrue(UpkeepNeeded);
 
-        // remove all link funds from upKeepManager
+        // remove all link funds from UpkeepManager
         vm.prank(admin);
-        upKeepManager.sweepLinkFunds(address(TECHOPS));
-        assertEq(address(upKeepManager).balance, 0);
-        assertEq(LINK.balanceOf(address(upKeepManager)), 0);
+        upkeepManager.sweepLinkFunds(address(TECHOPS));
+        assertEq(address(upkeepManager).balance, 0);
+        assertEq(LINK.balanceOf(address(upkeepManager)), 0);
         vm.stopPrank();
 
         // send eth from hypothetical gas station
-        vm.deal(address(upKeepManager), 2 ether);
+        vm.deal(address(upkeepManager), 2 ether);
 
         // trigger a perform, inspect swap with verbosity -vvvv
         vm.prank(CHAINLINK_KEEPER_REGISTRY);
-        upKeepManager.performUpkeep(performData);
+        upkeepManager.performUpkeep(performData);
 
-        (,, uint256 upKeepId) = upKeepManager.membersInfo(address(avatar));
-        assertTrue(upKeepId > 0);
+        (,, uint256 UpkeepId) = upkeepManager.membersInfo(address(avatar));
+        assertTrue(UpkeepId > 0);
 
         (address target, uint32 executeGas, bytes memory checkData, uint96 balance,, address keeperJobAdmin,,) =
-            CL_REGISTRY.getUpkeep(upKeepId);
+            CL_REGISTRY.getUpkeep(UpkeepId);
 
         assertEq(target, address(avatar));
         assertEq(executeGas, 500000);
         assertEq(checkData, new bytes(0));
         assertTrue(balance > 0);
-        assertEq(keeperJobAdmin, address(upKeepManager));
+        assertEq(keeperJobAdmin, address(upkeepManager));
     }
 }
