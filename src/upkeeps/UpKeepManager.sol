@@ -162,9 +162,9 @@ contract UpKeepManager is UpKeepManagerUtils, Pausable, KeeperCompatibleInterfac
     {
         /// @dev sanity checks before adding a new member in storage
         if (_memberAddress == address(0)) revert ZeroAddress();
-        if (membersInfo[_memberAddress].gasLimit != 0) revert MemberAlreadyRegister(_memberAddress);
         if (_gasLimit == 0) revert ZeroUintValue();
         if (bytes(_name).length == 0) revert EmptyString();
+        if (membersInfo[_memberAddress].gasLimit != 0) revert MemberAlreadyRegister(_memberAddress);
 
         _members.add(_memberAddress);
 
