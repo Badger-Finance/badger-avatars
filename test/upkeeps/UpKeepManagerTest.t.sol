@@ -22,14 +22,19 @@ contract UpkeepManagerTest is Test, UpkeepManagerUtils {
 
     uint256 constant MONITORING_GAS_LIMIT = 1_000_000;
 
+    // Token to test sweep
+    IERC20MetadataUpgradeable constant BADGER = IERC20MetadataUpgradeable(0x3472A5A71965499acd81997a54BBA8D852C6E53d);
+
     address constant admin = address(1);
     address constant eoa = address(2);
     address constant dummy_avatar = address(3);
+    address constant BADGER_WHALE = 0xBA12222222228d8Ba445958a75a0704d566BF2C8;
 
     event RoundsTopUpUpdated(uint256 oldValue, uint256 newValue);
     event MinRoundsTopUpUpdated(uint256 oldValue, uint256 newValue);
 
     event SweepLink(address recipient, uint256 amount, uint256 timestamp);
+    event ERC20Swept(address indexed token, uint256 amount);
     event SweepEth(address recipient, uint256 amount, uint256 timestamp);
 
     function setUp() public {
@@ -160,11 +165,6 @@ contract UpkeepManagerTest is Test, UpkeepManagerUtils {
         upkeepManager.cancelMemberUpkeep(dummy_avatar);
     }
 
-    function test_withdrawLinkFundsAndRemoveMember_permissions() public {
-        vm.expectRevert(abi.encodeWithSelector(UpkeepManager.NotGovernance.selector, (address(this))));
-        upkeepManager.withdrawLinkFundsAndRemoveMember(address(0));
-    }
-
     function test_withdrawLinkFundsAndRemoveMember_member_not_included() public {
         vm.startPrank(admin);
         vm.expectRevert(abi.encodeWithSelector(UpkeepManager.NotMemberIncluded.selector, dummy_avatar));
@@ -203,12 +203,34 @@ contract UpkeepManagerTest is Test, UpkeepManagerUtils {
         assertGt(LINK.balanceOf(address(upkeepManager)), linkBalBefore);
     }
 
+    function test_sweep() public {
+        vm.prank(admin);
+
+        uint256 ownerBalBefore = BADGER.balanceOf(admin);
+
+        vm.prank(BADGER_WHALE);
+        BADGER.transfer(address(upkeepManager), 1 ether);
+
+        vm.prank(admin);
+        vm.expectEmit(true, true, false, true);
+        emit ERC20Swept(address(BADGER), 1 ether);
+        upkeepManager.sweep(address(BADGER));
+
+        assertGt(BADGER.balanceOf(admin), ownerBalBefore);
+        assertEq(BADGER.balanceOf(address(upkeepManager)), 0);
+    }
+
     function test_sweep_permissions() public {
+        vm.expectRevert(abi.encodeWithSelector(UpkeepManager.NotGovernance.selector, (address(this))));
+        upkeepManager.sweep(address(BADGER));
+    }
+
+    function test_sweepLinkFunds_permissions() public {
         vm.expectRevert(abi.encodeWithSelector(UpkeepManager.NotGovernance.selector, (address(this))));
         upkeepManager.sweepLinkFunds(address(TECHOPS));
     }
 
-    function test_sweep() public {
+    function test_sweepLinkFunds() public {
         uint256 linkBal = LINK.balanceOf(address(upkeepManager));
         uint256 linkTechopsBal = LINK.balanceOf(address(TECHOPS));
 

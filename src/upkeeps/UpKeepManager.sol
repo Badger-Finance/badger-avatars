@@ -3,6 +3,8 @@ pragma solidity ^0.8.0;
 
 import {EnumerableSet} from "../../lib/openzeppelin-contracts/contracts/utils/structs/EnumerableSet.sol";
 import {Pausable} from "../../lib/openzeppelin-contracts/contracts/security/Pausable.sol";
+import {IERC20} from "../../lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20} from "../../lib/openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
 
 import {MAX_BPS} from "../BaseConstants.sol";
 import {UpkeepManagerUtils} from "./UpkeepManagerUtils.sol";
@@ -22,6 +24,7 @@ contract UpkeepManager is UpkeepManagerUtils, Pausable, KeeperCompatibleInterfac
     // LIBRARIES
     ////////////////////////////////////////////////////////////////////////////
 
+    using SafeERC20 for IERC20;
     using EnumerableSet for EnumerableSet.AddressSet;
 
     ////////////////////////////////////////////////////////////////////////////
@@ -94,6 +97,7 @@ contract UpkeepManager is UpkeepManagerUtils, Pausable, KeeperCompatibleInterfac
     event MinRoundsTopUpUpdated(uint256 oldValue, uint256 newValue);
 
     event SweepLink(address recipient, uint256 amount, uint256 timestamp);
+    event ERC20Swept(address indexed token, uint256 amount);
     event SweepEth(address recipient, uint256 amount, uint256 timestamp);
     event EthSwappedForLink(uint256 amountEthOut, uint256 amountLinkIn, uint256 timestamp);
 
@@ -188,10 +192,9 @@ contract UpkeepManager is UpkeepManagerUtils, Pausable, KeeperCompatibleInterfac
         CL_REGISTRY.cancelUpkeep(UpkeepId);
     }
 
-    /// @dev Withdraws LINK funds and remove member from manager
-    /// @notice only callable via governance
+    /// @notice Withdraws LINK funds and remove member from manager
     /// @param _memberAddress contract address to be remove from manager
-    function withdrawLinkFundsAndRemoveMember(address _memberAddress) external onlyGovernance {
+    function withdrawLinkFundsAndRemoveMember(address _memberAddress) external {
         if (!_members.contains(_memberAddress)) revert NotMemberIncluded(_memberAddress);
 
         uint256 UpkeepId = membersInfo[_memberAddress].UpkeepId;
@@ -208,14 +211,23 @@ contract UpkeepManager is UpkeepManagerUtils, Pausable, KeeperCompatibleInterfac
         emit RemoveMember(_memberAddress, UpkeepId, linkRefund, block.timestamp);
     }
 
-    /// @dev  Sweep the full LINK balance to techops
+    /// @notice  Sweep the full LINK balance to recipient
     function sweepLinkFunds(address _recipient) external onlyGovernance {
         uint256 linkBal = LINK.balanceOf(address(this));
         LINK.transfer(_recipient, linkBal);
         emit SweepLink(_recipient, linkBal, block.timestamp);
     }
 
-    /// @dev  Sweep the full ETH balance to recipient
+    /// @notice Sweep the full contract's balance for a given ERC-20 token. Can only be called by owner.
+    /// @param token The ERC-20 token which needs to be swept
+    function sweep(address token) external onlyGovernance {
+        IERC20 erc20Token = IERC20(token);
+        uint256 balance = erc20Token.balanceOf(address(this));
+        erc20Token.safeTransfer(governance, balance);
+        emit ERC20Swept(token, balance);
+    }
+
+    /// @notice  Sweep the full ETH balance to recipient
     /// @param _recipient Address receiving eth funds
     function sweepEthFunds(address payable _recipient) external onlyGovernance {
         uint256 ethBal = address(this).balance;
