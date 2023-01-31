@@ -145,8 +145,7 @@ contract UpkeepManager is UpkeepManagerUtils, Pausable, KeeperCompatibleInterfac
     // PUBLIC: Governance
     ////////////////////////////////////////////////////////////////////////////
 
-    /// @notice It will initiate the Upkeep job for monitoring members
-    /// @dev only callable via governance
+    /// @notice It will initiate the Upkeep job for monitoring members. Can only be called by governance.
     /// @param _gasLimit gas limit for the UpkeepManager monitoring Upkeep task
     function initializeBaseUpkeep(uint256 _gasLimit) external onlyGovernance {
         if (_gasLimit == 0) revert ZeroUintValue();
@@ -159,8 +158,7 @@ contract UpkeepManager is UpkeepManagerUtils, Pausable, KeeperCompatibleInterfac
         }
     }
 
-    /// @dev Adds an member into the manager
-    /// @notice only callable via governance
+    /// @notice Adds an member into the manager. Can only be called by governance.
     /// @param _memberAddress contract address to be register as new member
     /// @param _name member's name
     /// @param _gasLimit amount of gas to provide the target contract when performing Upkeep
@@ -186,8 +184,7 @@ contract UpkeepManager is UpkeepManagerUtils, Pausable, KeeperCompatibleInterfac
         emit NewMember(_memberAddress, _name, _gasLimit, upkeepId, block.timestamp);
     }
 
-    /// @dev Cancels an member's Upkeep job
-    /// @notice only callable via governance
+    /// @notice Cancels a member's Upkeep job. Can only be called by governance.
     /// @param _memberAddress contract address to be cancel Upkeep
     function cancelMemberUpkeep(address _memberAddress) external onlyGovernance {
         if (!_members.contains(_memberAddress)) revert NotMemberIncluded(_memberAddress);
@@ -475,7 +472,7 @@ contract UpkeepManager is UpkeepManagerUtils, Pausable, KeeperCompatibleInterfac
     ////////////////////////////////////////////////////////////////////////////
 
     /// @notice Checks whether an Upkeep is to be performed.
-    /// @dev The calldata is encoded with the targetted member address
+    /// @dev The calldata is encoded with the targetted member address and KeeperAction type
     /// @return upkeepNeeded_ A boolean indicating whether an Upkeep is to be performed.
     /// @return performData_ The calldata to be passed to the Upkeep function.
     function checkUpkeep(bytes calldata)
