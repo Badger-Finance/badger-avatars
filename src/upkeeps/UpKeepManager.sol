@@ -28,13 +28,18 @@ contract UpkeepManager is UpkeepManagerUtils, Pausable, KeeperCompatibleInterfac
     using EnumerableSet for EnumerableSet.AddressSet;
 
     ////////////////////////////////////////////////////////////////////////////
-    // STRUCT
+    // STRUCT & ENUM
     ////////////////////////////////////////////////////////////////////////////
+
+    enum KeeperAction {
+        TopUp, // TopUp = `_topupUpkeep` method trigger
+        WithdrawLinkFunds // WithdrawLinkFunds = `_withdrawLinkFundsAndRemoveMember` method trigger
+    }
 
     struct MemberInfo {
         string name;
         uint256 gasLimit;
-        uint256 UpkeepId;
+        uint256 upkeepId;
     }
 
     ////////////////////////////////////////////////////////////////////////////
@@ -70,10 +75,11 @@ contract UpkeepManager is UpkeepManagerUtils, Pausable, KeeperCompatibleInterfac
     error NotKeeper(address caller);
 
     error NotAutoApproveKeeper();
-    error NotUnderFundedUpkeep(uint256 UpkeepId);
+    error NotUnderFundedUpkeep(uint256 upkeepId);
     error NotMinLinkFundedUpkeep();
-    error UpkeepNotCancelled(uint256 UpkeepId);
-    error UpkeepCancelled(uint256 UpkeepId);
+    error UpkeepNotCancelled(uint256 upkeepId);
+    error UpkeepCancelled(uint256 upkeepId);
+    error UnderCancelationDelay(uint256 maxValidBlocknumber, uint256 currentBlock);
 
     error NotMemberIncluded(address member);
     error MemberAlreadyRegister(address member);
@@ -90,8 +96,8 @@ contract UpkeepManager is UpkeepManagerUtils, Pausable, KeeperCompatibleInterfac
     // EVENTS
     ////////////////////////////////////////////////////////////////////////////
 
-    event NewMember(address indexed memberAddress, string name, uint256 gasLimit, uint256 UpkeepId, uint256 timestamp);
-    event RemoveMember(address indexed memberAddress, uint256 UpkeepId, uint256 linkRefund, uint256 timestamp);
+    event NewMember(address indexed memberAddress, string name, uint256 gasLimit, uint256 upkeepId, uint256 timestamp);
+    event RemoveMember(address indexed memberAddress, uint256 upkeepId, uint256 linkRefund, uint256 timestamp);
 
     event RoundsTopUpUpdated(uint256 oldValue, uint256 newValue);
     event MinRoundsTopUpUpdated(uint256 oldValue, uint256 newValue);
@@ -173,11 +179,11 @@ contract UpkeepManager is UpkeepManagerUtils, Pausable, KeeperCompatibleInterfac
 
         // NOTE: when `_existingUpkeepId` is greater than zero, assumes that other admin has registered it
         //       and there are not needs to register again
-        uint256 UpkeepId = _existingUpkeepId > 0 ? _existingUpkeepId : _registerUpkeep(_memberAddress, _gasLimit, _name);
+        uint256 upkeepId = _existingUpkeepId > 0 ? _existingUpkeepId : _registerUpkeep(_memberAddress, _gasLimit, _name);
 
-        membersInfo[_memberAddress] = MemberInfo({name: _name, gasLimit: _gasLimit, UpkeepId: UpkeepId});
+        membersInfo[_memberAddress] = MemberInfo({name: _name, gasLimit: _gasLimit, upkeepId: upkeepId});
 
-        emit NewMember(_memberAddress, _name, _gasLimit, UpkeepId, block.timestamp);
+        emit NewMember(_memberAddress, _name, _gasLimit, upkeepId, block.timestamp);
     }
 
     /// @dev Cancels an member's Upkeep job
@@ -187,27 +193,14 @@ contract UpkeepManager is UpkeepManagerUtils, Pausable, KeeperCompatibleInterfac
         if (!_members.contains(_memberAddress)) revert NotMemberIncluded(_memberAddress);
 
         // NOTE: only member which Upkeep is being cancelled can be removed
-        uint256 UpkeepId = membersInfo[_memberAddress].UpkeepId;
-        CL_REGISTRY.cancelUpkeep(UpkeepId);
+        uint256 upkeepId = membersInfo[_memberAddress].upkeepId;
+        CL_REGISTRY.cancelUpkeep(upkeepId);
     }
 
     /// @notice Withdraws LINK funds and remove member from manager
     /// @param _memberAddress contract address to be remove from manager
     function withdrawLinkFundsAndRemoveMember(address _memberAddress) external {
-        if (!_members.contains(_memberAddress)) revert NotMemberIncluded(_memberAddress);
-
-        uint256 UpkeepId = membersInfo[_memberAddress].UpkeepId;
-        _members.remove(_memberAddress);
-        delete membersInfo[_memberAddress];
-
-        // NOTE: only member which Upkeep is being cancelled can be removed
-        (,,, uint96 linkRefund,,, uint64 maxValidBlocknumber,) = CL_REGISTRY.getUpkeep(UpkeepId);
-        // https://etherscan.io/address/0x02777053d6764996e594c3e88af1d58d5363a2e6#code#F1#L738
-        if (maxValidBlocknumber == UINT64_MAX) revert UpkeepNotCancelled(UpkeepId);
-
-        CL_REGISTRY.withdrawFunds(UpkeepId, address(this));
-
-        emit RemoveMember(_memberAddress, UpkeepId, linkRefund, block.timestamp);
+        _withdrawLinkFundsAndRemoveMember(_memberAddress);
     }
 
     /// @notice Sweep the full contract's balance for a given ERC-20 token to a recipient. Can only be called by governance.
@@ -276,11 +269,16 @@ contract UpkeepManager is UpkeepManagerUtils, Pausable, KeeperCompatibleInterfac
     ////////////////////////////////////////////////////////////////////////////
 
     /// @dev Contains the logic that should be executed on-chain when `checkUpkeep` returns true.
-    /// @param _performData ABI-encoded member address
+    /// @param _performData ABI-encoded member address and KeeperAction
     function performUpkeep(bytes calldata _performData) external override onlyKeeper whenNotPaused {
-        uint256 UpkeepId = _validatePerformData(_performData);
+        (address member, KeeperAction keeperAction) = abi.decode(_performData, (address, KeeperAction));
+        uint256 upkeepId = _validatePerformData(member, keeperAction);
 
-        _topupUpkeep(UpkeepId);
+        if (keeperAction == KeeperAction.TopUp) {
+            _topupUpkeep(upkeepId);
+        } else {
+            _withdrawLinkFundsAndRemoveMember(member);
+        }
     }
 
     ////////////////////////////////////////////////////////////////////////////
@@ -322,34 +320,42 @@ contract UpkeepManager is UpkeepManagerUtils, Pausable, KeeperCompatibleInterfac
     }
 
     /// @dev decodes the `bytes` calldata given by keepers and checks its validate against storage
-    /// @param _performData ABI-encoded member address to validate
-    function _validatePerformData(bytes calldata _performData) internal view returns (uint256 UpkeepId_) {
-        address member = abi.decode(_performData, (address));
-
-        if (member == address(this)) {
-            UpkeepId_ = monitoringUpkeepId;
+    /// @param _member Member address to validate
+    /// @param _keeperAction Action type carried by the keeper
+    function _validatePerformData(address _member, KeeperAction _keeperAction)
+        internal
+        view
+        returns (uint256 upkeepId_)
+    {
+        if (_member == address(this)) {
+            upkeepId_ = monitoringUpkeepId;
         } else {
-            UpkeepId_ = membersInfo[member].UpkeepId;
+            upkeepId_ = membersInfo[_member].upkeepId;
         }
 
-        if (UpkeepId_ == 0) revert MemberNotRegisteredYet(member);
+        if (upkeepId_ == 0) revert MemberNotRegisteredYet(_member);
 
-        (,,,,,, uint64 maxValidBlocknumber,) = CL_REGISTRY.getUpkeep(UpkeepId_);
-        // https://etherscan.io/address/0x02777053d6764996e594c3e88af1d58d5363a2e6#code#F1#L332
-        if (maxValidBlocknumber != UINT64_MAX) revert UpkeepCancelled(UpkeepId_);
+        (,,,,,, uint64 maxValidBlocknumber,) = CL_REGISTRY.getUpkeep(upkeepId_);
+        if (_keeperAction == KeeperAction.TopUp) {
+            // https://etherscan.io/address/0x02777053d6764996e594c3e88af1d58d5363a2e6#code#F1#L332
+            if (maxValidBlocknumber != UINT64_MAX) revert UpkeepCancelled(upkeepId_);
+        } else {
+            // NOTE: whenever `block.number` is not greater means that we are still within the 50 blocks cancelation window
+            if (maxValidBlocknumber > block.number) revert UnderCancelationDelay(maxValidBlocknumber, block.number);
+        }
     }
 
     /// @dev checks if UpkeepId is under-funded, helper in `checkUpkeep`
     /// and `performUpkeep` methods
-    /// @param _UpkeepId task id to verify is underfunded
-    function _isUpkeepIdUnderFunded(uint256 _UpkeepId)
+    /// @param _upkeepId task id to verify is underfunded
+    function _isUpkeepIdUnderFunded(uint256 _upkeepId)
         internal
         view
         returns (uint96 minUpkeepBal_, bool underFunded_)
     {
         /// @dev check onchain the min and current amounts to consider top-up
-        minUpkeepBal_ = CL_REGISTRY.getMinBalanceForUpkeep(_UpkeepId);
-        (,,, uint96 currentUpkeepBal,,,,) = CL_REGISTRY.getUpkeep(_UpkeepId);
+        minUpkeepBal_ = CL_REGISTRY.getMinBalanceForUpkeep(_upkeepId);
+        (,,, uint96 currentUpkeepBal,,,,) = CL_REGISTRY.getUpkeep(_upkeepId);
 
         if (currentUpkeepBal <= minUpkeepBal_ * minRoundsTopUp) {
             underFunded_ = true;
@@ -357,11 +363,11 @@ contract UpkeepManager is UpkeepManagerUtils, Pausable, KeeperCompatibleInterfac
     }
 
     /// @notice carries over the top-up action of an member Upkeep
-    /// @param _UpkeepId id to verify if it is underfunded
-    function _topupUpkeep(uint256 _UpkeepId) internal {
-        (uint96 minUpkeepBal, bool underFunded) = _isUpkeepIdUnderFunded(_UpkeepId);
+    /// @param _upkeepId id to verify if it is underfunded
+    function _topupUpkeep(uint256 _upkeepId) internal {
+        (uint96 minUpkeepBal, bool underFunded) = _isUpkeepIdUnderFunded(_upkeepId);
 
-        if (!underFunded) revert NotUnderFundedUpkeep(_UpkeepId);
+        if (!underFunded) revert NotUnderFundedUpkeep(_upkeepId);
 
         uint96 topupAmount = minUpkeepBal * uint96(roundsTopUp);
 
@@ -370,7 +376,26 @@ contract UpkeepManager is UpkeepManagerUtils, Pausable, KeeperCompatibleInterfac
             _swapEthForLink(topupAmount - linkRegistryBal);
         }
 
-        CL_REGISTRY.addFunds(_UpkeepId, topupAmount);
+        CL_REGISTRY.addFunds(_upkeepId, topupAmount);
+    }
+
+    /// @notice Withdraws LINK funds and remove member from manager
+    /// @param _member contract address to be remove from manager
+    function _withdrawLinkFundsAndRemoveMember(address _member) internal {
+        if (!_members.contains(_member)) revert NotMemberIncluded(_member);
+
+        uint256 upkeepId = membersInfo[_member].upkeepId;
+        _members.remove(_member);
+        delete membersInfo[_member];
+
+        // NOTE: only member which Upkeep is being cancelled can be removed
+        (,,, uint96 linkRefund,,, uint64 maxValidBlocknumber,) = CL_REGISTRY.getUpkeep(upkeepId);
+        // https://etherscan.io/address/0x02777053d6764996e594c3e88af1d58d5363a2e6#code#F1#L738
+        if (maxValidBlocknumber == UINT64_MAX) revert UpkeepNotCancelled(upkeepId);
+
+        CL_REGISTRY.withdrawFunds(upkeepId, address(this));
+
+        emit RemoveMember(_member, upkeepId, linkRefund, block.timestamp);
     }
 
     /// @notice executes the swap from ETH to LINK, for the amount of link required
@@ -398,10 +423,10 @@ contract UpkeepManager is UpkeepManagerUtils, Pausable, KeeperCompatibleInterfac
     /// @param _gasLimit amount of gas to provide the target contract when
     /// performing Upkeep
     /// @param _name detailed name for the Upkeep job
-    /// @return UpkeepID_ id of CL job
+    /// @return upkeepID_ id of CL job
     function _registerUpkeep(address _targetAddress, uint256 _gasLimit, string memory _name)
         internal
-        returns (uint256 UpkeepID_)
+        returns (uint256 upkeepID_)
     {
         /// @dev checks CL registry state before registering
         (IKeeperRegistry.State memory state, IKeeperRegistry.Config memory _c,) = CL_REGISTRY.getState();
@@ -437,7 +462,7 @@ contract UpkeepManager is UpkeepManagerUtils, Pausable, KeeperCompatibleInterfac
         uint256 newNonce = state.nonce;
 
         if (newNonce == oldNonce + 1) {
-            UpkeepID_ = uint256(
+            upkeepID_ = uint256(
                 keccak256(abi.encodePacked(blockhash(block.number - 1), address(CL_REGISTRY), uint32(oldNonce)))
             );
         } else {
@@ -451,14 +476,14 @@ contract UpkeepManager is UpkeepManagerUtils, Pausable, KeeperCompatibleInterfac
 
     /// @notice Checks whether an Upkeep is to be performed.
     /// @dev The calldata is encoded with the targetted member address
-    /// @return UpkeepNeeded_ A boolean indicating whether an Upkeep is to be performed.
+    /// @return upkeepNeeded_ A boolean indicating whether an Upkeep is to be performed.
     /// @return performData_ The calldata to be passed to the Upkeep function.
     function checkUpkeep(bytes calldata)
         external
         view
         override
         whenNotPaused
-        returns (bool UpkeepNeeded_, bytes memory performData_)
+        returns (bool upkeepNeeded_, bytes memory performData_)
     {
         bool underFunded;
 
@@ -466,10 +491,10 @@ contract UpkeepManager is UpkeepManagerUtils, Pausable, KeeperCompatibleInterfac
         ///      prio `UpkeepManger` vs members to avoid ops halting
         (, underFunded) = _isUpkeepIdUnderFunded(monitoringUpkeepId);
         if (underFunded) {
-            UpkeepNeeded_ = true;
-            performData_ = abi.encode(address(this));
+            upkeepNeeded_ = true;
+            performData_ = abi.encode(address(this), KeeperAction.TopUp);
             // NOTE: explicit early return to avoid overrides by `members`
-            return (UpkeepNeeded_, performData_);
+            return (upkeepNeeded_, performData_);
         }
 
         address[] memory members = getMembers();
@@ -477,14 +502,20 @@ contract UpkeepManager is UpkeepManagerUtils, Pausable, KeeperCompatibleInterfac
         if (membersLength > 0) {
             // NOTE: loop thru members to see which is underfunded
             for (uint256 i; i < membersLength;) {
-                uint256 UpkeepId = membersInfo[members[i]].UpkeepId;
-                (, underFunded) = _isUpkeepIdUnderFunded(UpkeepId);
+                uint256 upkeepId = membersInfo[members[i]].upkeepId;
+                (, underFunded) = _isUpkeepIdUnderFunded(upkeepId);
+                (,,,,,, uint64 maxValidBlocknumber,) = CL_REGISTRY.getUpkeep(upkeepId);
                 if (underFunded) {
-                    (,,,,,, uint64 maxValidBlocknumber,) = CL_REGISTRY.getUpkeep(UpkeepId);
                     // NOTE: helps filtering those which `cancelUpkeep` has being initiated
                     if (maxValidBlocknumber == UINT64_MAX) {
-                        UpkeepNeeded_ = true;
-                        performData_ = abi.encode(members[i]);
+                        upkeepNeeded_ = true;
+                        performData_ = abi.encode(members[i], KeeperAction.TopUp);
+                        break;
+                    }
+                } else {
+                    if (block.number > maxValidBlocknumber) {
+                        upkeepNeeded_ = true;
+                        performData_ = abi.encode(members[i], KeeperAction.WithdrawLinkFunds);
                         break;
                     }
                 }

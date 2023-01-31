@@ -11,7 +11,7 @@ contract UpkeepManagerDeploy is Script {
 
     function run() public {
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
-        vm.startBroadcast();
+        vm.startBroadcast(deployerPrivateKey);
 
         UpkeepManager upkeepManager = new UpkeepManager(TECHOPS_MSIG);
 

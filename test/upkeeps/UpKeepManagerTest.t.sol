@@ -417,13 +417,13 @@ contract UpkeepManagerTest is Test, UpkeepManagerUtils {
     }
 
     function test_performUpkeep_unregistered_member() public {
-        bytes memory performData = abi.encode(address(7));
+        bytes memory performData = abi.encode(address(7), 0);
         vm.prank(CHAINLINK_KEEPER_REGISTRY);
         vm.expectRevert(abi.encodeWithSelector(UpkeepManager.MemberNotRegisteredYet.selector, address(7)));
         upkeepManager.performUpkeep(performData);
     }
 
-    function test_performUpkeep_cancelled_member() public {
+    function test_performUpkeep_cancelled_underfunded_member() public {
         vm.prank(admin);
         upkeepManager.addMember(address(avatar), "randomAvatar", 500000, 0);
         (,, uint256 UpkeepId) = upkeepManager.membersInfo(address(avatar));
@@ -445,11 +445,45 @@ contract UpkeepManagerTest is Test, UpkeepManagerUtils {
             )
         );
 
-        bytes memory performData = abi.encode(address(avatar));
+        bytes memory performData = abi.encode(address(avatar), 0);
 
         vm.expectRevert(abi.encodeWithSelector(UpkeepManager.UpkeepCancelled.selector, UpkeepId));
         vm.prank(CHAINLINK_KEEPER_REGISTRY);
         upkeepManager.performUpkeep(performData);
+    }
+
+    function test_performUpKeep_withdrawLinkFunds() public {
+        vm.prank(admin);
+        upkeepManager.addMember(address(avatar), "randomAvatar", 500000, 0);
+
+        (,, uint256 upkeepId) = upkeepManager.membersInfo(address(avatar));
+
+        vm.prank(admin);
+        upkeepManager.cancelMemberUpkeep(address(avatar));
+        vm.stopPrank();
+
+        (,,,,,, uint256 maxValidBlocknumber,) = CL_REGISTRY.getUpkeep(upkeepId);
+
+        vm.roll(maxValidBlocknumber + 1);
+
+        (bool UpkeepNeeded, bytes memory performData) = upkeepManager.checkUpkeep(new bytes(0));
+        (address member, UpkeepManager.KeeperAction action) =
+            abi.decode(performData, (address, UpkeepManager.KeeperAction));
+
+        assertTrue(UpkeepNeeded);
+        assertEq(member, address(avatar));
+        assertTrue(action == UpkeepManager.KeeperAction.WithdrawLinkFunds);
+
+        uint256 linkBalBefore = LINK.balanceOf(address(upkeepManager));
+        vm.prank(CHAINLINK_KEEPER_REGISTRY);
+        upkeepManager.performUpkeep(performData);
+
+        (string memory name, uint256 gasLimit, uint256 upkeepID) = upkeepManager.membersInfo(address(avatar));
+
+        assertEq(name, "");
+        assertEqUint(gasLimit, 0);
+        assertEqUint(upkeepID, 0);
+        assertGt(LINK.balanceOf(address(upkeepManager)), linkBalBefore);
     }
 
     function test_performUpkeep_not_underfunded() public {
@@ -457,7 +491,7 @@ contract UpkeepManagerTest is Test, UpkeepManagerUtils {
         upkeepManager.addMember(address(avatar), "randomAvatar", 500000, 0);
         (,, uint256 UpkeepId) = upkeepManager.membersInfo(address(avatar));
 
-        bytes memory performData = abi.encode(address(avatar));
+        bytes memory performData = abi.encode(address(avatar), 0);
 
         vm.expectRevert(abi.encodeWithSelector(UpkeepManager.NotUnderFundedUpkeep.selector, UpkeepId));
         vm.prank(CHAINLINK_KEEPER_REGISTRY);
