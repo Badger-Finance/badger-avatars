@@ -13,8 +13,8 @@ import {IAvatar} from "../../src/interfaces/badger/IAvatar.sol";
 import {IKeeperRegistry} from "../../src/interfaces/chainlink/IKeeperRegistry.sol";
 import {IAggregatorV3} from "../../src/interfaces/chainlink/IAggregatorV3.sol";
 import {AuraAvatarMultiToken} from "../../src/aura/AuraAvatarMultiToken.sol";
-import {UpkeepManagerUtils} from "../../src/Upkeeps/UpkeepManagerUtils.sol";
-import {UpkeepManager} from "../../src/Upkeeps/UpkeepManager.sol";
+import {UpkeepManagerUtils} from "../../src/upkeeps/UpkeepManagerUtils.sol";
+import {UpkeepManager} from "../../src/upkeeps/UpkeepManager.sol";
 
 contract UpkeepManagerTest is Test, UpkeepManagerUtils {
     AuraAvatarMultiToken avatar;
