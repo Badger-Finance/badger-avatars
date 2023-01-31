@@ -16,3 +16,6 @@ via-ir = true
 
 [rpc_endpoints]
 mainnet = "https://eth-mainnet.alchemyapi.io/v2/${ALCHEMY_API_KEY}"
+
+[etherscan]
+mainnet = { key = "${ETHERSCAN_API_KEY}" }
