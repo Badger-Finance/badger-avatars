@@ -15,7 +15,7 @@ import {IUniswapRouterV3} from "../interfaces/uniswap/IUniswapRouterV3.sol";
 
 /// @title   UpKeepManager
 /// @author  Petrovska @ BadgerDAO
-/// @dev  Allows the `UpKeepManager` to register new contracts via governance and top-up under funded
+/// @notice  Allows the `UpKeepManager` to register new contracts via governance and top-up under funded
 /// upkeeps via CL keepers
 contract UpKeepManager is UpKeepManagerUtils, Pausable, KeeperCompatibleInterface {
     ////////////////////////////////////////////////////////////////////////////
@@ -136,8 +136,8 @@ contract UpKeepManager is UpKeepManagerUtils, Pausable, KeeperCompatibleInterfac
     // PUBLIC: Governance
     ////////////////////////////////////////////////////////////////////////////
 
-    /// @dev It will initiate the upKeep job for monitoring members
-    /// @notice only callable via governance
+    /// @notice It will initiate the upKeep job for monitoring members
+    /// @dev only callable via governance
     /// @param _gasLimit gas limit for the upKeepManager monitoring upkeep task
     function initializeBaseUpkeep(uint256 _gasLimit) external onlyGovernance {
         if (_gasLimit == 0) revert ZeroUintValue();
@@ -241,7 +241,7 @@ contract UpKeepManager is UpKeepManagerUtils, Pausable, KeeperCompatibleInterfac
     // PUBLIC: Governance - Config
     ////////////////////////////////////////////////////////////////////////////
 
-    /// @notice Updates the value of `roundsTopUp`, which is used for decided how much rounds will
+    /// @notice Updates the value of `roundsTopUp`, which is used for decided how much rounds
     ///         will be covered at least while topping-up
     /// @param _roundsTopUp new value for `roundsTopUp`
     function setRoundsTopUp(uint256 _roundsTopUp) external onlyGovernance {
