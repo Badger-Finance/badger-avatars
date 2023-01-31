@@ -96,8 +96,7 @@ contract UpkeepManager is UpkeepManagerUtils, Pausable, KeeperCompatibleInterfac
     event RoundsTopUpUpdated(uint256 oldValue, uint256 newValue);
     event MinRoundsTopUpUpdated(uint256 oldValue, uint256 newValue);
 
-    event SweepLink(address recipient, uint256 amount, uint256 timestamp);
-    event ERC20Swept(address indexed token, uint256 amount);
+    event ERC20Swept(address indexed token, address recipient, uint256 amount, uint256 timestamp);
     event SweepEth(address recipient, uint256 amount, uint256 timestamp);
     event EthSwappedForLink(uint256 amountEthOut, uint256 amountLinkIn, uint256 timestamp);
 
@@ -211,20 +210,14 @@ contract UpkeepManager is UpkeepManagerUtils, Pausable, KeeperCompatibleInterfac
         emit RemoveMember(_memberAddress, UpkeepId, linkRefund, block.timestamp);
     }
 
-    /// @notice  Sweep the full LINK balance to recipient
-    function sweepLinkFunds(address _recipient) external onlyGovernance {
-        uint256 linkBal = LINK.balanceOf(address(this));
-        LINK.transfer(_recipient, linkBal);
-        emit SweepLink(_recipient, linkBal, block.timestamp);
-    }
-
-    /// @notice Sweep the full contract's balance for a given ERC-20 token. Can only be called by owner.
-    /// @param token The ERC-20 token which needs to be swept
-    function sweep(address token) external onlyGovernance {
-        IERC20 erc20Token = IERC20(token);
+    /// @notice Sweep the full contract's balance for a given ERC-20 token to a recipient. Can only be called by governance.
+    /// @param _token The ERC-20 token which needs to be swept
+    /// @param _recipient Address receiving the full balance of the token
+    function sweep(address _token, address _recipient) external onlyGovernance {
+        IERC20 erc20Token = IERC20(_token);
         uint256 balance = erc20Token.balanceOf(address(this));
-        erc20Token.safeTransfer(governance, balance);
-        emit ERC20Swept(token, balance);
+        erc20Token.safeTransfer(_recipient, balance);
+        emit ERC20Swept(_token, _recipient, balance, block.timestamp);
     }
 
     /// @notice  Sweep the full ETH balance to recipient

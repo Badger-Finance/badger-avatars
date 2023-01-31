@@ -30,11 +30,14 @@ contract UpkeepManagerTest is Test, UpkeepManagerUtils {
     address constant dummy_avatar = address(3);
     address constant BADGER_WHALE = 0xBA12222222228d8Ba445958a75a0704d566BF2C8;
 
+    ////////////////////////////////////////////////////////////////////////////
+    // EVENTS
+    ////////////////////////////////////////////////////////////////////////////
+
     event RoundsTopUpUpdated(uint256 oldValue, uint256 newValue);
     event MinRoundsTopUpUpdated(uint256 oldValue, uint256 newValue);
 
-    event SweepLink(address recipient, uint256 amount, uint256 timestamp);
-    event ERC20Swept(address indexed token, uint256 amount);
+    event ERC20Swept(address indexed token, address recipient, uint256 amount, uint256 timestamp);
     event SweepEth(address recipient, uint256 amount, uint256 timestamp);
 
     function setUp() public {
@@ -206,41 +209,35 @@ contract UpkeepManagerTest is Test, UpkeepManagerUtils {
     function test_sweep() public {
         vm.prank(admin);
 
-        uint256 ownerBalBefore = BADGER.balanceOf(admin);
+        uint256 ownerBalBefore = BADGER.balanceOf(address(TECHOPS));
 
         vm.prank(BADGER_WHALE);
         BADGER.transfer(address(upkeepManager), 1 ether);
 
         vm.prank(admin);
         vm.expectEmit(true, true, false, true);
-        emit ERC20Swept(address(BADGER), 1 ether);
-        upkeepManager.sweep(address(BADGER));
+        emit ERC20Swept(address(BADGER), address(TECHOPS), 1 ether, block.timestamp);
+        upkeepManager.sweep(address(BADGER), address(TECHOPS));
 
-        assertGt(BADGER.balanceOf(admin), ownerBalBefore);
+        assertGt(BADGER.balanceOf(address(TECHOPS)), ownerBalBefore);
         assertEq(BADGER.balanceOf(address(upkeepManager)), 0);
-    }
 
-    function test_sweep_permissions() public {
-        vm.expectRevert(abi.encodeWithSelector(UpkeepManager.NotGovernance.selector, (address(this))));
-        upkeepManager.sweep(address(BADGER));
-    }
-
-    function test_sweepLinkFunds_permissions() public {
-        vm.expectRevert(abi.encodeWithSelector(UpkeepManager.NotGovernance.selector, (address(this))));
-        upkeepManager.sweepLinkFunds(address(TECHOPS));
-    }
-
-    function test_sweepLinkFunds() public {
+        // NOTE: test for LINK in isolation particularly
         uint256 linkBal = LINK.balanceOf(address(upkeepManager));
         uint256 linkTechopsBal = LINK.balanceOf(address(TECHOPS));
 
         vm.prank(admin);
-        vm.expectEmit(true, true, false, false);
-        emit SweepLink(TECHOPS, linkBal, block.timestamp);
-        upkeepManager.sweepLinkFunds(address(TECHOPS));
+        vm.expectEmit(true, true, false, true);
+        emit ERC20Swept(address(LINK), address(TECHOPS), linkBal, block.timestamp);
+        upkeepManager.sweep(address(LINK), address(TECHOPS));
 
         // ensure techops link balance is increased
         assertGt(LINK.balanceOf(address(TECHOPS)), linkTechopsBal);
+    }
+
+    function test_sweep_permissions() public {
+        vm.expectRevert(abi.encodeWithSelector(UpkeepManager.NotGovernance.selector, (address(this))));
+        upkeepManager.sweep(address(BADGER), address(9));
     }
 
     function test_sweepEthFunds_permissions() public {
@@ -497,7 +494,7 @@ contract UpkeepManagerTest is Test, UpkeepManagerUtils {
 
         // remove all link funds from UpkeepManager
         vm.prank(admin);
-        upkeepManager.sweepLinkFunds(address(TECHOPS));
+        upkeepManager.sweep(address(LINK), address(TECHOPS));
         assertEq(address(upkeepManager).balance, 0);
         assertEq(LINK.balanceOf(address(upkeepManager)), 0);
         vm.stopPrank();
@@ -558,7 +555,7 @@ contract UpkeepManagerTest is Test, UpkeepManagerUtils {
 
         // remove all link funds from UpkeepManager
         vm.prank(admin);
-        upkeepManager.sweepLinkFunds(address(TECHOPS));
+        upkeepManager.sweep(address(LINK), address(TECHOPS));
         assertEq(address(upkeepManager).balance, 0);
         assertEq(LINK.balanceOf(address(upkeepManager)), 0);
         vm.stopPrank();
@@ -673,7 +670,7 @@ contract UpkeepManagerTest is Test, UpkeepManagerUtils {
 
         // remove all link funds from UpkeepManager
         vm.prank(admin);
-        upkeepManager.sweepLinkFunds(address(TECHOPS));
+        upkeepManager.sweep(address(LINK), address(TECHOPS));
         assertEq(address(upkeepManager).balance, 0);
         assertEq(LINK.balanceOf(address(upkeepManager)), 0);
         vm.stopPrank();
