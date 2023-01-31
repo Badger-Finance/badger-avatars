@@ -29,7 +29,7 @@ contract UpKeepManagerTest is Test, UpKeepManagerUtils {
     event RoundsTopUpUpdated(uint256 oldValue, uint256 newValue);
     event MinRoundsTopUpUpdated(uint256 oldValue, uint256 newValue);
 
-    event SweepLinkToTechops(uint256 amount, uint256 timestamp);
+    event SweepLink(address recipient, uint256 amount, uint256 timestamp);
     event SweepEth(address recipient, uint256 amount, uint256 timestamp);
 
     function setUp() public {
@@ -205,7 +205,7 @@ contract UpKeepManagerTest is Test, UpKeepManagerUtils {
 
     function test_sweep_permissions() public {
         vm.expectRevert(abi.encodeWithSelector(UpKeepManager.NotGovernance.selector, (address(this))));
-        upKeepManager.sweepLinkFunds();
+        upKeepManager.sweepLinkFunds(address(TECHOPS));
     }
 
     function test_sweep() public {
@@ -214,8 +214,8 @@ contract UpKeepManagerTest is Test, UpKeepManagerUtils {
 
         vm.prank(admin);
         vm.expectEmit(true, true, false, false);
-        emit SweepLinkToTechops(linkBal, block.timestamp);
-        upKeepManager.sweepLinkFunds();
+        emit SweepLink(TECHOPS, linkBal, block.timestamp);
+        upKeepManager.sweepLinkFunds(address(TECHOPS));
 
         // ensure techops link balance is increased
         assertGt(LINK.balanceOf(address(TECHOPS)), linkTechopsBal);
@@ -475,7 +475,7 @@ contract UpKeepManagerTest is Test, UpKeepManagerUtils {
 
         // remove all link funds from upKeepManager
         vm.prank(admin);
-        upKeepManager.sweepLinkFunds();
+        upKeepManager.sweepLinkFunds(address(TECHOPS));
         assertEq(address(upKeepManager).balance, 0);
         assertEq(LINK.balanceOf(address(upKeepManager)), 0);
         vm.stopPrank();
@@ -536,7 +536,7 @@ contract UpKeepManagerTest is Test, UpKeepManagerUtils {
 
         // remove all link funds from upKeepManager
         vm.prank(admin);
-        upKeepManager.sweepLinkFunds();
+        upKeepManager.sweepLinkFunds(address(TECHOPS));
         assertEq(address(upKeepManager).balance, 0);
         assertEq(LINK.balanceOf(address(upKeepManager)), 0);
         vm.stopPrank();
@@ -651,7 +651,7 @@ contract UpKeepManagerTest is Test, UpKeepManagerUtils {
 
         // remove all link funds from upKeepManager
         vm.prank(admin);
-        upKeepManager.sweepLinkFunds();
+        upKeepManager.sweepLinkFunds(address(TECHOPS));
         assertEq(address(upKeepManager).balance, 0);
         assertEq(LINK.balanceOf(address(upKeepManager)), 0);
         vm.stopPrank();

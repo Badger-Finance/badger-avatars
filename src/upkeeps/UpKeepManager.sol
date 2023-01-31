@@ -93,7 +93,7 @@ contract UpKeepManager is UpKeepManagerUtils, Pausable, KeeperCompatibleInterfac
     event RoundsTopUpUpdated(uint256 oldValue, uint256 newValue);
     event MinRoundsTopUpUpdated(uint256 oldValue, uint256 newValue);
 
-    event SweepLinkToTechops(uint256 amount, uint256 timestamp);
+    event SweepLink(address recipient, uint256 amount, uint256 timestamp);
     event SweepEth(address recipient, uint256 amount, uint256 timestamp);
     event EthSwappedForLink(uint256 amountEthOut, uint256 amountLinkIn, uint256 timestamp);
 
@@ -209,10 +209,10 @@ contract UpKeepManager is UpKeepManagerUtils, Pausable, KeeperCompatibleInterfac
     }
 
     /// @dev  Sweep the full LINK balance to techops
-    function sweepLinkFunds() external onlyGovernance {
+    function sweepLinkFunds(address _recipient) external onlyGovernance {
         uint256 linkBal = LINK.balanceOf(address(this));
-        LINK.transfer(TECHOPS, linkBal);
-        emit SweepLinkToTechops(linkBal, block.timestamp);
+        LINK.transfer(_recipient, linkBal);
+        emit SweepLink(_recipient, linkBal, block.timestamp);
     }
 
     /// @dev  Sweep the full ETH balance to recipient
