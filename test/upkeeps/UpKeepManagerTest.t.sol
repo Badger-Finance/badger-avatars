@@ -452,7 +452,7 @@ contract UpkeepManagerTest is Test, UpkeepManagerUtils {
         upkeepManager.performUpkeep(performData);
     }
 
-    function test_performUpKeep_withdrawLinkFunds_under_cancellation_delay() public {
+    function test_performUpkeep_withdrawLinkFunds_under_cancellation_delay() public {
         vm.prank(admin);
         upkeepManager.addMember(address(avatar), "randomAvatar", 500000, 0);
 
@@ -473,7 +473,7 @@ contract UpkeepManagerTest is Test, UpkeepManagerUtils {
         upkeepManager.performUpkeep(performData);
     }
 
-    function test_performUpKeep_withdrawLinkFunds() public {
+    function test_performUpkeep_withdrawLinkFunds() public {
         vm.prank(admin);
         upkeepManager.addMember(address(avatar), "randomAvatar", 500000, 0);
 
