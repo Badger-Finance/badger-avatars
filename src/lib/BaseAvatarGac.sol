@@ -4,8 +4,8 @@ pragma solidity ^0.8.0;
 import {BaseAvatar} from "./BaseAvatar.sol";
 import {GlobalAccessControlManaged} from "./GlobalAccessControlManaged.sol";
 
-/// Avatar
-/// Forwards calls from the owner
+/// @title BaseAvatarGac
+/// @notice Forwards calls from the owner
 // TODO: See if we need GAC
 contract BaseAvatarGac is BaseAvatar, GlobalAccessControlManaged {
     function __BaseAvatarGac_init(address _owner, address _globalAccessControl) public onlyInitializing {
