@@ -452,6 +452,27 @@ contract UpkeepManagerTest is Test, UpkeepManagerUtils {
         upkeepManager.performUpkeep(performData);
     }
 
+    function test_performUpKeep_withdrawLinkFunds_under_cancellation_delay() public {
+        vm.prank(admin);
+        upkeepManager.addMember(address(avatar), "randomAvatar", 500000, 0);
+
+        (,, uint256 upkeepId) = upkeepManager.membersInfo(address(avatar));
+
+        vm.prank(admin);
+        upkeepManager.cancelMemberUpkeep(address(avatar));
+        vm.stopPrank();
+
+        (,,,,,, uint256 maxValidBlocknumber,) = CL_REGISTRY.getUpkeep(upkeepId);
+
+        bytes memory performData = abi.encode(address(avatar), 1);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(UpkeepManager.UnderCancelationDelay.selector, maxValidBlocknumber, block.number)
+        );
+        vm.prank(CHAINLINK_KEEPER_REGISTRY);
+        upkeepManager.performUpkeep(performData);
+    }
+
     function test_performUpKeep_withdrawLinkFunds() public {
         vm.prank(admin);
         upkeepManager.addMember(address(avatar), "randomAvatar", 500000, 0);
