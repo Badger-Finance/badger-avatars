@@ -6,7 +6,7 @@ import {IUniswapRouterV3} from "../interfaces/uniswap/IUniswapRouterV3.sol";
 import {IKeeperRegistry} from "../interfaces/chainlink/IKeeperRegistry.sol";
 import {ILink} from "../interfaces/chainlink/ILink.sol";
 
-abstract contract UpKeepManagerConstants {
+abstract contract UpkeepManagerConstants {
     address internal constant KEEPER_REGISTRAR = 0xDb8e8e2ccb5C033938736aa89Fe4fa1eDfD15a1d;
     IKeeperRegistry internal constant CL_REGISTRY = IKeeperRegistry(0x02777053d6764996e594c3E88AF1D58D5363a2e6);
     address internal constant TECHOPS = 0x86cbD0ce0c087b482782c181dA8d191De18C8275;

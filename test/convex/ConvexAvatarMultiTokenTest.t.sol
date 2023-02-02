@@ -1073,7 +1073,7 @@ contract ConvexAvatarMultiTokenTest is Test, ConvexAvatarUtils {
     // Actions: Keeper
     ////////////////////////////////////////////////////////////////////////////
 
-    function test_checkUpKeep() public {
+    function test_checkUpkeep() public {
         uint256[] memory amountsDeposit = new uint256[](1);
         amountsDeposit[0] = 20 ether;
         uint256[] memory pidsInit = new uint256[](1);
@@ -1111,7 +1111,7 @@ contract ConvexAvatarMultiTokenTest is Test, ConvexAvatarUtils {
         assertFalse(upkeepNeeded);
     }
 
-    function test_performUpKeep() public {
+    function test_performUpkeep() public {
         uint256[] memory amountsDeposit = new uint256[](1);
         amountsDeposit[0] = 20 ether;
         uint256[] memory pidsInit = new uint256[](1);

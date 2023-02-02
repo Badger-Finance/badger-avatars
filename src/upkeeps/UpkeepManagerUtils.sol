@@ -2,9 +2,9 @@
 pragma solidity ^0.8.0;
 
 import {BaseAvatarUtils} from "../BaseAvatarUtils.sol";
-import {UpKeepManagerConstants} from "./UpKeepManagerConstants.sol";
+import {UpkeepManagerConstants} from "./UpkeepManagerConstants.sol";
 
-contract UpKeepManagerUtils is BaseAvatarUtils, UpKeepManagerConstants {
+contract UpkeepManagerUtils is BaseAvatarUtils, UpkeepManagerConstants {
     ////////////////////////////////////////////////////////////////////////////
     // INTERNAL VIEW
     ////////////////////////////////////////////////////////////////////////////
