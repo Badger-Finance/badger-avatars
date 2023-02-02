@@ -18,7 +18,8 @@ import {BpsConfig, TokenAmount} from "../BaseStructs.sol";
 import {AuraAvatarUtils} from "./AuraAvatarUtils.sol";
 import {IBaseRewardPool} from "../interfaces/aura/IBaseRewardPool.sol";
 import {IAsset} from "../interfaces/balancer/IAsset.sol";
-import {IBalancerVault, JoinKind} from "../interfaces/balancer/IBalancerVault.sol";
+import {IBalancerVault, ExitKind, JoinKind} from "../interfaces/balancer/IBalancerVault.sol";
+import {IBpt} from "../interfaces/balancer/IBpt.sol";
 import {KeeperCompatibleInterface} from "../interfaces/chainlink/KeeperCompatibleInterface.sol";
 
 /// @title AuraAvatarMultiToken
@@ -368,7 +369,8 @@ contract AuraAvatarMultiToken is BaseAvatar, PausableUpgradeable, AuraAvatarUtil
 
     /// @notice Unstakes all staked assets and transfers them back to owner. Can only be called by owner and manager.
     /// @dev This function doesn't claim any rewards.
-    function withdrawAll() external onlyOwnerOrManager {
+    /// @param _lpEmergencyWd When `true` withdraws from the LPs into its underlying form
+    function withdrawAll(bool _lpEmergencyWd) external onlyOwnerOrManager {
         uint256 length = baseRewardPools.length();
         uint256[] memory bptsDeposited = new uint256[](length);
         for (uint256 i; i < length;) {
@@ -378,18 +380,22 @@ contract AuraAvatarMultiToken is BaseAvatar, PausableUpgradeable, AuraAvatarUtil
             }
         }
 
-        _withdraw(pids.values(), bptsDeposited);
+        _withdraw(pids.values(), bptsDeposited, _lpEmergencyWd);
     }
 
     /// @notice Unstakes the given amount of assets and transfers them back to owner. Can only be called by owner and manager.
     /// @dev This function doesn't claim any rewards.
     /// @param _pids PIDs targetted to withdraw from
     /// @param _amountAssets Amount of assets to be unstaked.
-    function withdraw(uint256[] calldata _pids, uint256[] calldata _amountAssets) external onlyOwnerOrManager {
+    /// @param _lpEmergencyWd When `true` withdraws from the LPs into its underlying form
+    function withdraw(uint256[] calldata _pids, uint256[] calldata _amountAssets, bool _lpEmergencyWd)
+        external
+        onlyOwnerOrManager
+    {
         if (_pids.length != _amountAssets.length) {
             revert LengthMismatch();
         }
-        _withdraw(_pids, _amountAssets);
+        _withdraw(_pids, _amountAssets, _lpEmergencyWd);
     }
 
     /// @notice Claims any pending BAL and AURA rewards and sends them to owner. Can only be called by owner.
@@ -595,7 +601,8 @@ contract AuraAvatarMultiToken is BaseAvatar, PausableUpgradeable, AuraAvatarUtil
     /// @dev This function doesn't claim any rewards. Caller can only be owner.
     /// @param _pids PIDs to be targetted to unstake from.
     /// @param _amountAssets Amount of assets to be unstaked.
-    function _withdraw(uint256[] memory _pids, uint256[] memory _amountAssets) internal {
+    /// @param _lpEmergencyWd When `true` withdraws from the LPs into its underlying form
+    function _withdraw(uint256[] memory _pids, uint256[] memory _amountAssets, bool _lpEmergencyWd) internal {
         for (uint256 i; i < _pids.length;) {
             if (_amountAssets[i] == 0) {
                 revert NothingToWithdraw();
@@ -604,13 +611,48 @@ contract AuraAvatarMultiToken is BaseAvatar, PausableUpgradeable, AuraAvatarUtil
             uint256 pidIndex = pids.indexOf(_pids[i]);
             address lpToken = assets.at(pidIndex);
             IBaseRewardPool(baseRewardPools.at(pidIndex)).withdrawAndUnwrap(_amountAssets[i], false);
-            IERC20MetadataUpgradeable(lpToken).safeTransfer(owner(), _amountAssets[i]);
 
+            if (_lpEmergencyWd) {
+                _withdrawLpToUnderlyings(lpToken, _amountAssets[i]);
+            } else {
+                IERC20MetadataUpgradeable(lpToken).safeTransfer(owner(), _amountAssets[i]);
+            }
             emit Withdraw(lpToken, _amountAssets[i], block.timestamp);
             unchecked {
                 ++i;
             }
         }
+    }
+
+    /// @notice Withdraws bpt token into underlyings proportionally
+    /// @param _lpToken Bpt address
+    /// @param _lpAmount Amount of bpt to be withdrawn
+    function _withdrawLpToUnderlyings(address _lpToken, uint256 _lpAmount) internal {
+        bytes32 poolId = IBpt(_lpToken).getPoolId();
+        (address[] memory tokens,,) = BALANCER_VAULT.getPoolTokens(poolId);
+        uint256 tokensLengthCached = tokens.length;
+
+        IAsset[] memory assetArray = new IAsset[](tokensLengthCached);
+        for (uint256 i; i < tokensLengthCached;) {
+            assetArray[i] = IAsset(tokens[i]);
+            unchecked {
+                ++i;
+            }
+        }
+
+        BALANCER_VAULT.exitPool(
+            poolId,
+            address(this),
+            payable(owner()),
+            IBalancerVault.ExitPoolRequest({
+                assets: assetArray,
+                // @audit DAO is accepting under emergency situations for speed defaulting
+                // the amount out expected to zero in this ocassion
+                minAmountsOut: new uint256[](tokensLengthCached),
+                userData: abi.encode(ExitKind.EXACT_BPT_IN_FOR_TOKENS_OUT, _lpAmount),
+                toInternalBalance: false
+            })
+        );
     }
 
     /// @notice A function to process pending BAL and AURA rewards at regular intervals.

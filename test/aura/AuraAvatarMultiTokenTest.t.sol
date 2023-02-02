@@ -14,6 +14,7 @@ import {MAX_BPS, CHAINLINK_KEEPER_REGISTRY} from "../../src/BaseConstants.sol";
 import {AuraConstants} from "../../src/aura/AuraConstants.sol";
 import {IAsset} from "../../src/interfaces/balancer/IAsset.sol";
 import {IBalancerVault, JoinKind} from "../../src/interfaces/balancer/IBalancerVault.sol";
+import {IBpt} from "../../src/interfaces/balancer/IBpt.sol";
 import {IPriceOracle} from "../../src/interfaces/balancer/IPriceOracle.sol";
 import {IBaseRewardPool} from "../../src/interfaces/aura/IBaseRewardPool.sol";
 import {IAggregatorV3} from "../../src/interfaces/chainlink/IAggregatorV3.sol";
@@ -614,7 +615,7 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
             vm.expectEmit(true, false, false, true);
             emit Withdraw(address(BPTS[i]), amountsDeposit[i], block.timestamp);
         }
-        avatar.withdrawAll();
+        avatar.withdrawAll(false);
 
         for (uint256 i; i < PIDS.length; ++i) {
             assertEq(BASE_REWARD_POOLS[i].balanceOf(address(avatar)), 0);
@@ -622,16 +623,49 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
         }
     }
 
+    function test_withdrawAll_emergency_underlying_wd() public {
+        uint256[] memory amountsDeposit = new uint256[](PIDS.length);
+        amountsDeposit[0] = 20 ether;
+        amountsDeposit[1] = 10 ether;
+        amountsDeposit[2] = 5 ether;
+        uint256[] memory pidsInit = new uint256[](PIDS.length);
+        pidsInit[0] = PIDS[0];
+        pidsInit[1] = PIDS[1];
+        pidsInit[2] = PIDS[2];
+
+        vm.prank(owner);
+        avatar.deposit(pidsInit, amountsDeposit);
+        vm.stopPrank();
+
+        // manager trigger emergency wd to underlying via `_lpEmergencyWd` flag
+        vm.startPrank(manager);
+        avatar.withdrawAll(true);
+
+        for (uint256 i; i < PIDS.length; ++i) {
+            assertEq(BASE_REWARD_POOLS[i].balanceOf(address(avatar)), 0);
+            bytes32 poolId = IBpt(address(BPTS[i])).getPoolId();
+            (address[] memory tokens,,) = BALANCER_VAULT.getPoolTokens(poolId);
+            for (uint256 j; j < tokens.length;) {
+                // NOTE: using for owner `address(1)` by default any of the erc20
+                // underlying tokens in the setup is zero
+                assertGt(IERC20MetadataUpgradeable(tokens[j]).balanceOf(owner), 0);
+                unchecked {
+                    ++j;
+                }
+            }
+        }
+    }
+
     function test_withdrawAll_nothing() public {
         vm.expectRevert(AuraAvatarMultiToken.NothingToWithdraw.selector);
         vm.prank(owner);
-        avatar.withdrawAll();
+        avatar.withdrawAll(false);
     }
 
     function test_withdrawAll_permissions() public {
         vm.expectRevert(abi.encodeWithSelector(AuraAvatarMultiToken.NotOwnerOrManager.selector, keeper));
         vm.prank(keeper);
-        avatar.withdrawAll();
+        avatar.withdrawAll(false);
     }
 
     function test_withdraw() public {
@@ -655,7 +689,7 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
             vm.expectEmit(true, false, false, true);
             emit Withdraw(address(BPTS[i]), amountsWithdraw[i], block.timestamp);
         }
-        avatar.withdraw(pidsInit, amountsWithdraw);
+        avatar.withdraw(pidsInit, amountsWithdraw, false);
 
         assertEq(BPT_80BADGER_20WBTC.balanceOf(owner), 10e18);
         assertEq(BPT_40WBTC_40DIGG_20GRAVIAURA.balanceOf(owner), 15e18);
@@ -686,7 +720,7 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
             vm.expectEmit(true, false, false, true);
             emit Withdraw(address(BPTS[i]), amountsWithdraw[i], block.timestamp);
         }
-        avatar.withdraw(pidsInit, amountsWithdraw);
+        avatar.withdraw(pidsInit, amountsWithdraw, false);
 
         assertEq(BPT_80BADGER_20WBTC.balanceOf(owner), 10e18);
         assertEq(BPT_40WBTC_40DIGG_20GRAVIAURA.balanceOf(owner), 15e18);
@@ -702,7 +736,7 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
 
         vm.expectRevert(AuraAvatarMultiToken.NothingToWithdraw.selector);
         vm.prank(owner);
-        avatar.withdraw(pidsInit, amountsWithdraw);
+        avatar.withdraw(pidsInit, amountsWithdraw, false);
     }
 
     function test_withdraw_permissions() public {
@@ -717,7 +751,7 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
 
         vm.expectRevert(abi.encodeWithSelector(AuraAvatarMultiToken.NotOwnerOrManager.selector, keeper));
         vm.prank(keeper);
-        avatar.withdraw(pidsInit, amountsWithdraw);
+        avatar.withdraw(pidsInit, amountsWithdraw, false);
     }
 
     function test_withdraw_lengthMismatch() public {
@@ -726,7 +760,7 @@ contract AuraAvatarMultiTokenTest is Test, AuraAvatarUtils {
 
         vm.prank(owner);
         vm.expectRevert(abi.encodeWithSelector(AuraAvatarMultiToken.LengthMismatch.selector));
-        avatar.withdraw(pidsInit, amountsWithdraw);
+        avatar.withdraw(pidsInit, amountsWithdraw, false);
     }
 
     function test_claimRewardsAndSendToOwner() public {
