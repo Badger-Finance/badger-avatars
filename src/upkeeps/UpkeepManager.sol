@@ -3,9 +3,11 @@ pragma solidity ^0.8.0;
 
 import {EnumerableSet} from "../../lib/openzeppelin-contracts/contracts/utils/structs/EnumerableSet.sol";
 import {Pausable} from "../../lib/openzeppelin-contracts/contracts/security/Pausable.sol";
+import {IERC20} from "../../lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20} from "../../lib/openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
 
 import {MAX_BPS} from "../BaseConstants.sol";
-import {UpKeepManagerUtils} from "./UpKeepManagerUtils.sol";
+import {UpkeepManagerUtils} from "./UpkeepManagerUtils.sol";
 
 import {IAggregatorV3} from "../interfaces/chainlink/IAggregatorV3.sol";
 import {KeeperCompatibleInterface} from "../interfaces/chainlink/KeeperCompatibleInterface.sol";
@@ -13,32 +15,38 @@ import {IKeeperRegistry} from "../interfaces/chainlink/IKeeperRegistry.sol";
 import {IKeeperRegistrar} from "../interfaces/chainlink/IKeeperRegistrar.sol";
 import {IUniswapRouterV3} from "../interfaces/uniswap/IUniswapRouterV3.sol";
 
-/// @title   UpKeepManager
+/// @title   UpkeepManager
 /// @author  Petrovska @ BadgerDAO
-/// @dev  Allows the `UpKeepManager` to register new contracts via governance and top-up under funded
-/// upkeeps via CL keepers
-contract UpKeepManager is UpKeepManagerUtils, Pausable, KeeperCompatibleInterface {
+/// @notice  Allows the `UpkeepManager` to register new contracts via governance and top-up under funded
+/// Upkeeps via CL keepers
+contract UpkeepManager is UpkeepManagerUtils, Pausable, KeeperCompatibleInterface {
     ////////////////////////////////////////////////////////////////////////////
     // LIBRARIES
     ////////////////////////////////////////////////////////////////////////////
 
+    using SafeERC20 for IERC20;
     using EnumerableSet for EnumerableSet.AddressSet;
 
     ////////////////////////////////////////////////////////////////////////////
-    // STRUCT
+    // STRUCT & ENUM
     ////////////////////////////////////////////////////////////////////////////
+
+    enum KeeperAction {
+        TopUp, // TopUp = `_topupUpkeep` method trigger
+        WithdrawLinkFunds // WithdrawLinkFunds = `_withdrawLinkFundsAndRemoveMember` method trigger
+    }
 
     struct MemberInfo {
         string name;
         uint256 gasLimit;
-        uint256 upKeepId;
+        uint256 upkeepId;
     }
 
     ////////////////////////////////////////////////////////////////////////////
     // CONSTANTS
     ////////////////////////////////////////////////////////////////////////////
 
-    string public constant NAME = "BadgerDAO UpKeep Manager";
+    string public constant NAME = "BadgerDAO Upkeep Manager";
 
     ////////////////////////////////////////////////////////////////////////////
     // IMMUTABLES
@@ -50,7 +58,7 @@ contract UpKeepManager is UpKeepManagerUtils, Pausable, KeeperCompatibleInterfac
     // STORAGE
     ////////////////////////////////////////////////////////////////////////////
 
-    uint256 public monitoringUpKeepId;
+    uint256 public monitoringUpkeepId;
 
     uint256 public roundsTopUp;
     uint256 public minRoundsTopUp;
@@ -67,10 +75,11 @@ contract UpKeepManager is UpKeepManagerUtils, Pausable, KeeperCompatibleInterfac
     error NotKeeper(address caller);
 
     error NotAutoApproveKeeper();
-    error NotUnderFundedUpkeep(uint256 upKeepId);
-    error NotMinLinkFundedUpKeep();
-    error UpKeepNotCancelled(uint256 upKeepId);
-    error UpkeepCancelled(uint256 upKeepId);
+    error NotUnderFundedUpkeep(uint256 upkeepId);
+    error NotMinLinkFundedUpkeep();
+    error UpkeepNotCancelled(uint256 upkeepId);
+    error UpkeepCancelled(uint256 upkeepId);
+    error UnderCancelationDelay(uint256 maxValidBlocknumber, uint256 currentBlock);
 
     error NotMemberIncluded(address member);
     error MemberAlreadyRegister(address member);
@@ -87,17 +96,17 @@ contract UpKeepManager is UpKeepManagerUtils, Pausable, KeeperCompatibleInterfac
     // EVENTS
     ////////////////////////////////////////////////////////////////////////////
 
-    event NewMember(address indexed memberAddress, string name, uint256 gasLimit, uint256 upKeepId, uint256 timestamp);
-    event RemoveMember(address indexed memberAddress, uint256 upKeepId, uint256 linkRefund, uint256 timestamp);
+    event NewMember(address indexed memberAddress, string name, uint256 gasLimit, uint256 upkeepId, uint256 timestamp);
+    event RemoveMember(address indexed memberAddress, uint256 upkeepId, uint256 linkRefund, uint256 timestamp);
 
     event RoundsTopUpUpdated(uint256 oldValue, uint256 newValue);
     event MinRoundsTopUpUpdated(uint256 oldValue, uint256 newValue);
 
-    event SweepLinkToTechops(uint256 amount, uint256 timestamp);
+    event ERC20Swept(address indexed token, address recipient, uint256 amount, uint256 timestamp);
     event SweepEth(address recipient, uint256 amount, uint256 timestamp);
     event EthSwappedForLink(uint256 amountEthOut, uint256 amountLinkIn, uint256 timestamp);
 
-    event UpKeepManagerEthReceived(address indexed sender, uint256 value);
+    event UpkeepManagerEthReceived(address indexed sender, uint256 value);
 
     constructor(address _governance) {
         if (_governance == address(0)) revert ZeroAddress();
@@ -129,93 +138,79 @@ contract UpKeepManager is UpKeepManagerUtils, Pausable, KeeperCompatibleInterfac
 
     /// @dev Fallback function accepts Ether transactions.
     receive() external payable {
-        emit UpKeepManagerEthReceived(msg.sender, msg.value);
+        emit UpkeepManagerEthReceived(msg.sender, msg.value);
     }
 
     ////////////////////////////////////////////////////////////////////////////
     // PUBLIC: Governance
     ////////////////////////////////////////////////////////////////////////////
 
-    /// @dev It will initiate the upKeep job for monitoring members
-    /// @notice only callable via governance
-    /// @param _gasLimit gas limit for the upKeepManager monitoring upkeep task
+    /// @notice It will initiate the Upkeep job for monitoring members. Can only be called by governance.
+    /// @param _gasLimit gas limit for the UpkeepManager monitoring Upkeep task
     function initializeBaseUpkeep(uint256 _gasLimit) external onlyGovernance {
         if (_gasLimit == 0) revert ZeroUintValue();
 
-        monitoringUpKeepId = _registerUpKeep(address(this), _gasLimit, NAME);
+        monitoringUpkeepId = _registerUpkeep(address(this), _gasLimit, NAME);
 
-        if (monitoringUpKeepId > 0) {
+        if (monitoringUpkeepId > 0) {
             /// @dev give allowance of spending LINK funds
             LINK.approve(address(CL_REGISTRY), type(uint256).max);
         }
     }
 
-    /// @dev Adds an member into the manager
-    /// @notice only callable via governance
+    /// @notice Adds an member into the manager. Can only be called by governance.
     /// @param _memberAddress contract address to be register as new member
     /// @param _name member's name
-    /// @param _gasLimit amount of gas to provide the target contract when performing upkeep
-    /// @param _existingUpKeepId optional upKeepId to add member which has being registered from other admins
-    function addMember(address _memberAddress, string memory _name, uint256 _gasLimit, uint256 _existingUpKeepId)
+    /// @param _gasLimit amount of gas to provide the target contract when performing Upkeep
+    /// @param _existingUpkeepId optional UpkeepId to add member which has being registered from other admins
+    function addMember(address _memberAddress, string memory _name, uint256 _gasLimit, uint256 _existingUpkeepId)
         external
         onlyGovernance
     {
         /// @dev sanity checks before adding a new member in storage
         if (_memberAddress == address(0)) revert ZeroAddress();
-        if (membersInfo[_memberAddress].gasLimit != 0) revert MemberAlreadyRegister(_memberAddress);
         if (_gasLimit == 0) revert ZeroUintValue();
         if (bytes(_name).length == 0) revert EmptyString();
+        if (_members.contains(_memberAddress)) revert MemberAlreadyRegister(_memberAddress);
 
         _members.add(_memberAddress);
 
-        // NOTE: when `_existingUpKeepId` is greater than zero, assumes that other admin has registered it
+        // NOTE: when `_existingUpkeepId` is greater than zero, assumes that other admin has registered it
         //       and there are not needs to register again
-        uint256 upKeepId = _existingUpKeepId > 0 ? _existingUpKeepId : _registerUpKeep(_memberAddress, _gasLimit, _name);
+        uint256 upkeepId = _existingUpkeepId > 0 ? _existingUpkeepId : _registerUpkeep(_memberAddress, _gasLimit, _name);
 
-        membersInfo[_memberAddress] = MemberInfo({name: _name, gasLimit: _gasLimit, upKeepId: upKeepId});
+        membersInfo[_memberAddress] = MemberInfo({name: _name, gasLimit: _gasLimit, upkeepId: upkeepId});
 
-        emit NewMember(_memberAddress, _name, _gasLimit, upKeepId, block.timestamp);
+        emit NewMember(_memberAddress, _name, _gasLimit, upkeepId, block.timestamp);
     }
 
-    /// @dev Cancels an member's upkeep job
-    /// @notice only callable via governance
-    /// @param _memberAddress contract address to be cancel upkeep
-    function cancelMemberUpKeep(address _memberAddress) external onlyGovernance {
+    /// @notice Cancels a member's Upkeep job. Can only be called by governance.
+    /// @param _memberAddress contract address to be cancel Upkeep
+    function cancelMemberUpkeep(address _memberAddress) external onlyGovernance {
         if (!_members.contains(_memberAddress)) revert NotMemberIncluded(_memberAddress);
 
-        // NOTE: only member which upkeep is being cancelled can be removed
-        uint256 upKeepId = membersInfo[_memberAddress].upKeepId;
-        CL_REGISTRY.cancelUpkeep(upKeepId);
+        // NOTE: only member which Upkeep is being cancelled can be removed
+        uint256 upkeepId = membersInfo[_memberAddress].upkeepId;
+        CL_REGISTRY.cancelUpkeep(upkeepId);
     }
 
-    /// @dev Withdraws LINK funds and remove member from manager
-    /// @notice only callable via governance
+    /// @notice Withdraws LINK funds and remove member from manager
     /// @param _memberAddress contract address to be remove from manager
-    function withdrawLinkFundsAndRemoveMember(address _memberAddress) external onlyGovernance {
-        if (!_members.contains(_memberAddress)) revert NotMemberIncluded(_memberAddress);
-
-        uint256 upKeepId = membersInfo[_memberAddress].upKeepId;
-        _members.remove(_memberAddress);
-        delete membersInfo[_memberAddress];
-
-        // NOTE: only member which upkeep is being cancelled can be removed
-        (,,, uint96 linkRefund,,, uint64 maxValidBlocknumber,) = CL_REGISTRY.getUpkeep(upKeepId);
-        // https://etherscan.io/address/0x02777053d6764996e594c3e88af1d58d5363a2e6#code#F1#L738
-        if (maxValidBlocknumber == UINT64_MAX) revert UpKeepNotCancelled(upKeepId);
-
-        CL_REGISTRY.withdrawFunds(upKeepId, address(this));
-
-        emit RemoveMember(_memberAddress, upKeepId, linkRefund, block.timestamp);
+    function withdrawLinkFundsAndRemoveMember(address _memberAddress) external {
+        _withdrawLinkFundsAndRemoveMember(_memberAddress);
     }
 
-    /// @dev  Sweep the full LINK balance to techops
-    function sweepLinkFunds() external onlyGovernance {
-        uint256 linkBal = LINK.balanceOf(address(this));
-        LINK.transfer(TECHOPS, linkBal);
-        emit SweepLinkToTechops(linkBal, block.timestamp);
+    /// @notice Sweep the full contract's balance for a given ERC-20 token to a recipient. Can only be called by governance.
+    /// @param _token The ERC-20 token which needs to be swept
+    /// @param _recipient Address receiving the full balance of the token
+    function sweep(address _token, address _recipient) external onlyGovernance {
+        IERC20 erc20Token = IERC20(_token);
+        uint256 balance = erc20Token.balanceOf(address(this));
+        erc20Token.safeTransfer(_recipient, balance);
+        emit ERC20Swept(_token, _recipient, balance, block.timestamp);
     }
 
-    /// @dev  Sweep the full ETH balance to recipient
+    /// @notice  Sweep the full ETH balance to recipient
     /// @param _recipient Address receiving eth funds
     function sweepEthFunds(address payable _recipient) external onlyGovernance {
         uint256 ethBal = address(this).balance;
@@ -241,7 +236,7 @@ contract UpKeepManager is UpKeepManagerUtils, Pausable, KeeperCompatibleInterfac
     // PUBLIC: Governance - Config
     ////////////////////////////////////////////////////////////////////////////
 
-    /// @notice Updates the value of `roundsTopUp`, which is used for decided how much rounds will
+    /// @notice Updates the value of `roundsTopUp`, which is used for decided how much rounds
     ///         will be covered at least while topping-up
     /// @param _roundsTopUp new value for `roundsTopUp`
     function setRoundsTopUp(uint256 _roundsTopUp) external onlyGovernance {
@@ -254,7 +249,7 @@ contract UpKeepManager is UpKeepManagerUtils, Pausable, KeeperCompatibleInterfac
         emit RoundsTopUpUpdated(oldRoundsTopUp, _roundsTopUp);
     }
 
-    /// @notice Updates the value of `minRoundsTopUp`, which is used to decide if `upKeepId` is underfunded
+    /// @notice Updates the value of `minRoundsTopUp`, which is used to decide if `UpkeepId` is underfunded
     /// @param _minRoundsTopUp new value for `minRoundsTopUp`
     function setMinRoundsTopUp(uint256 _minRoundsTopUp) external onlyGovernance {
         if (_minRoundsTopUp == 0) revert ZeroUintValue();
@@ -271,11 +266,16 @@ contract UpKeepManager is UpKeepManagerUtils, Pausable, KeeperCompatibleInterfac
     ////////////////////////////////////////////////////////////////////////////
 
     /// @dev Contains the logic that should be executed on-chain when `checkUpkeep` returns true.
-    /// @param _performData ABI-encoded member address
+    /// @param _performData ABI-encoded member address and KeeperAction
     function performUpkeep(bytes calldata _performData) external override onlyKeeper whenNotPaused {
-        uint256 upKeepId = _validatePerformData(_performData);
+        (address member, KeeperAction keeperAction) = abi.decode(_performData, (address, KeeperAction));
+        uint256 upkeepId = _validatePerformData(member, keeperAction);
 
-        _topupUpkeep(upKeepId);
+        if (keeperAction == KeeperAction.TopUp) {
+            _topupUpkeep(upkeepId);
+        } else {
+            _withdrawLinkFundsAndRemoveMember(member);
+        }
     }
 
     ////////////////////////////////////////////////////////////////////////////
@@ -294,7 +294,7 @@ contract UpKeepManager is UpKeepManagerUtils, Pausable, KeeperCompatibleInterfac
     }
 
     /// @notice converts a gas limit value into LINK expressed amount
-    /// @param _gasLimit amount of gas to provide the target contract when performing upkeep
+    /// @param _gasLimit amount of gas to provide the target contract when performing Upkeep
     /// @param _config current configuration of the CL registry
     /// @return linkAmount_ amount of LINK needed to cover the job
     function _getLinkAmount(uint256 _gasLimit, IKeeperRegistry.Config memory _config)
@@ -308,7 +308,7 @@ contract UpKeepManager is UpKeepManagerUtils, Pausable, KeeperCompatibleInterfac
         uint256 weiForGas = adjustedGas * (_gasLimit + REGISTRY_GAS_OVERHEAD);
         uint256 premium = PPB_BASE + _config.paymentPremiumPPB;
 
-        /// @dev amount of LINK to carry one `performUpKeep` operation
+        /// @dev amount of LINK to carry one `performUpkeep` operation
         // See: _calculatePaymentAmount
         // https://etherscan.io/address/0x02777053d6764996e594c3E88AF1D58D5363a2e6#code#F1#L776
         linkAmount_ =
@@ -317,59 +317,86 @@ contract UpKeepManager is UpKeepManagerUtils, Pausable, KeeperCompatibleInterfac
     }
 
     /// @dev decodes the `bytes` calldata given by keepers and checks its validate against storage
-    /// @param _performData ABI-encoded member address to validate
-    function _validatePerformData(bytes calldata _performData) internal view returns (uint256 upKeepId_) {
-        address member = abi.decode(_performData, (address));
-
-        if (member == address(this)) {
-            upKeepId_ = monitoringUpKeepId;
-        } else {
-            upKeepId_ = membersInfo[member].upKeepId;
-        }
-
-        if (upKeepId_ == 0) revert MemberNotRegisteredYet(member);
-
-        (,,,,,, uint64 maxValidBlocknumber,) = CL_REGISTRY.getUpkeep(upKeepId_);
-        // https://etherscan.io/address/0x02777053d6764996e594c3e88af1d58d5363a2e6#code#F1#L332
-        if (maxValidBlocknumber != UINT64_MAX) revert UpkeepCancelled(upKeepId_);
-    }
-
-    /// @dev checks if upKeepId is under-funded, helper in `checkUpKeep`
-    /// and `performUpKeep` methods
-    /// @param _upKeepId task id to verify is underfunded
-    function _isUpKeepIdUnderFunded(uint256 _upKeepId)
+    /// @param _member Member address to validate
+    /// @param _keeperAction Action type carried by the keeper
+    function _validatePerformData(address _member, KeeperAction _keeperAction)
         internal
         view
-        returns (uint96 minUpKeepBal_, bool underFunded_)
+        returns (uint256 upkeepId_)
+    {
+        if (_member == address(this)) {
+            upkeepId_ = monitoringUpkeepId;
+        } else {
+            upkeepId_ = membersInfo[_member].upkeepId;
+        }
+
+        if (upkeepId_ == 0) revert MemberNotRegisteredYet(_member);
+
+        (,,,,,, uint64 maxValidBlocknumber,) = CL_REGISTRY.getUpkeep(upkeepId_);
+        if (_keeperAction == KeeperAction.TopUp) {
+            // https://etherscan.io/address/0x02777053d6764996e594c3e88af1d58d5363a2e6#code#F1#L332
+            if (maxValidBlocknumber != UINT64_MAX) revert UpkeepCancelled(upkeepId_);
+        } else {
+            // NOTE: whenever `block.number` is not greater means that we are still within the 50 blocks cancelation window
+            if (maxValidBlocknumber > block.number) revert UnderCancelationDelay(maxValidBlocknumber, block.number);
+        }
+    }
+
+    /// @dev checks if UpkeepId is under-funded, helper in `checkUpkeep`
+    /// and `performUpkeep` methods
+    /// @param _upkeepId task id to verify is underfunded
+    function _isUpkeepIdUnderFunded(uint256 _upkeepId)
+        internal
+        view
+        returns (uint96 minUpkeepBal_, bool underFunded_)
     {
         /// @dev check onchain the min and current amounts to consider top-up
-        minUpKeepBal_ = CL_REGISTRY.getMinBalanceForUpkeep(_upKeepId);
-        (,,, uint96 currentUpKeepBal,,,,) = CL_REGISTRY.getUpkeep(_upKeepId);
+        minUpkeepBal_ = CL_REGISTRY.getMinBalanceForUpkeep(_upkeepId);
+        (,,, uint96 currentUpkeepBal,,,,) = CL_REGISTRY.getUpkeep(_upkeepId);
 
-        if (currentUpKeepBal <= minUpKeepBal_ * minRoundsTopUp) {
+        if (currentUpkeepBal <= minUpkeepBal_ * minRoundsTopUp) {
             underFunded_ = true;
         }
     }
 
-    /// @notice carries over the top-up action of an member upKeep
-    /// @param _upKeepId id to verify if it is underfunded
-    function _topupUpkeep(uint256 _upKeepId) internal {
-        (uint96 minUpKeepBal, bool underFunded) = _isUpKeepIdUnderFunded(_upKeepId);
+    /// @notice carries over the top-up action of an member Upkeep
+    /// @param _upkeepId id to verify if it is underfunded
+    function _topupUpkeep(uint256 _upkeepId) internal {
+        (uint96 minUpkeepBal, bool underFunded) = _isUpkeepIdUnderFunded(_upkeepId);
 
-        if (!underFunded) revert NotUnderFundedUpkeep(_upKeepId);
+        if (!underFunded) revert NotUnderFundedUpkeep(_upkeepId);
 
-        uint96 topupAmount = minUpKeepBal * uint96(roundsTopUp);
+        uint96 topupAmount = minUpkeepBal * uint96(roundsTopUp);
 
         uint256 linkRegistryBal = LINK.balanceOf(address(this));
         if (linkRegistryBal < topupAmount) {
             _swapEthForLink(topupAmount - linkRegistryBal);
         }
 
-        CL_REGISTRY.addFunds(_upKeepId, topupAmount);
+        CL_REGISTRY.addFunds(_upkeepId, topupAmount);
+    }
+
+    /// @notice Withdraws LINK funds and remove member from manager
+    /// @param _member contract address to be remove from manager
+    function _withdrawLinkFundsAndRemoveMember(address _member) internal {
+        if (!_members.contains(_member)) revert NotMemberIncluded(_member);
+
+        uint256 upkeepId = membersInfo[_member].upkeepId;
+        _members.remove(_member);
+        delete membersInfo[_member];
+
+        // NOTE: only member which Upkeep is being cancelled can be removed
+        (,,, uint96 linkRefund,,, uint64 maxValidBlocknumber,) = CL_REGISTRY.getUpkeep(upkeepId);
+        // https://etherscan.io/address/0x02777053d6764996e594c3e88af1d58d5363a2e6#code#F1#L738
+        if (maxValidBlocknumber == UINT64_MAX) revert UpkeepNotCancelled(upkeepId);
+
+        CL_REGISTRY.withdrawFunds(upkeepId, address(this));
+
+        emit RemoveMember(_member, upkeepId, linkRefund, block.timestamp);
     }
 
     /// @notice executes the swap from ETH to LINK, for the amount of link required
-    /// @param _linkRequired amount of link required for handling the `performUpKeep` task
+    /// @param _linkRequired amount of link required for handling the `performUpkeep` task
     function _swapEthForLink(uint256 _linkRequired) internal {
         uint256 maxEth = (getLinkAmountInEth(_linkRequired) * MAX_IN_BPS) / MAX_BPS;
         uint256 ethSpent = UNIV3_ROUTER.exactOutputSingle{value: maxEth}(
@@ -391,10 +418,10 @@ contract UpKeepManager is UpKeepManagerUtils, Pausable, KeeperCompatibleInterfac
     /// @notice carries registration of target contract in the CL registry
     /// @param _targetAddress contract which will be register
     /// @param _gasLimit amount of gas to provide the target contract when
-    /// performing upkeep
-    /// @param _name detailed name for the upkeep job
+    /// performing Upkeep
+    /// @param _name detailed name for the Upkeep job
     /// @return upkeepID_ id of CL job
-    function _registerUpKeep(address _targetAddress, uint256 _gasLimit, string memory _name)
+    function _registerUpkeep(address _targetAddress, uint256 _gasLimit, string memory _name)
         internal
         returns (uint256 upkeepID_)
     {
@@ -404,7 +431,7 @@ contract UpKeepManager is UpKeepManagerUtils, Pausable, KeeperCompatibleInterfac
 
         /// @dev we ensure we top-up enough LINK for couple of test-runs (20) and sanity checks
         uint256 linkAmount = _getLinkAmount(_gasLimit, _c) * roundsTopUp;
-        if (linkAmount < MIN_FUNDING_UPKEEP) revert NotMinLinkFundedUpKeep();
+        if (linkAmount < MIN_FUNDING_UPKEEP) revert NotMinLinkFundedUpkeep();
 
         uint256 linkRegistryBal = LINK.balanceOf(address(this));
         if (linkRegistryBal < linkAmount) {
@@ -444,10 +471,10 @@ contract UpKeepManager is UpKeepManagerUtils, Pausable, KeeperCompatibleInterfac
     // PUBLIC VIEW
     ////////////////////////////////////////////////////////////////////////////
 
-    /// @notice Checks whether an upkeep is to be performed.
-    /// @dev The calldata is encoded with the targetted member address
-    /// @return upkeepNeeded_ A boolean indicating whether an upkeep is to be performed.
-    /// @return performData_ The calldata to be passed to the upkeep function.
+    /// @notice Checks whether an Upkeep is to be performed.
+    /// @dev The calldata is encoded with the targetted member address and KeeperAction type
+    /// @return upkeepNeeded_ A boolean indicating whether an Upkeep is to be performed.
+    /// @return performData_ The calldata to be passed to the Upkeep function.
     function checkUpkeep(bytes calldata)
         external
         view
@@ -457,12 +484,12 @@ contract UpKeepManager is UpKeepManagerUtils, Pausable, KeeperCompatibleInterfac
     {
         bool underFunded;
 
-        /// @dev check for the UpKeepManager itself if its upkeep needs topup
-        ///      prio `UpKeepManger` vs members to avoid ops halting
-        (, underFunded) = _isUpKeepIdUnderFunded(monitoringUpKeepId);
+        /// @dev check for the UpkeepManager itself if its Upkeep needs topup
+        ///      prio `UpkeepManger` vs members to avoid ops halting
+        (, underFunded) = _isUpkeepIdUnderFunded(monitoringUpkeepId);
         if (underFunded) {
             upkeepNeeded_ = true;
-            performData_ = abi.encode(address(this));
+            performData_ = abi.encode(address(this), KeeperAction.TopUp);
             // NOTE: explicit early return to avoid overrides by `members`
             return (upkeepNeeded_, performData_);
         }
@@ -472,14 +499,20 @@ contract UpKeepManager is UpKeepManagerUtils, Pausable, KeeperCompatibleInterfac
         if (membersLength > 0) {
             // NOTE: loop thru members to see which is underfunded
             for (uint256 i; i < membersLength;) {
-                uint256 upKeepId = membersInfo[members[i]].upKeepId;
-                (, underFunded) = _isUpKeepIdUnderFunded(upKeepId);
+                uint256 upkeepId = membersInfo[members[i]].upkeepId;
+                (, underFunded) = _isUpkeepIdUnderFunded(upkeepId);
+                (,,,,,, uint64 maxValidBlocknumber,) = CL_REGISTRY.getUpkeep(upkeepId);
                 if (underFunded) {
-                    (,,,,,, uint64 maxValidBlocknumber,) = CL_REGISTRY.getUpkeep(upKeepId);
                     // NOTE: helps filtering those which `cancelUpkeep` has being initiated
                     if (maxValidBlocknumber == UINT64_MAX) {
                         upkeepNeeded_ = true;
-                        performData_ = abi.encode(members[i]);
+                        performData_ = abi.encode(members[i], KeeperAction.TopUp);
+                        break;
+                    }
+                } else {
+                    if (block.number > maxValidBlocknumber) {
+                        upkeepNeeded_ = true;
+                        performData_ = abi.encode(members[i], KeeperAction.WithdrawLinkFunds);
                         break;
                     }
                 }

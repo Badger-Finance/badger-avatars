@@ -18,6 +18,8 @@ contract AuraAvatarMultiTokenDeploy is Script {
     address constant TECHOPS_MSIG = 0x86cbD0ce0c087b482782c181dA8d191De18C8275;
 
     function run() public {
+        uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
+
         uint256[] memory pidsInit = new uint256[](3);
         pidsInit[0] = PID_80BADGER_20WBTC;
         pidsInit[1] = PID_40WBTC_40DIGG_20GRAVIAURA;
@@ -25,7 +27,7 @@ contract AuraAvatarMultiTokenDeploy is Script {
 
         bytes memory initData = abi.encodeCall(AuraAvatarMultiToken.initialize, (VAULT_MSIG, TECHOPS_MSIG, pidsInit));
 
-        vm.startBroadcast();
+        vm.startBroadcast(deployerPrivateKey);
         address logic = address(new AuraAvatarMultiToken());
         AuraAvatarMultiToken(
             address(
@@ -36,5 +38,7 @@ contract AuraAvatarMultiTokenDeploy is Script {
                 )
             )
         );
+
+        vm.stopBroadcast();
     }
 }

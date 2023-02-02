@@ -16,6 +16,8 @@ contract ConvexAvatarMultiTokenDeploy is Script {
     address constant TECHOPS_MSIG = 0x86cbD0ce0c087b482782c181dA8d191De18C8275;
 
     function run() public {
+        uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
+
         /// @dev pid related with vanilla curve lp positions, not private vaults
         uint256[] memory vanillaPidsInit;
 
@@ -26,7 +28,7 @@ contract ConvexAvatarMultiTokenDeploy is Script {
         bytes memory initData =
             abi.encodeCall(ConvexAvatarMultiToken.initialize, (VAULT_MSIG, TECHOPS_MSIG, vanillaPidsInit, fraxPidsInit));
 
-        vm.startBroadcast();
+        vm.startBroadcast(deployerPrivateKey);
         address logic = address(new ConvexAvatarMultiToken());
         ConvexAvatarMultiToken(
             address(
@@ -37,5 +39,7 @@ contract ConvexAvatarMultiTokenDeploy is Script {
                 )
             )
         );
+
+        vm.stopBroadcast();
     }
 }
