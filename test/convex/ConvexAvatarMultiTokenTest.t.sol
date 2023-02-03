@@ -35,9 +35,12 @@ contract ConvexAvatarMultiTokenTest is Test, ConvexAvatarUtils {
         IERC20MetadataUpgradeable(0xb92e3fD365Fc5E038aa304Afe919FeE158359C88);
     IERC20MetadataUpgradeable constant CURVE_LP_SILO_FRAX =
         IERC20MetadataUpgradeable(0x2302aaBe69e6E7A1b0Aa23aAC68fcCB8A4D2B460);
+    IERC20MetadataUpgradeable constant CURVE_LP_3CRYPTO =
+        IERC20MetadataUpgradeable(0xc4AD29ba4B3c580e6D59105FFf484999997675Ff);
 
     IBaseRewardPool constant BASE_REWARD_POOL_BADGER_WBTC = IBaseRewardPool(0x36c7E7F9031647A74687ce46A8e16BcEA84f3865);
     IBaseRewardPool constant BASE_REWARD_POOL_SILO_FRAX = IBaseRewardPool(0xE259d085f55825624bBA8571eD20984c125Ba720);
+    IBaseRewardPool constant BASE_REWARD_POOL_3CRYPTO = IBaseRewardPool(0x9D5C5E364D81DaB193b72db9E9BE9D8ee669B652);
     IFraxUnifiedFarm constant UNIFIED_FARM_BADGER_FRAXBP = IFraxUnifiedFarm(0x5a92EF27f4baA7C766aee6d751f754EBdEBd9fae);
 
     // Token to test sweep
@@ -866,6 +869,45 @@ contract ConvexAvatarMultiTokenTest is Test, ConvexAvatarUtils {
 
         assertEq(BASE_REWARD_POOL_BADGER_WBTC.balanceOf(address(avatar)), 10e18);
         assertEq(CURVE_LP_BADGER_WBTC.balanceOf(owner), 10e18);
+    }
+
+    function test_withdraw_emergency_emergency_underlying_wd() public {
+        uint256 lpBalance = 10 ether;
+        deal(address(CURVE_LP_3CRYPTO), owner, lpBalance, true);
+        uint256 cryptoPid = 38;
+
+        // coins info and addresses
+        ICurvePool pool = ICurvePool(META_REGISTRY.get_pool_from_lp_token(address(CURVE_LP_3CRYPTO)));
+        uint256 coins = META_REGISTRY.get_n_coins(address(pool));
+        uint256[] memory balanceBefore = new uint256[](coins);
+        for (uint256 i; i < coins; ++i) {
+            balanceBefore[i] = IERC20MetadataUpgradeable(pool.coins(i)).balanceOf(owner);
+        }
+
+        vm.startPrank(owner);
+        avatar.addCurveLpPositionInfo(cryptoPid);
+        CURVE_LP_3CRYPTO.approve(address(avatar), lpBalance);
+
+        // this case is use to cover the lps with 3 underlying tokens
+        // target is tricrypto2
+        uint256[] memory amountsDeposit = new uint256[](1);
+        amountsDeposit[0] = lpBalance;
+        uint256[] memory pidsInit = new uint256[](1);
+        pidsInit[0] = cryptoPid;
+
+        avatar.deposit(pidsInit, amountsDeposit);
+        vm.stopPrank();
+
+        // NOTE: switch of role to manager, emergency testing!
+        vm.startPrank(manager);
+        avatar.withdraw(pidsInit, amountsDeposit, true);
+
+        assertEq(BASE_REWARD_POOL_3CRYPTO.balanceOf(address(avatar)), 0);
+        assertEq(CURVE_LP_3CRYPTO.balanceOf(owner), 0);
+
+        for (uint256 i; i < coins; ++i) {
+            assertGt(IERC20MetadataUpgradeable(pool.coins(i)).balanceOf(owner), balanceBefore[i]);
+        }
     }
 
     function test_withdraw_nothing() public {

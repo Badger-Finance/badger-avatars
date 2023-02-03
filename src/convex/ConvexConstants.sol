@@ -22,7 +22,7 @@ abstract contract ConvexConstants {
     // uniswap v3
     IUniswapRouterV3 internal constant UNIV3_ROUTER = IUniswapRouterV3(0xE592427A0AEce92De3Edee1F18E0157C05861564);
 
-    // curve meta registry
+    // curve meta registry. ref: https://github.com/curvefi/metaregistry#deployments
     IMetaRegistry internal constant META_REGISTRY = IMetaRegistry(0xF98B45FA17DE75FB1aD0e7aFD971b0ca00e379fC);
     uint256 internal constant TWO_COINS_POOL = 2;
 
