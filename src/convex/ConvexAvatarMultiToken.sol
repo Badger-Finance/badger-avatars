@@ -607,13 +607,13 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
             uint256[2] memory minOutAmounts;
             // @audit DAO is accepting under emergency situations for speed defaulting
             // the amount out expected to zero in this ocassion
-            ICurvePool(pool).remove_liquidity(_lpAmount, minOutAmounts);
+            pool.remove_liquidity(_lpAmount, minOutAmounts);
         } else {
             // NOTE: pools may have three tokens like tricrypto2/3pool needs
             // different signature to withdraw
             uint256[3] memory minOutAmounts;
             // @audit idem comment as L598-L599
-            ICurvePool(pool).remove_liquidity(_lpAmount, minOutAmounts);
+            pool.remove_liquidity(_lpAmount, minOutAmounts);
         }
 
         // NOTE: given that many curve pool have different abi format not all has `_receiver`
