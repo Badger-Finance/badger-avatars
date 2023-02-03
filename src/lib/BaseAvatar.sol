@@ -10,6 +10,12 @@ import {GlobalAccessControlManaged} from "./GlobalAccessControlManaged.sol";
 /// @notice Forwards calls from the owner
 contract BaseAvatar is OwnableUpgradeable, Executor {
     ////////////////////////////////////////////////////////////////////////////
+    // ERRORS
+    ////////////////////////////////////////////////////////////////////////////
+
+    error ExecutionFailure(address target, uint256 value, bytes data, uint256 timestamp);
+
+    ////////////////////////////////////////////////////////////////////////////
     // INITIALIZATION
     ////////////////////////////////////////////////////////////////////////////
 
@@ -23,7 +29,7 @@ contract BaseAvatar is OwnableUpgradeable, Executor {
     // PUBLIC: Owner
     ////////////////////////////////////////////////////////////////////////////
 
-    /// @dev Make arbitrary Ethereum call
+    /// @dev Make arbitrary Ethereum call. Can only be called by owner.
     /// @param to Address to call
     /// @param value ETH value
     /// @param data TX data
@@ -35,5 +41,6 @@ contract BaseAvatar is OwnableUpgradeable, Executor {
         returns (bool success)
     {
         success = execute(to, value, data, Enum.Operation.Call, gasleft());
+        if (!success) revert ExecutionFailure(to, value, data, block.timestamp);
     }
 }

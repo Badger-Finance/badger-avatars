@@ -11,6 +11,7 @@ import {IERC20MetadataUpgradeable} from
 import {EnumerableSetUpgradeable} from
     "../../lib/openzeppelin-contracts-upgradeable/contracts/utils/structs/EnumerableSetUpgradeable.sol";
 
+import {EnumerableSetExtension} from "../lib/EnumerableSetExtension.sol";
 import {BaseAvatar} from "../lib/BaseAvatar.sol";
 import {MAX_BPS, PRECISION, CHAINLINK_KEEPER_REGISTRY} from "../BaseConstants.sol";
 import {BpsConfig, TokenAmount} from "../BaseStructs.sol";
@@ -35,6 +36,7 @@ contract AuraAvatarMultiToken is BaseAvatar, PausableUpgradeable, AuraAvatarUtil
     using SafeERC20Upgradeable for IERC20MetadataUpgradeable;
     using EnumerableSetUpgradeable for EnumerableSetUpgradeable.AddressSet;
     using EnumerableSetUpgradeable for EnumerableSetUpgradeable.UintSet;
+    using EnumerableSetExtension for EnumerableSetUpgradeable.UintSet;
 
     ////////////////////////////////////////////////////////////////////////////
     // STORAGE
@@ -336,10 +338,11 @@ contract AuraAvatarMultiToken is BaseAvatar, PausableUpgradeable, AuraAvatarUtil
     /// @param _pids PIDs target to stake into
     /// @param _amountAssets Amount of assets to be staked.
     function deposit(uint256[] calldata _pids, uint256[] calldata _amountAssets) external onlyOwner {
-        if (_pids.length != _amountAssets.length) {
+        uint256 pidLength = _pids.length;
+        if (pidLength != _amountAssets.length) {
             revert LengthMismatch();
         }
-        for (uint256 i; i < _pids.length;) {
+        for (uint256 i; i < pidLength;) {
             // Verify if PID is in storage and amount is > 0
             if (!pids.contains(_pids[i])) {
                 revert PidNotIncluded(_pids[i]);
@@ -348,8 +351,7 @@ contract AuraAvatarMultiToken is BaseAvatar, PausableUpgradeable, AuraAvatarUtil
                 revert NothingToDeposit();
             }
 
-            // TODO: Cache this value somewhere and avoid call
-            (address lpToken,,,,,) = AURA_BOOSTER.poolInfo(_pids[i]);
+            address lpToken = assets.at(pids.indexOf(_pids[i]));
             // NOTE: Using msg.sender since this function is only callable by owner.
             //       Keep in mind if access control is changed.
             IERC20MetadataUpgradeable(lpToken).safeTransferFrom(msg.sender, address(this), _amountAssets[i]);
@@ -416,7 +418,15 @@ contract AuraAvatarMultiToken is BaseAvatar, PausableUpgradeable, AuraAvatarUtil
             revert PidNotIncluded(_removePid);
         }
 
-        (address lpToken,,, address crvRewards,,) = AURA_BOOSTER.poolInfo(_removePid);
+        uint256 pidIndex = pids.indexOf(_removePid);
+        address lpToken = assets.at(pidIndex);
+        address crvRewards = baseRewardPools.at(pidIndex);
+
+        // NOTE: remove from storage prior to external calls, CEI compliance
+        pids.remove(_removePid);
+        assets.remove(lpToken);
+        baseRewardPools.remove(crvRewards);
+
         IBaseRewardPool baseRewardPool = IBaseRewardPool(crvRewards);
 
         uint256 stakedAmount = baseRewardPool.balanceOf(address(this));
@@ -424,15 +434,11 @@ contract AuraAvatarMultiToken is BaseAvatar, PausableUpgradeable, AuraAvatarUtil
             revert BptStillStaked(lpToken, crvRewards, stakedAmount);
         }
 
-        // NOTE: verify pending rewards and claim. Processing is done separately
-        if (baseRewardPool.earned(address(this)) > 0) {
-            baseRewardPool.getReward();
-        }
+        // NOTE: Claim extra and normal rewards. Processing is done separately
+        baseRewardPool.getReward();
 
-        // NOTE: indeed if nothing is staked, then remove from storage
-        pids.remove(_removePid);
-        assets.remove(lpToken);
-        baseRewardPools.remove(crvRewards);
+        // NOTE: while removing the info from storage, we ensure that allowance is set back to zero
+        IERC20MetadataUpgradeable(lpToken).safeApprove(address(AURA_BOOSTER), 0);
     }
 
     /// @notice Sweep the full contract's balance for a given ERC-20 token. Can only be called by owner.
@@ -440,7 +446,7 @@ contract AuraAvatarMultiToken is BaseAvatar, PausableUpgradeable, AuraAvatarUtil
     function sweep(address token) external onlyOwner {
         IERC20MetadataUpgradeable erc20Token = IERC20MetadataUpgradeable(token);
         uint256 balance = erc20Token.balanceOf(address(this));
-        erc20Token.safeTransfer(owner(), balance);
+        erc20Token.safeTransfer(msg.sender, balance);
         emit ERC20Swept(token, balance);
     }
 
@@ -594,10 +600,10 @@ contract AuraAvatarMultiToken is BaseAvatar, PausableUpgradeable, AuraAvatarUtil
             if (_amountAssets[i] == 0) {
                 revert NothingToWithdraw();
             }
-            // TODO: Cache
-            (address lpToken,,, address crvRewards,,) = AURA_BOOSTER.poolInfo(_pids[i]);
 
-            IBaseRewardPool(crvRewards).withdrawAndUnwrap(_amountAssets[i], false);
+            uint256 pidIndex = pids.indexOf(_pids[i]);
+            address lpToken = assets.at(pidIndex);
+            IBaseRewardPool(baseRewardPools.at(pidIndex)).withdrawAndUnwrap(_amountAssets[i], false);
             IERC20MetadataUpgradeable(lpToken).safeTransfer(owner(), _amountAssets[i]);
 
             emit Withdraw(lpToken, _amountAssets[i], block.timestamp);
@@ -664,12 +670,9 @@ contract AuraAvatarMultiToken is BaseAvatar, PausableUpgradeable, AuraAvatarUtil
         // Update last claimed time
         lastClaimTimestamp = block.timestamp;
 
-        uint256 length = baseRewardPools.length();
-        for (uint256 i; i < length;) {
+        for (uint256 i; i < baseRewardPools.length();) {
             IBaseRewardPool baseRewardPool = IBaseRewardPool(baseRewardPools.at(i));
-            if (baseRewardPool.earned(address(this)) > 0) {
-                baseRewardPool.getReward();
-            }
+            baseRewardPool.getReward();
             unchecked {
                 ++i;
             }
