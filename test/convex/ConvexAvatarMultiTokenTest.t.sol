@@ -16,6 +16,7 @@ import {IBaseRewardPool} from "../../src/interfaces/aura/IBaseRewardPool.sol";
 import {IStakingProxy} from "../../src/interfaces/convex/IStakingProxy.sol";
 import {IFraxUnifiedFarm} from "../../src/interfaces/convex/IFraxUnifiedFarm.sol";
 import {IAggregatorV3} from "../../src/interfaces/chainlink/IAggregatorV3.sol";
+import {ICurvePool} from "../../src/interfaces/curve/ICurvePool.sol";
 
 import {MockV3Aggregator} from "../mocks/MockV3Aggregator.sol";
 
@@ -448,7 +449,7 @@ contract ConvexAvatarMultiTokenTest is Test, ConvexAvatarUtils {
         skip(1 weeks);
 
         vm.prank(owner);
-        avatar.withdraw(pidsInit, amountsDeposit);
+        avatar.withdraw(pidsInit, amountsDeposit, false);
 
         uint256 initialAvatarCrv = CRV.balanceOf(address(avatar));
         uint256 initialAvatarCvx = CVX.balanceOf(address(avatar));
@@ -809,7 +810,7 @@ contract ConvexAvatarMultiTokenTest is Test, ConvexAvatarUtils {
         vm.prank(owner);
         vm.expectEmit(true, false, false, true);
         emit Withdraw(address(CURVE_LP_BADGER_WBTC), 20 ether, block.timestamp);
-        avatar.withdrawAll();
+        avatar.withdrawAll(false);
 
         assertEq(BASE_REWARD_POOL_BADGER_WBTC.balanceOf(address(avatar)), 0);
         assertEq(CURVE_LP_BADGER_WBTC.balanceOf(owner), 20e18);
@@ -818,13 +819,13 @@ contract ConvexAvatarMultiTokenTest is Test, ConvexAvatarUtils {
     function test_withdrawAll_nothing() public {
         vm.expectRevert(ConvexAvatarMultiToken.NothingToWithdraw.selector);
         vm.prank(owner);
-        avatar.withdrawAll();
+        avatar.withdrawAll(false);
     }
 
     function test_withdrawAll_permissions() public {
         vm.expectRevert(abi.encodeWithSelector(ConvexAvatarMultiToken.NotOwnerOrManager.selector, keeper));
         vm.prank(keeper);
-        avatar.withdrawAll();
+        avatar.withdrawAll(false);
     }
 
     function test_withdraw() public {
@@ -839,7 +840,7 @@ contract ConvexAvatarMultiTokenTest is Test, ConvexAvatarUtils {
         emit Withdraw(address(CURVE_LP_BADGER_WBTC), 10e18, block.timestamp);
         uint256[] memory amountsWithdraw = new uint256[](1);
         amountsWithdraw[0] = 10 ether;
-        avatar.withdraw(pidsInit, amountsWithdraw);
+        avatar.withdraw(pidsInit, amountsWithdraw, false);
 
         assertEq(BASE_REWARD_POOL_BADGER_WBTC.balanceOf(address(avatar)), 10e18);
         assertEq(CURVE_LP_BADGER_WBTC.balanceOf(owner), 10e18);
@@ -861,7 +862,7 @@ contract ConvexAvatarMultiTokenTest is Test, ConvexAvatarUtils {
         emit Withdraw(address(CURVE_LP_BADGER_WBTC), 10e18, block.timestamp);
         uint256[] memory amountsWithdraw = new uint256[](1);
         amountsWithdraw[0] = 10 ether;
-        avatar.withdraw(pidsInit, amountsWithdraw);
+        avatar.withdraw(pidsInit, amountsWithdraw, false);
 
         assertEq(BASE_REWARD_POOL_BADGER_WBTC.balanceOf(address(avatar)), 10e18);
         assertEq(CURVE_LP_BADGER_WBTC.balanceOf(owner), 10e18);
@@ -873,7 +874,7 @@ contract ConvexAvatarMultiTokenTest is Test, ConvexAvatarUtils {
         pidsInit[0] = CONVEX_PID_BADGER_WBTC;
         vm.expectRevert(ConvexAvatarMultiToken.NothingToWithdraw.selector);
         vm.prank(owner);
-        avatar.withdraw(pidsInit, amountsWithdraw);
+        avatar.withdraw(pidsInit, amountsWithdraw, false);
     }
 
     function test_withdraw_permissions() public {
@@ -882,7 +883,7 @@ contract ConvexAvatarMultiTokenTest is Test, ConvexAvatarUtils {
         pidsInit[0] = CONVEX_PID_BADGER_WBTC;
         vm.expectRevert(abi.encodeWithSelector(ConvexAvatarMultiToken.NotOwnerOrManager.selector, keeper));
         vm.prank(keeper);
-        avatar.withdraw(pidsInit, amountsWithdraw);
+        avatar.withdraw(pidsInit, amountsWithdraw, false);
     }
 
     function test_withdraw_length_mismatch() public {
@@ -891,7 +892,7 @@ contract ConvexAvatarMultiTokenTest is Test, ConvexAvatarUtils {
 
         vm.prank(owner);
         vm.expectRevert(abi.encodeWithSelector(ConvexAvatarMultiToken.LengthMismatch.selector));
-        avatar.withdraw(pidsInit, amountsWithdraw);
+        avatar.withdraw(pidsInit, amountsWithdraw, false);
     }
 
     function test_withdrawFromPrivateVault() public {
@@ -903,7 +904,7 @@ contract ConvexAvatarMultiTokenTest is Test, ConvexAvatarUtils {
         vm.prank(owner);
         vm.expectEmit(true, true, false, true);
         emit Withdraw(address(CURVE_LP_BADGER_FRAXBP), 20 ether, block.timestamp);
-        avatar.withdrawFromPrivateVault(CONVEX_PID_BADGER_FRAXBP);
+        avatar.withdrawFromPrivateVault(CONVEX_PID_BADGER_FRAXBP, false);
 
         address vaultAddr = avatar.privateVaults(CONVEX_PID_BADGER_FRAXBP);
         IStakingProxy proxy = IStakingProxy(vaultAddr);
@@ -923,7 +924,7 @@ contract ConvexAvatarMultiTokenTest is Test, ConvexAvatarUtils {
         vm.prank(manager);
         vm.expectEmit(true, true, false, true);
         emit Withdraw(address(CURVE_LP_BADGER_FRAXBP), 20 ether, block.timestamp);
-        avatar.withdrawFromPrivateVault(CONVEX_PID_BADGER_FRAXBP);
+        avatar.withdrawFromPrivateVault(CONVEX_PID_BADGER_FRAXBP, false);
 
         address vaultAddr = avatar.privateVaults(CONVEX_PID_BADGER_FRAXBP);
         IStakingProxy proxy = IStakingProxy(vaultAddr);
@@ -933,10 +934,42 @@ contract ConvexAvatarMultiTokenTest is Test, ConvexAvatarUtils {
         assertEq(CURVE_LP_BADGER_FRAXBP.balanceOf(owner), 20e18);
     }
 
+    function test_withdrawFromPrivateVault_emergency_underlying_wd() public {
+        // coins info and addresses
+        ICurvePool pool = ICurvePool(META_REGISTRY.get_pool_from_lp_token(address(CURVE_LP_BADGER_FRAXBP)));
+        uint256 coins = META_REGISTRY.get_n_coins(address(pool));
+        uint256[] memory balanceBefore = new uint256[](coins);
+        for (uint256 i; i < coins; ++i) {
+            balanceBefore[i] = IERC20MetadataUpgradeable(pool.coins(i)).balanceOf(owner);
+        }
+
+        vm.prank(owner);
+        avatar.depositInPrivateVault(CONVEX_PID_BADGER_FRAXBP, 20 ether, false);
+        vm.stopPrank();
+
+        skip(2 weeks);
+
+        vm.prank(manager);
+        vm.expectEmit(true, true, false, true);
+        emit Withdraw(address(CURVE_LP_BADGER_FRAXBP), 20 ether, block.timestamp);
+        avatar.withdrawFromPrivateVault(CONVEX_PID_BADGER_FRAXBP, true);
+
+        address vaultAddr = avatar.privateVaults(CONVEX_PID_BADGER_FRAXBP);
+        IStakingProxy proxy = IStakingProxy(vaultAddr);
+
+        // ensure nothing is staked neither owner has lp balance, but rather underlyings
+        assertEq(IFraxUnifiedFarm(proxy.stakingAddress()).lockedLiquidityOf(vaultAddr), 0);
+        assertEq(CURVE_LP_BADGER_FRAXBP.balanceOf(owner), 0);
+
+        for (uint256 i; i < coins; ++i) {
+            assertGt(IERC20MetadataUpgradeable(pool.coins(i)).balanceOf(owner), balanceBefore[i]);
+        }
+    }
+
     function test_withdrawFromPrivateVault_not_private_vault() public {
         vm.expectRevert(abi.encodeWithSelector(ConvexAvatarMultiToken.NoPrivateVaultForPid.selector, 80));
         vm.prank(owner);
-        avatar.withdrawFromPrivateVault(80);
+        avatar.withdrawFromPrivateVault(80, false);
     }
 
     function test_withdrawFromPrivateVault_not_lock_expired() public {
@@ -951,19 +984,19 @@ contract ConvexAvatarMultiTokenTest is Test, ConvexAvatarUtils {
             )
         );
         vm.prank(owner);
-        avatar.withdrawFromPrivateVault(CONVEX_PID_BADGER_FRAXBP);
+        avatar.withdrawFromPrivateVault(CONVEX_PID_BADGER_FRAXBP, false);
     }
 
     function test_withdrawFromPrivateVault_nothing() public {
         vm.expectRevert(ConvexAvatarMultiToken.NothingToWithdraw.selector);
         vm.prank(owner);
-        avatar.withdrawFromPrivateVault(CONVEX_PID_BADGER_FRAXBP);
+        avatar.withdrawFromPrivateVault(CONVEX_PID_BADGER_FRAXBP, false);
     }
 
     function test_withdrawFromPrivateVault_permissions() public {
         vm.expectRevert(abi.encodeWithSelector(ConvexAvatarMultiToken.NotOwnerOrManager.selector, keeper));
         vm.prank(keeper);
-        avatar.withdrawFromPrivateVault(CONVEX_PID_BADGER_FRAXBP);
+        avatar.withdrawFromPrivateVault(CONVEX_PID_BADGER_FRAXBP, false);
     }
 
     function test_claimRewardsAndSendToOwner() public {

@@ -20,6 +20,7 @@ import {ConvexAvatarUtils} from "./ConvexAvatarUtils.sol";
 import {IBaseRewardPool} from "../interfaces/aura/IBaseRewardPool.sol";
 import {IStakingProxy} from "../interfaces/convex/IStakingProxy.sol";
 import {IFraxUnifiedFarm} from "../interfaces/convex/IFraxUnifiedFarm.sol";
+import {ICurvePool} from "../interfaces/curve/ICurvePool.sol";
 import {KeeperCompatibleInterface} from "../interfaces/chainlink/KeeperCompatibleInterface.sol";
 
 /// @title ConvexAvatarMultiToken
@@ -350,7 +351,8 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
     /// @notice Unstakes all staked assets and transfers them back to owner. Can only be called by owner or manager.
     /// @dev Internally in the unified farm contract calls `getReward` collecting rewards and updating the balances
     /// @param _pid Pid target to withdraw from avatar private vault
-    function withdrawFromPrivateVault(uint256 _pid) external onlyOwnerOrManager {
+    /// @param _lpEmergencyWd When `true` withdraws from the LPs into its underlying form
+    function withdrawFromPrivateVault(uint256 _pid, bool _lpEmergencyWd) external onlyOwnerOrManager {
         address vaultAddr = privateVaults[_pid];
 
         if (vaultAddr == address(0)) {
@@ -379,7 +381,11 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
 
         IERC20MetadataUpgradeable curveLp = IERC20MetadataUpgradeable(proxy.curveLpToken());
         uint256 curveLpBalance = curveLp.balanceOf(address(this));
-        curveLp.safeTransfer(owner(), curveLpBalance);
+        if (_lpEmergencyWd) {
+            _withdrawLpToUnderlyings(address(curveLp), curveLpBalance);
+        } else {
+            curveLp.safeTransfer(owner(), curveLpBalance);
+        }
 
         emit Withdraw(address(curveLp), curveLpBalance, block.timestamp);
     }
@@ -418,7 +424,8 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
 
     /// @notice Unstakes all staked assets and transfers them back to owner. Can only be called by owner or manager.
     /// @dev This function doesn't claim any rewards.
-    function withdrawAll() external onlyOwnerOrManager {
+    /// @param _lpEmergencyWd When `true` withdraws from the LPs into its underlying form
+    function withdrawAll(bool _lpEmergencyWd) external onlyOwnerOrManager {
         uint256 length = baseRewardPools.length();
         uint256[] memory curveLpDeposited = new uint256[](length);
         for (uint256 i; i < length;) {
@@ -428,18 +435,22 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
             }
         }
 
-        _withdraw(pids.values(), curveLpDeposited);
+        _withdraw(pids.values(), curveLpDeposited, _lpEmergencyWd);
     }
 
     /// @notice Unstakes the given amount of assets and transfers them back to owner. Can only be called by owner or manager.
     /// @dev This function doesn't claim any rewards.
     /// @param _pids Pids targetted to withdraw from
     /// @param _amountAssets Amount of assets to be unstaked.
-    function withdraw(uint256[] calldata _pids, uint256[] calldata _amountAssets) external onlyOwnerOrManager {
+    /// @param _lpEmergencyWd When `true` withdraws from the LPs into its underlying form
+    function withdraw(uint256[] calldata _pids, uint256[] calldata _amountAssets, bool _lpEmergencyWd)
+        external
+        onlyOwnerOrManager
+    {
         if (_pids.length != _amountAssets.length) {
             revert LengthMismatch();
         }
-        _withdraw(_pids, _amountAssets);
+        _withdraw(_pids, _amountAssets, _lpEmergencyWd);
     }
 
     /// @notice Claims any pending CRV, CVX & FXS rewards and sends them to owner. Can only be called by owner.
@@ -560,7 +571,8 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
     /// @dev This function doesn't claim any rewards.
     /// @param _pids Pids to be targetted to unstake from.
     /// @param _curveLpDeposited Amount of assets to be unstaked.
-    function _withdraw(uint256[] memory _pids, uint256[] memory _curveLpDeposited) internal {
+    /// @param _lpEmergencyWd When `true` withdraws from the LPs into its underlying form
+    function _withdraw(uint256[] memory _pids, uint256[] memory _curveLpDeposited, bool _lpEmergencyWd) internal {
         for (uint256 i; i < _pids.length;) {
             if (_curveLpDeposited[i] == 0) {
                 revert NothingToWithdraw();
@@ -570,9 +582,46 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
             address lpToken = assets.at(pidIndex);
 
             IBaseRewardPool(baseRewardPools.at(pidIndex)).withdrawAndUnwrap(_curveLpDeposited[i], false);
-            IERC20MetadataUpgradeable(lpToken).safeTransfer(owner(), _curveLpDeposited[i]);
+
+            if (_lpEmergencyWd) {
+                _withdrawLpToUnderlyings(lpToken, _curveLpDeposited[i]);
+            } else {
+                IERC20MetadataUpgradeable(lpToken).safeTransfer(owner(), _curveLpDeposited[i]);
+            }
 
             emit Withdraw(lpToken, _curveLpDeposited[i], block.timestamp);
+            unchecked {
+                ++i;
+            }
+        }
+    }
+
+    /// @notice Withdraws curve lp token into underlyings proportionally
+    /// @param _lpToken Curve lp address
+    /// @param _lpAmount Amount of bpt to be withdrawn
+    function _withdrawLpToUnderlyings(address _lpToken, uint256 _lpAmount) internal {
+        ICurvePool pool = ICurvePool(META_REGISTRY.get_pool_from_lp_token(_lpToken));
+        uint256 coins = META_REGISTRY.get_n_coins(address(pool));
+
+        if (coins == TWO_COINS_POOL) {
+            uint256[2] memory minOutAmounts;
+            // @audit DAO is accepting under emergency situations for speed defaulting
+            // the amount out expected to zero in this ocassion
+            ICurvePool(pool).remove_liquidity(_lpAmount, minOutAmounts);
+        } else {
+            // NOTE: pools may have three tokens like tricrypto2/3pool needs
+            // different signature to withdraw
+            uint256[3] memory minOutAmounts;
+            // @audit idem comment as L598-L599
+            ICurvePool(pool).remove_liquidity(_lpAmount, minOutAmounts);
+        }
+
+        // NOTE: given that many curve pool have different abi format not all has `_receiver`
+        // in `remove_liquidity`. Fallback to direct erc20 transfers for each underlying token
+        address ownerCached = owner();
+        for (uint256 i; i < coins;) {
+            IERC20MetadataUpgradeable underlying = IERC20MetadataUpgradeable(pool.coins(i));
+            underlying.safeTransfer(ownerCached, underlying.balanceOf(address(this)));
             unchecked {
                 ++i;
             }
