@@ -92,6 +92,7 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
     error TooSoon(uint256 currentTime, uint256 updateTime, uint256 minDuration);
 
     error CurveLpStillStaked(address curveLp, address basePool, uint256 stakingBalance);
+    error PoolNotFoundInMetaregistry(address curveLp);
 
     error PoolDeactivated(uint256 pid);
     error PidNotIncluded(uint256 pid);
@@ -601,6 +602,7 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
     /// @param _lpAmount Amount of bpt to be withdrawn
     function _withdrawLpToUnderlyings(address _lpToken, uint256 _lpAmount) internal {
         ICurvePool pool = ICurvePool(META_REGISTRY.get_pool_from_lp_token(_lpToken));
+        if (address(pool) == address(0)) revert PoolNotFoundInMetaregistry(_lpToken);
         uint256 coins = META_REGISTRY.get_n_coins(address(pool));
 
         if (coins == TWO_COINS_POOL) {
