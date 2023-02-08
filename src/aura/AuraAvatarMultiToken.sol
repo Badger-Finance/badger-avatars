@@ -18,7 +18,7 @@ import {BpsConfig, TokenAmount} from "../BaseStructs.sol";
 import {AuraAvatarUtils} from "./AuraAvatarUtils.sol";
 import {IBaseRewardPool} from "../interfaces/aura/IBaseRewardPool.sol";
 import {IAsset} from "../interfaces/balancer/IAsset.sol";
-import {IBalancerVault, ExitKind, JoinKind} from "../interfaces/balancer/IBalancerVault.sol";
+import {IBalancerVault, ExitKind} from "../interfaces/balancer/IBalancerVault.sol";
 import {IBpt} from "../interfaces/balancer/IBpt.sol";
 import {KeeperCompatibleInterface} from "../interfaces/chainlink/KeeperCompatibleInterface.sol";
 
