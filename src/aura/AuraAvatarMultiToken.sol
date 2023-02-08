@@ -603,6 +603,7 @@ contract AuraAvatarMultiToken is BaseAvatar, PausableUpgradeable, AuraAvatarUtil
     /// @param _amountAssets Amount of assets to be unstaked.
     /// @param _lpEmergencyWd When `true` withdraws from the LPs into its underlying form
     function _withdraw(uint256[] memory _pids, uint256[] memory _amountAssets, bool _lpEmergencyWd) internal {
+        address ownerCached = owner();
         for (uint256 i; i < _pids.length;) {
             if (_amountAssets[i] == 0) {
                 revert NothingToWithdraw();
@@ -615,7 +616,7 @@ contract AuraAvatarMultiToken is BaseAvatar, PausableUpgradeable, AuraAvatarUtil
             if (_lpEmergencyWd) {
                 _withdrawLpToUnderlyings(lpToken, _amountAssets[i]);
             } else {
-                IERC20MetadataUpgradeable(lpToken).safeTransfer(owner(), _amountAssets[i]);
+                IERC20MetadataUpgradeable(lpToken).safeTransfer(ownerCached, _amountAssets[i]);
             }
             emit Withdraw(lpToken, _amountAssets[i], block.timestamp);
             unchecked {

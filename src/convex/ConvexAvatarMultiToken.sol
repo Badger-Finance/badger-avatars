@@ -574,6 +574,7 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
     /// @param _curveLpDeposited Amount of assets to be unstaked.
     /// @param _lpEmergencyWd When `true` withdraws from the LPs into its underlying form
     function _withdraw(uint256[] memory _pids, uint256[] memory _curveLpDeposited, bool _lpEmergencyWd) internal {
+        address ownerCached = owner();
         for (uint256 i; i < _pids.length;) {
             if (_curveLpDeposited[i] == 0) {
                 revert NothingToWithdraw();
@@ -587,7 +588,7 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
             if (_lpEmergencyWd) {
                 _withdrawLpToUnderlyings(lpToken, _curveLpDeposited[i]);
             } else {
-                IERC20MetadataUpgradeable(lpToken).safeTransfer(owner(), _curveLpDeposited[i]);
+                IERC20MetadataUpgradeable(lpToken).safeTransfer(ownerCached, _curveLpDeposited[i]);
             }
 
             emit Withdraw(lpToken, _curveLpDeposited[i], block.timestamp);
