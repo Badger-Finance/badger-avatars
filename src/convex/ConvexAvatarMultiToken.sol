@@ -611,11 +611,17 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
             // @audit DAO is accepting under emergency situations for speed defaulting
             // the amount out expected to zero in this ocassion
             pool.remove_liquidity(_lpAmount, minOutAmounts);
-        } else {
+        } else if (coins == THREE_COINS_POOL) {
             // NOTE: pools may have three tokens like tricrypto2/3pool needs
             // different signature to withdraw
             uint256[3] memory minOutAmounts;
-            // @audit idem comment as L598-L599
+            // @audit idem comment as L611-612
+            pool.remove_liquidity(_lpAmount, minOutAmounts);
+        } else {
+            // NOTE: pools may have four tokens like ySwap needs
+            // different signature to withdraw
+            uint256[4] memory minOutAmounts;
+            // @audit idem comment as L611-612
             pool.remove_liquidity(_lpAmount, minOutAmounts);
         }
 
@@ -623,8 +629,14 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
         // in `remove_liquidity`. Fallback to direct erc20 transfers for each underlying token
         address ownerCached = owner();
         for (uint256 i; i < coins;) {
-            IERC20MetadataUpgradeable underlying = IERC20MetadataUpgradeable(pool.coins(i));
-            underlying.safeTransfer(ownerCached, underlying.balanceOf(address(this)));
+            // NOTE: some pools are expecting int128 while generally is uint256
+            try pool.coins(i) returns (address coin_) {
+                IERC20MetadataUpgradeable underlying = IERC20MetadataUpgradeable(coin_);
+                underlying.safeTransfer(ownerCached, underlying.balanceOf(address(this)));
+            } catch {
+                IERC20MetadataUpgradeable underlying = IERC20MetadataUpgradeable(pool.coins(int128(int256(i))));
+                underlying.safeTransfer(ownerCached, underlying.balanceOf(address(this)));
+            }
             unchecked {
                 ++i;
             }

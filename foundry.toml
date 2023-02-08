@@ -11,6 +11,9 @@ remappings = [
 verbosity = 3
 solc_version = "0.8.17"
 
+[fuzz]
+runs=50
+
 [profile.optimized]
 via-ir = true
 

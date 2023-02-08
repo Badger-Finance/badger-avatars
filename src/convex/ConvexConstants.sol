@@ -25,6 +25,8 @@ abstract contract ConvexConstants {
     // curve meta registry. ref: https://github.com/curvefi/metaregistry#deployments
     IMetaRegistry internal constant META_REGISTRY = IMetaRegistry(0xF98B45FA17DE75FB1aD0e7aFD971b0ca00e379fC);
     uint256 internal constant TWO_COINS_POOL = 2;
+    uint256 internal constant THREE_COINS_POOL = 3;
+    address internal constant CURVE_ETH_ADDR = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
 
     // curve pools
     ICurvePool internal constant CRV_ETH_CURVE_POOL = ICurvePool(0x8301AE4fc9c624d1D396cbDAa1ed877821D7C511);

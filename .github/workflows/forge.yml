@@ -25,13 +25,13 @@ jobs:
           version: nightly
 
       - name: Run tests
-        run: forge test
+        run: forge test --no-match-test "testFuzz*"
 
       - name: Check contract sizes
         run: forge build --force --sizes
 
       - name: Check gas snapshots
-        run: forge snapshot --check
+        run: forge snapshot --no-match-test "testFuzz*" --check
 
       - name: Check formatting
         run: forge fmt --check

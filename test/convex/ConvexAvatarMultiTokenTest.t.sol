@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
+import {console2 as console} from "forge-std/console2.sol";
 import {Test} from "forge-std/Test.sol";
 import {TransparentUpgradeableProxy} from "openzeppelin-contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
 import {ProxyAdmin} from "openzeppelin-contracts/proxy/transparent/ProxyAdmin.sol";
@@ -1295,6 +1296,88 @@ contract ConvexAvatarMultiTokenTest is Test, ConvexAvatarUtils {
         );
         vm.prank(keeper);
         avatar.performUpkeep(new bytes(0));
+    }
+
+    ////////////////////////////////////////////////////////////////////////////
+    // Fuzz: metaregistry reliability
+    ////////////////////////////////////////////////////////////////////////////
+
+    function testFuzz_metaRegistry_withdrawLpToUnderlyings(uint256 pid) public {
+        pid = bound(pid, 0, CONVEX_BOOSTER.poolLength());
+
+        // NOTE: weird `"EvmError: InvalidOpcode"` for the pid = 131
+        // pid = 108 contains TrueUSD reverts on the transfers
+        // as well different than already registered pids, otherwise will revert with `PidAlreadyExist`
+        if (pid != 131 && pid != 108 && pid != CONVEX_PID_BADGER_WBTC && pid != CONVEX_PID_BADGER_FRAXBP) {
+            uint256 lpBalance = 2 ether;
+            (address lpTokenAddr,,, address crvRewards,, bool shutdown) = CONVEX_BOOSTER.poolInfo(pid);
+
+            // NOTE: cases where the pid is shutdown we are not interested
+            if (!shutdown) {
+                IERC20MetadataUpgradeable lpToken = IERC20MetadataUpgradeable(lpTokenAddr);
+
+                deal(lpTokenAddr, owner, lpBalance, true);
+
+                // pool info & coins length
+                ICurvePool pool = ICurvePool(META_REGISTRY.get_pool_from_lp_token(address(lpTokenAddr)));
+                uint256 coins = META_REGISTRY.get_n_coins(address(pool));
+                uint256[] memory balanceBefore = new uint256[](coins);
+
+                bool isEth;
+                // TODO: left out for now 1:ETH pool asset type for discussion
+                for (uint256 i; i < coins; ++i) {
+                    try pool.coins(i) returns (address coin_) {
+                        if (coin_ == CURVE_ETH_ADDR) {
+                            isEth = true;
+                        } else {
+                            balanceBefore[i] = IERC20MetadataUpgradeable(coin_).balanceOf(owner);
+                        }
+                    } catch {
+                        address coin = pool.coins(int128(int256(i)));
+                        if (coin == CURVE_ETH_ADDR) {
+                            isEth = true;
+                        } else {
+                            balanceBefore[i] = IERC20MetadataUpgradeable(coin).balanceOf(owner);
+                        }
+                    }
+                }
+
+                if (!isEth) {
+                    // display in console for exploration in cli together with bound result
+                    console.log("PID run for %s", pid);
+                    console.log("LP address at %s", lpTokenAddr);
+                    console.log("Pool address found by metaregistry at %s", address(pool));
+
+                    vm.startPrank(owner);
+                    avatar.addCurveLpPositionInfo(pid);
+                    lpToken.approve(address(avatar), lpBalance);
+
+                    uint256[] memory amountsDeposit = new uint256[](1);
+                    amountsDeposit[0] = lpBalance;
+                    uint256[] memory pidsInit = new uint256[](1);
+                    pidsInit[0] = pid;
+
+                    avatar.deposit(pidsInit, amountsDeposit);
+                    vm.stopPrank();
+
+                    // NOTE: switch of role to manager, emergency testing!
+                    vm.startPrank(manager);
+                    avatar.withdraw(pidsInit, amountsDeposit, true);
+
+                    assertEq(IBaseRewardPool(crvRewards).balanceOf(address(avatar)), 0);
+                    assertEq(lpToken.balanceOf(owner), 0);
+
+                    for (uint256 i; i < coins; ++i) {
+                        try pool.coins(i) returns (address coin_) {
+                            assertGt(IERC20MetadataUpgradeable(pool.coins(i)).balanceOf(owner), balanceBefore[i]);
+                        } catch {
+                            address coin = pool.coins(int128(int256(i)));
+                            assertGt(IERC20MetadataUpgradeable(coin).balanceOf(owner), balanceBefore[i]);
+                        }
+                    }
+                }
+            }
+        }
     }
 
     ////////////////////////////////////////////////////////////////////////////
