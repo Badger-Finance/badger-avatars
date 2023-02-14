@@ -93,6 +93,7 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
 
     error CurveLpStillStaked(address curveLp, address basePool, uint256 stakingBalance);
     error PoolNotFoundInMetaregistry(address curveLp);
+    error NotSupportedCurvePool(address pool, uint256 coins);
 
     error PoolDeactivated(uint256 pid);
     error PidNotIncluded(uint256 pid);
@@ -617,12 +618,14 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
             uint256[3] memory minOutAmounts;
             // @audit idem comment as L611-612
             pool.remove_liquidity(_lpAmount, minOutAmounts);
-        } else {
+        } else if (coins == FOUR_COINS_POOL) {
             // NOTE: pools may have four tokens like ySwap needs
             // different signature to withdraw
             uint256[4] memory minOutAmounts;
             // @audit idem comment as L611-612
             pool.remove_liquidity(_lpAmount, minOutAmounts);
+        } else {
+            revert NotSupportedCurvePool(address(pool), coins);
         }
 
         // NOTE: given that many curve pool have different abi format not all has `_receiver`

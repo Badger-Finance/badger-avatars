@@ -26,6 +26,7 @@ abstract contract ConvexConstants {
     IMetaRegistry internal constant META_REGISTRY = IMetaRegistry(0xF98B45FA17DE75FB1aD0e7aFD971b0ca00e379fC);
     uint256 internal constant TWO_COINS_POOL = 2;
     uint256 internal constant THREE_COINS_POOL = 3;
+    uint256 internal constant FOUR_COINS_POOL = 4;
     address internal constant CURVE_ETH_ADDR = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
 
     // curve pools

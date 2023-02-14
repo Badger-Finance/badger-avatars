@@ -1307,8 +1307,9 @@ contract ConvexAvatarMultiTokenTest is Test, ConvexAvatarUtils {
 
         // NOTE: weird `"EvmError: InvalidOpcode"` for the pid = 131
         // pid = 108 contains TrueUSD reverts on the transfers
+        // pid = 31, cannot burn TrueCurrency from this address revert
         // as well different than already registered pids, otherwise will revert with `PidAlreadyExist`
-        if (pid != 131 && pid != 108 && pid != CONVEX_PID_BADGER_WBTC && pid != CONVEX_PID_BADGER_FRAXBP) {
+        if (pid != 131 && pid != 108 && pid != 31 && pid != CONVEX_PID_BADGER_WBTC && pid != CONVEX_PID_BADGER_FRAXBP) {
             uint256 lpBalance = 2 ether;
             (address lpTokenAddr,,, address crvRewards,, bool shutdown) = CONVEX_BOOSTER.poolInfo(pid);
 
