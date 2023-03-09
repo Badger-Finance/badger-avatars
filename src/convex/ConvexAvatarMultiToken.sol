@@ -339,7 +339,7 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
             // and limited/permissioned to owner. No present fallback methods in proxy/frax farm internally,
             // limited approval from `owner` to avatar (`_amountAsset`)
             // ref: https://github.com/convex-eth/frax-cvx-platform/blob/main/contracts/contracts/StakingProxyConvex.sol#L92
-            kekId = proxy.stakeLocked(_amountAsset, farm.lock_time_min());
+            kekId = proxy.stakeLocked(_amountAsset, minLockTime);
             /// @dev detailed required to enable withdrawls later
             kekIds[vaultAddr] = kekId;
         }
