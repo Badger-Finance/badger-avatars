@@ -400,9 +400,8 @@ contract AuraAvatarMultiToken is BaseAvatar, PausableUpgradeable, AuraAvatarUtil
         (uint256 totalBal, uint256 totalAura) = claimAndRegisterRewards();
 
         // 2. Send to owner
-        address ownerCached = owner();
-        BAL.safeTransfer(ownerCached, totalBal);
-        AURA.safeTransfer(ownerCached, totalAura);
+        BAL.safeTransfer(msg.sender, totalBal);
+        AURA.safeTransfer(msg.sender, totalAura);
     }
 
     /// @dev given a target PID, it will add the details in the `EnumerableSet`: pids, assets & baseRewardPools

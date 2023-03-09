@@ -446,15 +446,14 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
     /// @dev This is a failsafe to handle rewards manually in case anything goes wrong (eg. rewards need to be sold
     ///      through other pools)
     function claimRewardsAndSendToOwner() external onlyOwner {
-        address ownerCached = owner();
         // 1. Claim CVX, CRV & FXS rewards
         (uint256 totalCrv, uint256 totalCvx, uint256 totalFxs) = claimAndRegisterRewards();
 
         // 2. Send to owner
-        CRV.safeTransfer(ownerCached, totalCrv);
-        CVX.safeTransfer(ownerCached, totalCvx);
+        CRV.safeTransfer(msg.sender, totalCrv);
+        CVX.safeTransfer(msg.sender, totalCvx);
         if (totalFxs > 0) {
-            FXS.safeTransfer(ownerCached, totalFxs);
+            FXS.safeTransfer(msg.sender, totalFxs);
         }
     }
 
