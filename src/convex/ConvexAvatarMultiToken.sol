@@ -99,6 +99,7 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
     error NoExistingLockInPrivateVault(address vault);
     error NoExpiredLock(address vault, bytes32 kekId);
     error MinLockTimeMisconfigured(address farm, uint256 minLockTime);
+    error KekAlreadyExistForVault(address vault, bytes32 kekId);
 
     error LengthMismatch();
 
@@ -340,6 +341,10 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
             // limited approval from `owner` to avatar (`_amountAsset`)
             // ref: https://github.com/convex-eth/frax-cvx-platform/blob/main/contracts/contracts/StakingProxyConvex.sol#L92
             kekId = proxy.stakeLocked(_amountAsset, minLockTime);
+            // NOTE: protective measure for tighter ops
+            if (kekIds[vaultAddr] != bytes32(0)) {
+                revert KekAlreadyExistForVault(vaultAddr, kekIds[vaultAddr]);
+            }
             /// @dev detailed required to enable withdrawls later
             kekIds[vaultAddr] = kekId;
         }

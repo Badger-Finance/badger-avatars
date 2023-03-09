@@ -787,6 +787,19 @@ contract ConvexAvatarMultiTokenTest is Test, ConvexAvatarUtils {
         avatar.depositInPrivateVault(CONVEX_PID_BADGER_FRAXBP, 10 ether, false);
     }
 
+    function test_depositPrivateVault_ops_failure() public {
+        vm.prank(owner);
+        bytes32 kekId = avatar.depositInPrivateVault(CONVEX_PID_BADGER_FRAXBP, 10 ether, false);
+
+        address vaultAddr = avatar.privateVaults(CONVEX_PID_BADGER_FRAXBP);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(ConvexAvatarMultiToken.KekAlreadyExistForVault.selector, vaultAddr, kekId)
+        );
+        vm.prank(owner);
+        avatar.depositInPrivateVault(CONVEX_PID_BADGER_FRAXBP, 10 ether, false);
+    }
+
     function test_depositPrivateVault_permissions() public {
         vm.expectRevert("Ownable: caller is not the owner");
         avatar.depositInPrivateVault(CONVEX_PID_BADGER_FRAXBP, 20 ether, false);
