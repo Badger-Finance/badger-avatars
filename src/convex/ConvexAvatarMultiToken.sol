@@ -100,6 +100,7 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
     error NoExpiredLock(address vault, bytes32 kekId);
     error MinLockTimeMisconfigured(address farm, uint256 minLockTime);
     error KekAlreadyExistForVault(address vault, bytes32 kekId);
+    error AssetAlreadyExist(address lpToken, uint256 pid);
 
     error LengthMismatch();
 
@@ -554,7 +555,9 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
         }
         pids.add(_newPid);
         (address lpToken,,, address crvRewards,,) = CONVEX_BOOSTER.poolInfo(_newPid);
-        assets.add(lpToken);
+        if (!assets.add(lpToken)) {
+            revert AssetAlreadyExist(lpToken, _newPid);
+        }
         baseRewardPools.add(crvRewards);
         // NOTE: during new lp addition approve those assets to convex booster
         IERC20MetadataUpgradeable(lpToken).safeApprove(address(CONVEX_BOOSTER), type(uint256).max);

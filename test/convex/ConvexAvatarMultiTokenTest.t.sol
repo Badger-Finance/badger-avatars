@@ -16,6 +16,7 @@ import {IBaseRewardPool} from "../../src/interfaces/aura/IBaseRewardPool.sol";
 import {IStakingProxy} from "../../src/interfaces/convex/IStakingProxy.sol";
 import {IFraxUnifiedFarm} from "../../src/interfaces/convex/IFraxUnifiedFarm.sol";
 import {IAggregatorV3} from "../../src/interfaces/chainlink/IAggregatorV3.sol";
+import {IBooster} from "../../src/interfaces/aura/IBooster.sol";
 
 import {MockV3Aggregator} from "../mocks/MockV3Aggregator.sol";
 
@@ -404,6 +405,29 @@ contract ConvexAvatarMultiTokenTest is Test, ConvexAvatarUtils {
         vm.prank(owner);
         vm.expectRevert(abi.encodeWithSelector(ConvexAvatarMultiToken.PidAlreadyExist.selector, 21));
         avatar.addCurveLpPositionInfo(21);
+    }
+
+    function test_addCurveLp_asset_already_exist() public {
+        address lp = 0x94e131324b6054c0D789b190b2dAC504e4361b53;
+        vm.prank(owner);
+        avatar.addCurveLpPositionInfo(21);
+
+        vm.mockCall(
+            address(CONVEX_BOOSTER),
+            abi.encodeWithSelector(IBooster.poolInfo.selector, 70),
+            abi.encode(
+                lp,
+                0xe7f50e96e0FE8285D3B27B3b9A464a2102C9708c,
+                0x02246583870b36Be0fEf2819E1d3A771d6C07546,
+                0x36c7E7F9031647A74687ce46A8e16BcEA84f3865,
+                0x406868FBFdb61f976C2A76d617259EFB7778860A,
+                false
+            )
+        );
+
+        vm.expectRevert(abi.encodeWithSelector(ConvexAvatarMultiToken.AssetAlreadyExist.selector, lp, 70));
+        vm.prank(owner);
+        avatar.addCurveLpPositionInfo(70);
     }
 
     function test_removeCurveLp_position_info_permissions() public {

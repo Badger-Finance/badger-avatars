@@ -95,6 +95,7 @@ contract AuraAvatarMultiToken is BaseAvatar, PausableUpgradeable, AuraAvatarUtil
     error BptStillStaked(address bpt, address basePool, uint256 stakingBalance);
     error PidNotIncluded(uint256 pid);
     error PidAlreadyExist(uint256 pid);
+    error AssetAlreadyExist(address lpToken, uint256 pid);
 
     error LengthMismatch();
 
@@ -584,7 +585,9 @@ contract AuraAvatarMultiToken is BaseAvatar, PausableUpgradeable, AuraAvatarUtil
         }
         pids.add(_newPid);
         (address lpToken,,, address crvRewards,,) = AURA_BOOSTER.poolInfo(_newPid);
-        assets.add(lpToken);
+        if (!assets.add(lpToken)) {
+            revert AssetAlreadyExist(lpToken, _newPid);
+        }
         baseRewardPools.add(crvRewards);
         // Boster approval for bpts
         IERC20MetadataUpgradeable(lpToken).safeApprove(address(AURA_BOOSTER), type(uint256).max);
