@@ -456,8 +456,12 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
         (uint256 totalCrv, uint256 totalCvx, uint256 totalFxs) = claimAndRegisterRewards();
 
         // 2. Send to owner
-        CRV.safeTransfer(msg.sender, totalCrv);
-        CVX.safeTransfer(msg.sender, totalCvx);
+        if (totalCrv > 0) {
+            CRV.safeTransfer(msg.sender, totalCrv);
+        }
+        if (totalCvx > 0) {
+            CVX.safeTransfer(msg.sender, totalCvx);
+        }
         if (totalFxs > 0) {
             FXS.safeTransfer(msg.sender, totalFxs);
         }
