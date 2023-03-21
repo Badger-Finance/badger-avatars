@@ -99,6 +99,8 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
     error NoExistingLockInPrivateVault(address vault);
     error NoExpiredLock(address vault, bytes32 kekId);
     error MinLockTimeMisconfigured(address farm, uint256 minLockTime);
+    error KekAlreadyExistForVault(address vault, bytes32 kekId);
+    error AssetAlreadyExist(address lpToken, uint256 pid);
 
     error LengthMismatch();
 
@@ -339,7 +341,11 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
             // and limited/permissioned to owner. No present fallback methods in proxy/frax farm internally,
             // limited approval from `owner` to avatar (`_amountAsset`)
             // ref: https://github.com/convex-eth/frax-cvx-platform/blob/main/contracts/contracts/StakingProxyConvex.sol#L92
-            kekId = proxy.stakeLocked(_amountAsset, farm.lock_time_min());
+            kekId = proxy.stakeLocked(_amountAsset, minLockTime);
+            // NOTE: protective measure for tighter ops
+            if (kekIds[vaultAddr] != bytes32(0)) {
+                revert KekAlreadyExistForVault(vaultAddr, kekIds[vaultAddr]);
+            }
             /// @dev detailed required to enable withdrawls later
             kekIds[vaultAddr] = kekId;
         }
@@ -446,15 +452,18 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
     /// @dev This is a failsafe to handle rewards manually in case anything goes wrong (eg. rewards need to be sold
     ///      through other pools)
     function claimRewardsAndSendToOwner() external onlyOwner {
-        address ownerCached = owner();
         // 1. Claim CVX, CRV & FXS rewards
         (uint256 totalCrv, uint256 totalCvx, uint256 totalFxs) = claimAndRegisterRewards();
 
         // 2. Send to owner
-        CRV.safeTransfer(ownerCached, totalCrv);
-        CVX.safeTransfer(ownerCached, totalCvx);
+        if (totalCrv > 0) {
+            CRV.safeTransfer(msg.sender, totalCrv);
+        }
+        if (totalCvx > 0) {
+            CVX.safeTransfer(msg.sender, totalCvx);
+        }
         if (totalFxs > 0) {
-            FXS.safeTransfer(ownerCached, totalFxs);
+            FXS.safeTransfer(msg.sender, totalFxs);
         }
     }
 
@@ -550,7 +559,9 @@ contract ConvexAvatarMultiToken is BaseAvatar, ConvexAvatarUtils, PausableUpgrad
         }
         pids.add(_newPid);
         (address lpToken,,, address crvRewards,,) = CONVEX_BOOSTER.poolInfo(_newPid);
-        assets.add(lpToken);
+        if (!assets.add(lpToken)) {
+            revert AssetAlreadyExist(lpToken, _newPid);
+        }
         baseRewardPools.add(crvRewards);
         // NOTE: during new lp addition approve those assets to convex booster
         IERC20MetadataUpgradeable(lpToken).safeApprove(address(CONVEX_BOOSTER), type(uint256).max);

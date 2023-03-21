@@ -95,6 +95,7 @@ contract AuraAvatarMultiToken is BaseAvatar, PausableUpgradeable, AuraAvatarUtil
     error BptStillStaked(address bpt, address basePool, uint256 stakingBalance);
     error PidNotIncluded(uint256 pid);
     error PidAlreadyExist(uint256 pid);
+    error AssetAlreadyExist(address lpToken, uint256 pid);
 
     error LengthMismatch();
 
@@ -400,9 +401,12 @@ contract AuraAvatarMultiToken is BaseAvatar, PausableUpgradeable, AuraAvatarUtil
         (uint256 totalBal, uint256 totalAura) = claimAndRegisterRewards();
 
         // 2. Send to owner
-        address ownerCached = owner();
-        BAL.safeTransfer(ownerCached, totalBal);
-        AURA.safeTransfer(ownerCached, totalAura);
+        if (totalBal > 0) {
+            BAL.safeTransfer(msg.sender, totalBal);
+        }
+        if (totalAura > 0) {
+            AURA.safeTransfer(msg.sender, totalAura);
+        }
     }
 
     /// @dev given a target PID, it will add the details in the `EnumerableSet`: pids, assets & baseRewardPools
@@ -585,7 +589,9 @@ contract AuraAvatarMultiToken is BaseAvatar, PausableUpgradeable, AuraAvatarUtil
         }
         pids.add(_newPid);
         (address lpToken,,, address crvRewards,,) = AURA_BOOSTER.poolInfo(_newPid);
-        assets.add(lpToken);
+        if (!assets.add(lpToken)) {
+            revert AssetAlreadyExist(lpToken, _newPid);
+        }
         baseRewardPools.add(crvRewards);
         // Boster approval for bpts
         IERC20MetadataUpgradeable(lpToken).safeApprove(address(AURA_BOOSTER), type(uint256).max);
@@ -670,7 +676,8 @@ contract AuraAvatarMultiToken is BaseAvatar, PausableUpgradeable, AuraAvatarUtil
         // Update last claimed time
         lastClaimTimestamp = block.timestamp;
 
-        for (uint256 i; i < baseRewardPools.length();) {
+        uint256 length = baseRewardPools.length();
+        for (uint256 i; i < length;) {
             IBaseRewardPool baseRewardPool = IBaseRewardPool(baseRewardPools.at(i));
             baseRewardPool.getReward();
             unchecked {
